@@ -154,19 +154,3 @@
   margin: 0;
   padding: 12px;
 }
-
-/* Hint toast fade in and out animation */
-@keyframes fadeInOut {
-  0% {
-    opacity: 0;
-  }
-  15% {
-    opacity: 1;
-  }
-  75% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}

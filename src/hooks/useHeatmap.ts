@@ -32,6 +32,7 @@ export function useHeatmap(options: UseHeatmapOptions = {}): UseHeatmapReturn {
   const [metadata, setMetadata] = useState<HeatmapResponse['metadata'] | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
 
   const fetchHeatmap = useCallback(
     async (
@@ -47,7 +48,9 @@ export function useHeatmap(options: UseHeatmapOptions = {}): UseHeatmapReturn {
         abortControllerRef.current.abort();
       }
 
+      // Create new abort controller and increment request ID
       abortControllerRef.current = new AbortController();
+      const currentRequestId = ++requestIdRef.current;
 
       setIsLoading(true);
       setError(null);
@@ -69,6 +72,11 @@ export function useHeatmap(options: UseHeatmapOptions = {}): UseHeatmapReturn {
           signal: abortControllerRef.current.signal,
         });
 
+        // Check if this request is still the latest one
+        if (currentRequestId !== requestIdRef.current) {
+          return; // A newer request has been made, ignore this response
+        }
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           if (errorData.error === 'Viewport too large') {
@@ -78,33 +86,50 @@ export function useHeatmap(options: UseHeatmapOptions = {}): UseHeatmapReturn {
         }
 
         const data: HeatmapResponse = await response.json();
-        setHeatmapPoints(data.points);
-        setPois(data.pois || {});
-        setMetadata(data.metadata);
+        
+        // Double-check this is still the latest request before updating state
+        if (currentRequestId === requestIdRef.current) {
+          setHeatmapPoints(data.points);
+          setPois(data.pois || {});
+          setMetadata(data.metadata);
+        }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
           // Request was cancelled, ignore
           return;
         }
-        setError(err instanceof Error ? err.message : 'Failed to fetch heatmap');
-        console.error('Heatmap fetch error:', err);
+        // Only set error if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch heatmap');
+          console.error('Heatmap fetch error:', err);
+        }
       } finally {
-        setIsLoading(false);
+        // Only update loading state if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
+          setIsLoading(false);
+        }
       }
     },
     []
   );
 
   const clearHeatmap = useCallback(() => {
+    // Cancel any pending request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    requestIdRef.current++;
     setHeatmapPoints([]);
     setPois({});
     setMetadata(null);
     setError(null);
+    setIsLoading(false);
   }, []);
 
   const abortFetch = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      requestIdRef.current++;
       setIsLoading(false);
     }
   }, []);

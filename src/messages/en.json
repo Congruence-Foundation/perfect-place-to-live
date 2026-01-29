@@ -14,10 +14,11 @@
   },
   "help": {
     "title": "How to Use",
-    "rightClick": "<strong>Right-click</strong> on the map to analyze a specific location",
-    "search": "Search for a city to start exploring",
-    "adjust": "Adjust factor weights in the left panel to customize scoring",
-    "greenAreas": "Green areas score higher based on your preferences"
+    "step1": "Search for a city or navigate to an area",
+    "step2": "Choose a profile or customize factors in the left panel",
+    "step3": "Click <strong>Refresh</strong> to calculate the heatmap",
+    "step4": "<strong>Right-click</strong> anywhere on the map for detailed analysis",
+    "tip": "Green = better match for your preferences"
   },
   "settings": {
     "title": "Settings",

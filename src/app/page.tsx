@@ -9,14 +9,13 @@ import { DEFAULT_FACTORS, applyProfile, FACTOR_PROFILES } from '@/config/factors
 import { Bounds, Factor } from '@/types';
 import { useHeatmap } from '@/hooks';
 import { useDebounce } from '@/hooks/useDebounce';
-import { Loader2, RefreshCw, ChevronLeft, ChevronRight, Square, SlidersHorizontal, ChevronDown, RotateCcw, MousePointer2 } from 'lucide-react';
+import { Loader2, RefreshCw, ChevronLeft, ChevronRight, Square, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
 
 export default function Home() {
   const t = useTranslations();
   const tApp = useTranslations('app');
   const tControls = useTranslations('controls');
   const tProfiles = useTranslations('profiles');
-  const tHint = useTranslations('hint');
 
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [factors, setFactors] = useState<Factor[]>(DEFAULT_FACTORS);
@@ -25,7 +24,6 @@ export default function Home() {
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [isFactorsExpanded, setIsFactorsExpanded] = useState(false);
   const [showPOIs, setShowPOIs] = useState(false);
-  const [showHint, setShowHint] = useState(true);
   const [heatmapSettings, setHeatmapSettings] = useState<HeatmapSettings>({
     gridCellSize: 150, // default 150m
     distanceCurve: 'exp', // exponential for sharp drop-off near POIs
@@ -44,14 +42,6 @@ export default function Home() {
 
   // Track if user has interacted (searched for a city)
   const hasInteracted = useRef(false);
-
-  // Auto-hide hint after 5 seconds
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowHint(false);
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, []);
 
   const handleBoundsChange = useCallback((newBounds: Bounds) => {
     setBounds(newBounds);
@@ -86,19 +76,29 @@ export default function Home() {
   }, []);
 
   const handleRefresh = useCallback(() => {
-    if (debouncedBounds && mode === 'realtime') {
+    // Use current values, not debounced, for immediate refresh
+    if (bounds && mode === 'realtime') {
       // Mark as interacted so future auto-updates work
       hasInteracted.current = true;
+      
+      // Check viewport size
+      const latRange = bounds.north - bounds.south;
+      const lngRange = bounds.east - bounds.west;
+      if (latRange > 1 || lngRange > 1.5) {
+        console.log('Viewport too large for refresh');
+        return;
+      }
+      
       fetchHeatmap(
-        debouncedBounds,
-        debouncedFactors,
-        debouncedSettings.gridCellSize,
-        debouncedSettings.distanceCurve,
-        debouncedSettings.sensitivity,
-        debouncedSettings.normalizeToViewport
+        bounds,
+        factors,
+        heatmapSettings.gridCellSize,
+        heatmapSettings.distanceCurve,
+        heatmapSettings.sensitivity,
+        heatmapSettings.normalizeToViewport
       );
     }
-  }, [debouncedBounds, debouncedFactors, debouncedSettings, mode, fetchHeatmap]);
+  }, [bounds, factors, heatmapSettings, mode, fetchHeatmap]);
 
   const handleCitySelect = useCallback((lat: number, lng: number, cityBounds?: Bounds) => {
     // Mark that user has interacted
@@ -160,7 +160,7 @@ export default function Home() {
     <main className="h-screen w-screen flex overflow-hidden relative">
       {/* Search Box - Floating on top center of MAP area */}
       <div 
-        className="absolute top-4 z-[1001] w-80 transition-all duration-300"
+        className="absolute top-4 z-[1001] transition-all duration-300"
         style={{ 
           left: `calc(${panelWidth}px + (100% - ${panelWidth}px) / 2)`,
           transform: 'translateX(-50%)'
@@ -331,26 +331,6 @@ export default function Home() {
           mode={mode}
           onModeChange={setMode}
         />
-
-        {/* Right-click Hint Toast - Centered on map area like search box */}
-        {showHint && (
-          <div 
-            className="absolute top-20 z-[1000]"
-            style={{ 
-              left: '50%',
-              transform: 'translateX(-50%)',
-              animation: 'fadeInOut 5s ease-in-out forwards',
-            }}
-          >
-            <div 
-              className="bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 cursor-pointer text-muted-foreground/70 hover:text-muted-foreground transition-colors text-xs shadow-sm"
-              onClick={() => setShowHint(false)}
-            >
-              <MousePointer2 className="h-3 w-3" />
-              <span>{tHint('rightClick')}</span>
-            </div>
-          </div>
-        )}
 
         {/* Loading Overlay */}
         {isLoading && (

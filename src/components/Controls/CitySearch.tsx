@@ -28,6 +28,7 @@ export default function CitySearch({ onCitySelect }: CitySearchProps) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -37,6 +38,7 @@ export default function CitySearch({ onCitySelect }: CitySearchProps) {
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        setIsFocused(false);
       }
     };
 
@@ -136,29 +138,43 @@ export default function CitySearch({ onCitySelect }: CitySearchProps) {
   };
 
   return (
-    <div ref={containerRef} className="relative">
-      <div className="relative shadow-lg rounded-lg">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+    <div 
+      ref={containerRef} 
+      className={`relative transition-all duration-300 ease-out ${isFocused ? 'w-72' : 'w-40'}`}
+    >
+      <div className="relative shadow-lg rounded-full">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <Input
           type="text"
           placeholder={t('placeholder')}
           value={query}
           onChange={(e) => handleInputChange(e.target.value)}
-          onFocus={() => results.length > 0 && setIsOpen(true)}
+          onFocus={() => {
+            setIsFocused(true);
+            if (results.length > 0) setIsOpen(true);
+          }}
+          onBlur={() => {
+            // Delay to allow click on results
+            setTimeout(() => {
+              if (!containerRef.current?.contains(document.activeElement)) {
+                setIsFocused(false);
+              }
+            }, 150);
+          }}
           onKeyDown={handleKeyDown}
-          className="pl-9 pr-8 bg-background border-0 shadow-none h-11 text-base"
+          className="pl-8 pr-7 bg-background border-0 shadow-none h-8 text-xs rounded-full"
         />
         {query && (
           <Button
             variant="ghost"
             size="sm"
-            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+            className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 p-0 rounded-full"
             onClick={handleClear}
           >
             {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
-              <X className="h-4 w-4" />
+              <X className="h-3 w-3" />
             )}
           </Button>
         )}
