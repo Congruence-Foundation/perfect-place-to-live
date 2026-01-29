@@ -1,0 +1,289 @@
+'use client';
+
+import { useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { Settings, X, Eye, EyeOff, Info } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { HeatmapSettings } from './AdvancedSettings';
+import { DistanceCurve } from '@/types';
+
+const CURVE_VALUES: DistanceCurve[] = ['log', 'linear', 'exp', 'power'];
+
+interface MapSettingsProps {
+  settings: HeatmapSettings;
+  onSettingsChange: (settings: Partial<HeatmapSettings>) => void;
+  showPOIs: boolean;
+  onShowPOIsChange: (show: boolean) => void;
+  mode: 'realtime' | 'precomputed';
+  onModeChange: (mode: 'realtime' | 'precomputed') => void;
+}
+
+export default function MapSettings({
+  settings,
+  onSettingsChange,
+  showPOIs,
+  onShowPOIsChange,
+  mode,
+  onModeChange,
+}: MapSettingsProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const t = useTranslations('settings');
+  const tCurves = useTranslations('curves');
+
+  return (
+    <div className="absolute bottom-4 right-4 z-[1000] flex flex-col items-end">
+      {/* Expanded Panel */}
+      {isOpen && (
+        <div className="mb-2 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-64 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-semibold">{t('title')}</span>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="w-6 h-6 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
+            >
+              <X className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {/* Show POIs */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <Label className="text-xs flex items-center gap-2">
+                  {showPOIs ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                  {t('showPOIs')}
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
+                      <Info className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="max-w-xs">
+                    <p className="text-xs">
+                      {t('showPOIsTooltip')}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <Switch
+                checked={showPOIs}
+                onCheckedChange={onShowPOIsChange}
+              />
+            </div>
+
+            {/* Grid Resolution */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs">{t('gridResolution')}</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
+                        <Info className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="max-w-xs">
+                      <p className="text-xs">
+                        {t('gridResolutionTooltip')}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <span className="text-xs text-muted-foreground font-medium">{settings.gridCellSize}m</span>
+              </div>
+              <Slider
+                value={[settings.gridCellSize]}
+                onValueChange={([value]) => onSettingsChange({ gridCellSize: value })}
+                min={25}
+                max={300}
+                step={25}
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>{t('dense')}</span>
+                <span>{t('fast')}</span>
+              </div>
+            </div>
+
+            {/* Distance Curve - Inline */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <Label className="text-xs">{t('curve')}</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
+                      <Info className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="max-w-xs">
+                    <p className="text-xs">
+                      {t('curveTooltip')}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <Select
+                value={settings.distanceCurve}
+                onValueChange={(value: DistanceCurve) => onSettingsChange({ distanceCurve: value })}
+              >
+                <SelectTrigger className="h-7 text-xs w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" className="z-[1100] w-64">
+                  {CURVE_VALUES.map((curveValue) => (
+                    <SelectItem key={curveValue} value={curveValue} className="text-xs py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{tCurves(`${curveValue}.label`)}</span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button 
+                              type="button" 
+                              className="p-0.5 hover:bg-muted rounded transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Info className="h-3 w-3 text-muted-foreground" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="max-w-xs z-[1200]">
+                            <p className="text-xs font-medium mb-1">{tCurves(`${curveValue}.description`)}</p>
+                            <p className="text-xs text-muted-foreground">{tCurves(`${curveValue}.useCase`)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Sensitivity Slider - Only show for non-linear curves */}
+            {settings.distanceCurve !== 'linear' && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs">{t('sensitivity')}</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
+                          <Info className="h-3 w-3 text-muted-foreground" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="max-w-xs">
+                        <p className="text-xs">
+                          {t('sensitivityTooltip')}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <span className="text-xs text-muted-foreground font-medium">{settings.sensitivity.toFixed(1)}x</span>
+                </div>
+                <Slider
+                  value={[settings.sensitivity]}
+                  onValueChange={([value]) => onSettingsChange({ sensitivity: value })}
+                  min={0.5}
+                  max={3}
+                  step={0.5}
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>{t('gentle')}</span>
+                  <span>{t('aggressive')}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Normalize to Viewport */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs">{t('relativeMode')}</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
+                        <Info className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="max-w-xs">
+                      <p className="text-xs">
+                        {t('relativeModeTooltip')}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Switch
+                  checked={settings.normalizeToViewport}
+                  onCheckedChange={(checked) => onSettingsChange({ normalizeToViewport: checked })}
+                />
+              </div>
+            </div>
+
+            {/* Computation Mode */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1">
+                <Label className="text-xs">{t('computation')}</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
+                      <Info className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="max-w-xs">
+                    <p className="text-xs">
+                      {t('computationTooltip')}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className={mode === 'realtime' ? 'font-medium' : 'text-muted-foreground'}>
+                  {t('realtime')}
+                </span>
+                <Switch
+                  checked={mode === 'precomputed'}
+                  onCheckedChange={(checked) => onModeChange(checked ? 'precomputed' : 'realtime')}
+                />
+                <span className={mode === 'precomputed' ? 'font-medium' : 'text-muted-foreground'}>
+                  {t('cached')}
+                </span>
+              </div>
+              {mode === 'precomputed' && (
+                <p className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg">
+                  {t('cachedNotAvailable')}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toggle Button - Fixed width container to prevent movement */}
+      <div className="w-10 h-10">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className={`flex items-center justify-center w-10 h-10 rounded-full shadow-lg transition-all ${
+            isOpen 
+              ? 'bg-primary text-primary-foreground' 
+              : 'bg-background/95 backdrop-blur-sm hover:bg-muted border'
+          }`}
+          title={t('title')}
+        >
+          <Settings className={`h-5 w-5 ${isOpen ? '' : 'text-muted-foreground'}`} />
+        </button>
+      </div>
+    </div>
+  );
+}

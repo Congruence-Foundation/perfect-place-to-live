@@ -1,0 +1,247 @@
+{
+  "app": {
+    "title": "Location Finder",
+    "subtitle": "Find your ideal neighborhood"
+  },
+  "controls": {
+    "profile": "Profile",
+    "factors": "Factors",
+    "active": "{count} active",
+    "reset": "Reset",
+    "refresh": "Refresh",
+    "stop": "Stop",
+    "calculating": "Calculating..."
+  },
+  "help": {
+    "title": "How to Use",
+    "rightClick": "<strong>Right-click</strong> on the map to analyze a specific location",
+    "search": "Search for a city to start exploring",
+    "adjust": "Adjust factor weights in the left panel to customize scoring",
+    "greenAreas": "Green areas score higher based on your preferences"
+  },
+  "settings": {
+    "title": "Settings",
+    "showPOIs": "Show POIs",
+    "showPOIsTooltip": "Display points of interest (cafes, parks, etc.) on the map as markers.",
+    "gridResolution": "Grid Resolution",
+    "gridResolutionTooltip": "Distance between sample points. Smaller values give more detail but take longer to compute.",
+    "dense": "Dense",
+    "fast": "Fast",
+    "curve": "Curve",
+    "curveTooltip": "Controls how distance affects the score. Determines sensitivity to distance changes.",
+    "sensitivity": "Sensitivity",
+    "sensitivityTooltip": "Adjusts curve steepness. Higher values make the score more sensitive to small distance changes.",
+    "gentle": "Gentle",
+    "aggressive": "Aggressive",
+    "relativeMode": "Relative Mode",
+    "relativeModeTooltip": "When enabled, colors show relative differences within the current view, highlighting the best/worst areas even if they're all similar.",
+    "computation": "Computation",
+    "computationTooltip": "Real-time calculates on-demand with custom weights. Cached uses pre-computed tiles for faster loading.",
+    "realtime": "Real-time",
+    "cached": "Cached",
+    "cachedNotAvailable": "Cached tiles not available yet"
+  },
+  "curves": {
+    "log": {
+      "label": "Logarithmic",
+      "description": "Very sensitive to nearby distances",
+      "useCase": "Best for street-level precision. Small distance changes matter a lot."
+    },
+    "linear": {
+      "label": "Linear",
+      "description": "Uniform sensitivity across all distances",
+      "useCase": "Good for general use when all distances matter equally."
+    },
+    "exp": {
+      "label": "Exponential",
+      "description": "Sharp drop-off near POIs",
+      "useCase": "Best when being very close matters most. 95% score at max distance."
+    },
+    "power": {
+      "label": "Power",
+      "description": "Moderate sensitivity (square root)",
+      "useCase": "Balanced option. More forgiving than logarithmic."
+    }
+  },
+  "debug": {
+    "title": "Debug",
+    "activeFactors": "Active factors",
+    "gridPoints": "Grid points",
+    "poisLoaded": "POIs loaded",
+    "computeTime": "Compute time"
+  },
+  "search": {
+    "placeholder": "Search city...",
+    "noResults": "No results found",
+    "failed": "Search failed. Please try again."
+  },
+  "categories": {
+    "essential": "Essential",
+    "lifestyle": "Lifestyle",
+    "environment": "Environment"
+  },
+  "weight": {
+    "neutral": "Neutral",
+    "strongPrefer": "Strong prefer",
+    "prefer": "Prefer",
+    "slightPrefer": "Slight prefer",
+    "strongAvoid": "Strong avoid",
+    "avoid": "Avoid",
+    "slightAvoid": "Slight avoid"
+  },
+  "factorTooltip": {
+    "poiTypes": "POI types",
+    "maxDistance": "Max distance",
+    "mode": "Mode",
+    "avoidMode": "Avoid (farther is better)",
+    "preferMode": "Prefer (closer is better)",
+    "distanceToStayAway": "Distance to stay away from this factor",
+    "maxAcceptableDistance": "Maximum acceptable distance to this amenity"
+  },
+  "profiles": {
+    "balanced": {
+      "name": "Balanced",
+      "description": "Well-rounded for general living"
+    },
+    "family": {
+      "name": "Family",
+      "description": "Schools, parks, playgrounds, quiet areas"
+    },
+    "young-professional": {
+      "name": "Urban Pro",
+      "description": "Transit, nightlife, gyms, urban living"
+    },
+    "remote-worker": {
+      "name": "Remote Worker",
+      "description": "Quiet, parks, cafes, less transit focus"
+    },
+    "active-lifestyle": {
+      "name": "Active Lifestyle",
+      "description": "Gyms, parks, sports facilities"
+    },
+    "student": {
+      "name": "Student",
+      "description": "Universities, transit, affordable food, nightlife"
+    },
+    "established": {
+      "name": "Settled",
+      "description": "Quality dining, culture, quiet residential"
+    },
+    "senior": {
+      "name": "Senior",
+      "description": "Healthcare, quiet, accessible services"
+    }
+  },
+  "factors": {
+    "grocery": "Grocery Stores",
+    "transit": "Public Transit",
+    "healthcare": "Healthcare",
+    "parks": "Parks & Green Areas",
+    "schools": "Schools",
+    "post": "Post & Delivery",
+    "restaurants": "Restaurants & Cafes",
+    "banks": "Banks & ATMs",
+    "gyms": "Gyms & Sports",
+    "playgrounds": "Playgrounds",
+    "stadiums": "Stadiums & Arenas",
+    "nightlife": "Nightlife & Bars",
+    "universities": "Universities",
+    "religious": "Religious Sites",
+    "dog_parks": "Dog Parks",
+    "coworking": "Coworking & Libraries",
+    "cinemas": "Cinemas & Theaters",
+    "markets": "Markets & Bazaars",
+    "water": "Water Bodies",
+    "industrial": "Industrial Areas",
+    "highways": "Major Roads",
+    "airports": "Airports",
+    "railways": "Railway Tracks",
+    "cemeteries": "Cemeteries",
+    "construction": "Construction Sites"
+  },
+    "popup": {
+    "excellent": "Excellent",
+    "good": "Good",
+    "average": "Average",
+    "belowAverage": "Below Average",
+    "poor": "Poor",
+    "footer": "Right-click for details",
+    "goodLabel": "good",
+    "improveLabel": "improve",
+    "noData": "No data available for this area. Zoom in or pan to load POIs."
+  },
+  "tags": {
+    "shop=supermarket": "Supermarkets",
+    "shop=convenience": "Convenience stores",
+    "shop=grocery": "Grocery shops",
+    "railway=station": "Train stations",
+    "railway=halt": "Train halts",
+    "highway=bus_stop": "Bus stops",
+    "railway=tram_stop": "Tram stops",
+    "public_transport=platform": "Transit platforms",
+    "public_transport=station": "Transit stations",
+    "amenity=pharmacy": "Pharmacies",
+    "amenity=hospital": "Hospitals",
+    "amenity=clinic": "Clinics",
+    "amenity=doctors": "Doctor offices",
+    "leisure=park": "Parks",
+    "landuse=forest": "Forests",
+    "natural=wood": "Woodlands",
+    "leisure=garden": "Gardens",
+    "amenity=school": "Schools",
+    "amenity=kindergarten": "Kindergartens",
+    "amenity=college": "Colleges",
+    "amenity=post_office": "Post offices",
+    "amenity=parcel_locker": "Parcel lockers",
+    "amenity=post_box": "Post boxes",
+    "amenity=restaurant": "Restaurants",
+    "amenity=cafe": "Cafes",
+    "amenity=fast_food": "Fast food",
+    "amenity=bank": "Banks",
+    "amenity=atm": "ATMs",
+    "leisure=fitness_centre": "Fitness centers",
+    "leisure=sports_centre": "Sports centers",
+    "leisure=swimming_pool": "Swimming pools",
+    "leisure=playground": "Playgrounds",
+    "landuse=industrial": "Industrial areas",
+    "landuse=quarry": "Quarries",
+    "highway=motorway": "Motorways",
+    "highway=trunk": "Trunk roads",
+    "highway=primary": "Primary roads",
+    "leisure=stadium": "Stadiums",
+    "building=stadium": "Stadium buildings",
+    "amenity=bar": "Bars",
+    "amenity=pub": "Pubs",
+    "amenity=nightclub": "Nightclubs",
+    "amenity=biergarten": "Beer gardens",
+    "amenity=university": "Universities",
+    "building=university": "University buildings",
+    "amenity=place_of_worship": "Places of worship",
+    "building=church": "Churches",
+    "building=mosque": "Mosques",
+    "building=synagogue": "Synagogues",
+    "leisure=dog_park": "Dog parks",
+    "amenity=coworking_space": "Coworking spaces",
+    "amenity=library": "Libraries",
+    "office=coworking": "Coworking offices",
+    "amenity=cinema": "Cinemas",
+    "amenity=theatre": "Theaters",
+    "amenity=marketplace": "Marketplaces",
+    "shop=mall": "Shopping malls",
+    "landuse=retail": "Retail areas",
+    "natural=water": "Water bodies",
+    "water=lake": "Lakes",
+    "water=river": "Rivers",
+    "waterway=river": "Rivers",
+    "natural=coastline": "Coastlines",
+    "aeroway=aerodrome": "Airports",
+    "aeroway=helipad": "Helipads",
+    "aeroway=runway": "Runways",
+    "railway=rail": "Railway tracks",
+    "railway=light_rail": "Light rail",
+    "landuse=cemetery": "Cemeteries",
+    "amenity=grave_yard": "Graveyards",
+    "landuse=construction": "Construction sites",
+    "building=construction": "Buildings under construction"
+  }
+}

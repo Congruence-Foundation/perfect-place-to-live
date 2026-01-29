@@ -1,0 +1,247 @@
+{
+  "app": {
+    "title": "Wyszukiwarka Lokalizacji",
+    "subtitle": "Znajdź idealną okolicę"
+  },
+  "controls": {
+    "profile": "Profil",
+    "factors": "Czynniki",
+    "active": "{count} aktywnych",
+    "reset": "Resetuj",
+    "refresh": "Odśwież",
+    "stop": "Zatrzymaj",
+    "calculating": "Obliczanie..."
+  },
+  "help": {
+    "title": "Jak używać",
+    "rightClick": "<strong>Kliknij prawym przyciskiem</strong> na mapie, aby przeanalizować konkretną lokalizację",
+    "search": "Wyszukaj miasto, aby rozpocząć eksplorację",
+    "adjust": "Dostosuj wagi czynników w lewym panelu, aby spersonalizować ocenę",
+    "greenAreas": "Zielone obszary mają wyższą ocenę na podstawie Twoich preferencji"
+  },
+  "settings": {
+    "title": "Ustawienia",
+    "showPOIs": "Pokaż POI",
+    "showPOIsTooltip": "Wyświetl punkty zainteresowania (kawiarnie, parki itp.) na mapie jako znaczniki.",
+    "gridResolution": "Rozdzielczość siatki",
+    "gridResolutionTooltip": "Odległość między punktami próbkowania. Mniejsze wartości dają więcej szczegółów, ale obliczenia trwają dłużej.",
+    "dense": "Gęsta",
+    "fast": "Szybka",
+    "curve": "Krzywa",
+    "curveTooltip": "Kontroluje wpływ odległości na wynik. Określa czułość na zmiany odległości.",
+    "sensitivity": "Czułość",
+    "sensitivityTooltip": "Dostosowuje stromość krzywej. Wyższe wartości sprawiają, że wynik jest bardziej wrażliwy na małe zmiany odległości.",
+    "gentle": "Łagodna",
+    "aggressive": "Agresywna",
+    "relativeMode": "Tryb względny",
+    "relativeModeTooltip": "Po włączeniu kolory pokazują względne różnice w bieżącym widoku, podkreślając najlepsze/najgorsze obszary, nawet jeśli są podobne.",
+    "computation": "Obliczenia",
+    "computationTooltip": "Czas rzeczywisty oblicza na żądanie z niestandardowymi wagami. Pamięć podręczna używa wstępnie obliczonych kafelków dla szybszego ładowania.",
+    "realtime": "Na żywo",
+    "cached": "Cache",
+    "cachedNotAvailable": "Kafelki z pamięci podręcznej nie są jeszcze dostępne"
+  },
+  "curves": {
+    "log": {
+      "label": "Logarytmiczna",
+      "description": "Bardzo czuła na bliskie odległości",
+      "useCase": "Najlepsza dla precyzji na poziomie ulicy. Małe zmiany odległości mają duże znaczenie."
+    },
+    "linear": {
+      "label": "Liniowa",
+      "description": "Jednolita czułość na wszystkich odległościach",
+      "useCase": "Dobra do ogólnego użytku, gdy wszystkie odległości są równie ważne."
+    },
+    "exp": {
+      "label": "Wykładnicza",
+      "description": "Ostry spadek w pobliżu POI",
+      "useCase": "Najlepsza, gdy bycie bardzo blisko ma największe znaczenie. 95% wyniku przy maksymalnej odległości."
+    },
+    "power": {
+      "label": "Potęgowa",
+      "description": "Umiarkowana czułość (pierwiastek kwadratowy)",
+      "useCase": "Zbalansowana opcja. Bardziej wyrozumiała niż logarytmiczna."
+    }
+  },
+  "debug": {
+    "title": "Debugowanie",
+    "activeFactors": "Aktywne czynniki",
+    "gridPoints": "Punkty siatki",
+    "poisLoaded": "Załadowane POI",
+    "computeTime": "Czas obliczeń"
+  },
+  "search": {
+    "placeholder": "Szukaj miasta...",
+    "noResults": "Nie znaleziono wyników",
+    "failed": "Wyszukiwanie nie powiodło się. Spróbuj ponownie."
+  },
+  "categories": {
+    "essential": "Podstawowe",
+    "lifestyle": "Styl życia",
+    "environment": "Środowisko"
+  },
+  "weight": {
+    "neutral": "Neutralny",
+    "strongPrefer": "Silnie preferuj",
+    "prefer": "Preferuj",
+    "slightPrefer": "Lekko preferuj",
+    "strongAvoid": "Silnie unikaj",
+    "avoid": "Unikaj",
+    "slightAvoid": "Lekko unikaj"
+  },
+  "factorTooltip": {
+    "poiTypes": "Typy POI",
+    "maxDistance": "Maks. odległość",
+    "mode": "Tryb",
+    "avoidMode": "Unikaj (dalej jest lepiej)",
+    "preferMode": "Preferuj (bliżej jest lepiej)",
+    "distanceToStayAway": "Odległość do utrzymania od tego czynnika",
+    "maxAcceptableDistance": "Maksymalna akceptowalna odległość do tego udogodnienia"
+  },
+  "profiles": {
+    "balanced": {
+      "name": "Balans",
+      "description": "Wszechstronny do ogólnego życia"
+    },
+    "family": {
+      "name": "Rodzina",
+      "description": "Szkoły, parki, place zabaw, spokojne okolice"
+    },
+    "young-professional": {
+      "name": "Miejski Pro",
+      "description": "Komunikacja, życie nocne, siłownie, życie miejskie"
+    },
+    "remote-worker": {
+      "name": "Praca zdalna",
+      "description": "Cisza, parki, kawiarnie, mniejszy nacisk na komunikację"
+    },
+    "active-lifestyle": {
+      "name": "Aktywny styl",
+      "description": "Siłownie, parki, obiekty sportowe"
+    },
+    "student": {
+      "name": "Student",
+      "description": "Uczelnie, komunikacja, tanie jedzenie, życie nocne"
+    },
+    "established": {
+      "name": "Spokojny",
+      "description": "Dobra gastronomia, kultura, spokojna okolica"
+    },
+    "senior": {
+      "name": "Senior",
+      "description": "Opieka zdrowotna, cisza, dostępne usługi"
+    }
+  },
+  "factors": {
+    "grocery": "Sklepy spożywcze",
+    "transit": "Komunikacja miejska",
+    "healthcare": "Opieka zdrowotna",
+    "parks": "Parki i tereny zielone",
+    "schools": "Szkoły",
+    "post": "Poczta i przesyłki",
+    "restaurants": "Restauracje i kawiarnie",
+    "banks": "Banki i bankomaty",
+    "gyms": "Siłownie i sport",
+    "playgrounds": "Place zabaw",
+    "stadiums": "Stadiony i areny",
+    "nightlife": "Życie nocne i bary",
+    "universities": "Uczelnie",
+    "religious": "Miejsca kultu",
+    "dog_parks": "Wybiegi dla psów",
+    "coworking": "Coworking i biblioteki",
+    "cinemas": "Kina i teatry",
+    "markets": "Targowiska i bazary",
+    "water": "Zbiorniki wodne",
+    "industrial": "Tereny przemysłowe",
+    "highways": "Główne drogi",
+    "airports": "Lotniska",
+    "railways": "Tory kolejowe",
+    "cemeteries": "Cmentarze",
+    "construction": "Place budowy"
+  },
+    "popup": {
+    "excellent": "Doskonały",
+    "good": "Dobry",
+    "average": "Przeciętny",
+    "belowAverage": "Poniżej średniej",
+    "poor": "Słaby",
+    "footer": "Kliknij prawym dla szczegółów",
+    "goodLabel": "dobrze",
+    "improveLabel": "do poprawy",
+    "noData": "Brak danych dla tego obszaru. Przybliż lub przesuń mapę, aby załadować POI."
+  },
+  "tags": {
+    "shop=supermarket": "Supermarkety",
+    "shop=convenience": "Sklepy całodobowe",
+    "shop=grocery": "Sklepy spożywcze",
+    "railway=station": "Stacje kolejowe",
+    "railway=halt": "Przystanki kolejowe",
+    "highway=bus_stop": "Przystanki autobusowe",
+    "railway=tram_stop": "Przystanki tramwajowe",
+    "public_transport=platform": "Perony",
+    "public_transport=station": "Stacje komunikacji",
+    "amenity=pharmacy": "Apteki",
+    "amenity=hospital": "Szpitale",
+    "amenity=clinic": "Przychodnie",
+    "amenity=doctors": "Gabinety lekarskie",
+    "leisure=park": "Parki",
+    "landuse=forest": "Lasy",
+    "natural=wood": "Zagajniki",
+    "leisure=garden": "Ogrody",
+    "amenity=school": "Szkoły",
+    "amenity=kindergarten": "Przedszkola",
+    "amenity=college": "Szkoły wyższe",
+    "amenity=post_office": "Urzędy pocztowe",
+    "amenity=parcel_locker": "Paczkomaty",
+    "amenity=post_box": "Skrzynki pocztowe",
+    "amenity=restaurant": "Restauracje",
+    "amenity=cafe": "Kawiarnie",
+    "amenity=fast_food": "Fast food",
+    "amenity=bank": "Banki",
+    "amenity=atm": "Bankomaty",
+    "leisure=fitness_centre": "Centra fitness",
+    "leisure=sports_centre": "Centra sportowe",
+    "leisure=swimming_pool": "Baseny",
+    "leisure=playground": "Place zabaw",
+    "landuse=industrial": "Tereny przemysłowe",
+    "landuse=quarry": "Kamieniołomy",
+    "highway=motorway": "Autostrady",
+    "highway=trunk": "Drogi ekspresowe",
+    "highway=primary": "Drogi główne",
+    "leisure=stadium": "Stadiony",
+    "building=stadium": "Budynki stadionów",
+    "amenity=bar": "Bary",
+    "amenity=pub": "Puby",
+    "amenity=nightclub": "Kluby nocne",
+    "amenity=biergarten": "Ogródki piwne",
+    "amenity=university": "Uczelnie",
+    "building=university": "Budynki uczelni",
+    "amenity=place_of_worship": "Miejsca kultu",
+    "building=church": "Kościoły",
+    "building=mosque": "Meczety",
+    "building=synagogue": "Synagogi",
+    "leisure=dog_park": "Wybiegi dla psów",
+    "amenity=coworking_space": "Przestrzenie coworkingowe",
+    "amenity=library": "Biblioteki",
+    "office=coworking": "Biura coworkingowe",
+    "amenity=cinema": "Kina",
+    "amenity=theatre": "Teatry",
+    "amenity=marketplace": "Targowiska",
+    "shop=mall": "Centra handlowe",
+    "landuse=retail": "Tereny handlowe",
+    "natural=water": "Zbiorniki wodne",
+    "water=lake": "Jeziora",
+    "water=river": "Rzeki",
+    "waterway=river": "Rzeki",
+    "natural=coastline": "Linie brzegowe",
+    "aeroway=aerodrome": "Lotniska",
+    "aeroway=helipad": "Lądowiska dla helikopterów",
+    "aeroway=runway": "Pasy startowe",
+    "railway=rail": "Tory kolejowe",
+    "railway=light_rail": "Kolej lekka",
+    "landuse=cemetery": "Cmentarze",
+    "amenity=grave_yard": "Cmentarze",
+    "landuse=construction": "Place budowy",
+    "building=construction": "Budynki w budowie"
+  }
+}
