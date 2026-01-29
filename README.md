@@ -16,7 +16,7 @@ An interactive map application that helps identify the best locations to live ba
 - **Map**: Leaflet, react-leaflet, leaflet.heat
 - **UI Components**: shadcn/ui
 - **Data Source**: OpenStreetMap via Overpass API
-- **Caching**: Vercel KV (Redis)
+- **Caching**: Upstash Redis
 
 ## Getting Started
 
@@ -101,8 +101,8 @@ Generate pre-computed tiles (requires admin secret).
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `OVERPASS_API_URL` | Overpass API endpoint | No (has default) |
-| `KV_REST_API_URL` | Vercel KV URL | No |
-| `KV_REST_API_TOKEN` | Vercel KV token | No |
+| `UPSTASH_REDIS_REST_URL` | Upstash Redis URL | No |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis token | No |
 | `ADMIN_SECRET` | Secret for tile generation | For tile generation |
 
 ## Deployment

@@ -1,15 +1,34 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 
 // In-memory cache for development/fallback
 const memoryCache = new Map<string, { data: unknown; expiresAt: number }>();
 
 const DEFAULT_TTL = 3600; // 1 hour in seconds
 
+// Lazy-initialize Redis client
+let redis: Redis | null = null;
+
 /**
- * Check if Vercel KV is available
+ * Check if Upstash Redis is available
  */
-function isKVAvailable(): boolean {
-  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+function isRedisAvailable(): boolean {
+  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+}
+
+/**
+ * Get Redis client (lazy initialization)
+ */
+function getRedis(): Redis | null {
+  if (!isRedisAvailable()) return null;
+  
+  if (!redis) {
+    redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    });
+  }
+  
+  return redis;
 }
 
 /**
@@ -17,8 +36,9 @@ function isKVAvailable(): boolean {
  */
 export async function cacheGet<T>(key: string): Promise<T | null> {
   try {
-    if (isKVAvailable()) {
-      return await kv.get<T>(key);
+    const client = getRedis();
+    if (client) {
+      return await client.get<T>(key);
     }
 
     // Fallback to memory cache
@@ -44,8 +64,9 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
  */
 export async function cacheSet<T>(key: string, value: T, ttl: number = DEFAULT_TTL): Promise<void> {
   try {
-    if (isKVAvailable()) {
-      await kv.set(key, value, { ex: ttl });
+    const client = getRedis();
+    if (client) {
+      await client.set(key, value, { ex: ttl });
       return;
     }
 
@@ -64,8 +85,9 @@ export async function cacheSet<T>(key: string, value: T, ttl: number = DEFAULT_T
  */
 export async function cacheDelete(key: string): Promise<void> {
   try {
-    if (isKVAvailable()) {
-      await kv.del(key);
+    const client = getRedis();
+    if (client) {
+      await client.del(key);
       return;
     }
 
@@ -80,8 +102,9 @@ export async function cacheDelete(key: string): Promise<void> {
  */
 export async function cacheGetMany<T>(keys: string[]): Promise<(T | null)[]> {
   try {
-    if (isKVAvailable()) {
-      return await kv.mget<T[]>(...keys);
+    const client = getRedis();
+    if (client) {
+      return await client.mget<T[]>(...keys);
     }
 
     // Fallback to memory cache
