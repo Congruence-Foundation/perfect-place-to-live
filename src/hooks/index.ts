@@ -1,3 +1,5 @@
-export { useDebounce, useDebouncedCallback, useThrottledCallback } from './useDebounce';
+export { useDebounce } from './useDebounce';
 export { useHeatmap } from './useHeatmap';
-export { useMediaQuery, useIsMobile, useIsDesktop } from './useMediaQuery';
+export { useMediaQuery, useIsMobile } from './useMediaQuery';
+export { useSnapPoints } from './useSnapPoints';
+export type { SnapPointConfig, SnapPointName, SnapHeights } from './useSnapPoints';

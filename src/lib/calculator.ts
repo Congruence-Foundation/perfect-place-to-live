@@ -9,17 +9,121 @@ const DENSITY_BONUS_MAX = 0.15;   // Maximum bonus (15% improvement)
 const DENSITY_BONUS_SCALE = 3;    // Number of POIs needed for full bonus
 
 /**
- * Apply a distance curve transformation to normalize distance values
- * Different curves provide different sensitivity to distance changes:
+ * K value statistics for debugging and analysis
+ */
+export interface KStats {
+  min: number;
+  max: number;
+  avg: number;
+  stdDev: number;
+}
+
+/**
+ * Calculate statistics for K values in heatmap points
+ * Used for debugging and understanding score distribution
+ */
+export function calculateKStats(points: HeatmapPoint[]): KStats | null {
+  if (points.length === 0) return null;
+  
+  let minK = Infinity;
+  let maxK = -Infinity;
+  let sumK = 0;
+  
+  for (const p of points) {
+    if (p.value < minK) minK = p.value;
+    if (p.value > maxK) maxK = p.value;
+    sumK += p.value;
+  }
+  
+  const avgK = sumK / points.length;
+  
+  let sumSqDiff = 0;
+  for (const p of points) {
+    sumSqDiff += Math.pow(p.value - avgK, 2);
+  }
+  const stdDev = Math.sqrt(sumSqDiff / points.length);
+  
+  return { min: minK, max: maxK, avg: avgK, stdDev };
+}
+
+/**
+ * Log K value statistics to console
+ * @param points - Heatmap points to analyze
+ * @param context - Additional context to include in log message
+ */
+export function logKStats(points: HeatmapPoint[], context?: string): void {
+  const stats = calculateKStats(points);
+  if (!stats) return;
+  
+  const contextStr = context ? ` (${context})` : '';
+  console.log(
+    `K value stats: min=${stats.min.toFixed(3)}, max=${stats.max.toFixed(3)}, avg=${stats.avg.toFixed(3)}, stdDev=${stats.stdDev.toFixed(3)}${contextStr}`
+  );
+}
+
+/**
+ * Distance curve strategy interface
+ * Each strategy transforms a distance ratio (0-1) to a score (0-1)
+ */
+interface DistanceCurveStrategy {
+  /**
+   * Apply the distance curve transformation
+   * @param ratio - Distance ratio (0 = at POI, 1 = at maxDistance)
+   * @param sensitivity - Curve sensitivity parameter
+   * @returns Transformed score (0-1)
+   */
+  apply(ratio: number, sensitivity: number): number;
+}
+
+/**
+ * Distance curve strategies
+ * Each provides different sensitivity to distance changes:
  * - linear: uniform sensitivity across all distances
  * - log: more sensitive to small distances (street-level precision)
  * - exp: sharp drop-off near POI, 2-sigma coverage at maxDistance
  * - power: moderate sensitivity with square root curve
+ */
+const DISTANCE_CURVE_STRATEGIES: Record<DistanceCurve, DistanceCurveStrategy> = {
+  linear: {
+    apply: (ratio: number) => ratio,
+  },
+  log: {
+    // Logarithmic - very sensitive to small distances
+    // sensitivity controls the base: higher = more sensitive
+    apply: (ratio: number, sensitivity: number) => {
+      const logBase = 1 + (Math.E - 1) * sensitivity;
+      return Math.log(1 + ratio * (logBase - 1)) / Math.log(logBase);
+    },
+  },
+  exp: {
+    // Exponential decay - sharp drop-off near POI
+    // sensitivity controls decay rate: higher = sharper drop-off
+    // Default sensitivity=1 gives k=3 (95% at maxDistance)
+    apply: (ratio: number, sensitivity: number) => {
+      const k = 3 * sensitivity;
+      return 1 - Math.exp(-k * ratio);
+    },
+  },
+  power: {
+    // Power curve - sensitivity controls exponent
+    // Default sensitivity=1 gives n=0.5 (square root)
+    // Lower sensitivity = more sensitive to small distances
+    apply: (ratio: number, sensitivity: number) => {
+      const n = 0.5 / sensitivity;
+      return Math.pow(ratio, n);
+    },
+  },
+};
+
+/**
+ * Apply a distance curve transformation to normalize distance values
+ * Different curves provide different sensitivity to distance changes
  * 
+ * @param distance - Raw distance in meters
+ * @param maxDistance - Maximum distance threshold
+ * @param curve - The curve type to apply
  * @param sensitivity - Controls curve steepness (0.5-3, default 1)
- *   - For log: higher = more sensitive to small distances
- *   - For exp: higher = sharper drop-off (default 3 gives 95% at maxDistance)
- *   - For power: lower = more sensitive to small distances (default 0.5)
+ * @returns Normalized score (0-1)
  */
 export function applyDistanceCurve(
   distance: number,
@@ -28,33 +132,8 @@ export function applyDistanceCurve(
   sensitivity: number = 1
 ): number {
   const ratio = Math.min(distance, maxDistance) / maxDistance;
-  
-  switch (curve) {
-    case 'log':
-      // Logarithmic - very sensitive to small distances
-      // sensitivity controls the base: higher = more sensitive
-      // Default sensitivity=1 gives standard log curve
-      const logBase = 1 + (Math.E - 1) * sensitivity;
-      return Math.log(1 + ratio * (logBase - 1)) / Math.log(logBase);
-      
-    case 'exp':
-      // Exponential decay - sharp drop-off near POI
-      // sensitivity controls decay rate: higher = sharper drop-off
-      // Default sensitivity=1 gives k=3 (95% at maxDistance)
-      const k = 3 * sensitivity;
-      return 1 - Math.exp(-k * ratio);
-      
-    case 'power':
-      // Power curve - sensitivity controls exponent
-      // Default sensitivity=1 gives n=0.5 (square root)
-      // Lower sensitivity = more sensitive to small distances
-      const n = 0.5 / sensitivity;
-      return Math.pow(ratio, n);
-      
-    case 'linear':
-    default:
-      return ratio;
-  }
+  const strategy = DISTANCE_CURVE_STRATEGIES[curve] || DISTANCE_CURVE_STRATEGIES.linear;
+  return strategy.apply(ratio, sensitivity);
 }
 
 /**
@@ -254,22 +333,8 @@ export function calculateHeatmap(
     heatmapPoints = normalizeKValues(heatmapPoints);
   }
 
-  // Log K value distribution for debugging (avoid stack overflow with large arrays)
-  if (heatmapPoints.length > 0) {
-    let minK = Infinity, maxK = -Infinity, sumK = 0;
-    for (const p of heatmapPoints) {
-      if (p.value < minK) minK = p.value;
-      if (p.value > maxK) maxK = p.value;
-      sumK += p.value;
-    }
-    const avgK = sumK / heatmapPoints.length;
-    let sumSqDiff = 0;
-    for (const p of heatmapPoints) {
-      sumSqDiff += Math.pow(p.value - avgK, 2);
-    }
-    const stdDev = Math.sqrt(sumSqDiff / heatmapPoints.length);
-    console.log(`K value stats: min=${minK.toFixed(3)}, max=${maxK.toFixed(3)}, avg=${avgK.toFixed(3)}, stdDev=${stdDev.toFixed(3)} (curve: ${distanceCurve}, sensitivity: ${sensitivity}, normalized: ${normalizeToViewport})`);
-  }
+  // Log K value distribution for debugging
+  logKStats(heatmapPoints, `curve: ${distanceCurve}, sensitivity: ${sensitivity}, normalized: ${normalizeToViewport}`);
 
   const endTime = performance.now();
   console.log(
@@ -280,62 +345,113 @@ export function calculateHeatmap(
 }
 
 /**
- * Recalculate K values with new weights (client-side, no POI refetch needed)
+ * Factor breakdown result for a single factor
+ * Used for detailed location analysis in popups
  */
-export function recalculateWithWeights(
-  points: { lat: number; lng: number }[],
-  poiData: Map<string, POI[]>,
+export interface FactorBreakdown {
+  factorId: string;
+  factorName: string;
+  distance: number;
+  maxDistance: number;
+  score: number; // 0-1, lower is better
+  isNegative: boolean; // derived from weight sign
+  weight: number;
+  contribution: number; // weighted contribution to final K
+  noPOIs: boolean;
+  nearbyCount: number; // count of POIs within maxDistance
+}
+
+/**
+ * Result of factor breakdown calculation
+ */
+export interface FactorBreakdownResult {
+  k: number;
+  breakdown: FactorBreakdown[];
+}
+
+/**
+ * Calculate detailed factor breakdown for a specific location
+ * Used for showing location details in popups
+ * 
+ * @param lat - Latitude of the location
+ * @param lng - Longitude of the location
+ * @param factors - Array of factors to analyze
+ * @param pois - POI data keyed by factor ID
+ * @returns K value and detailed breakdown by factor
+ */
+export function calculateFactorBreakdown(
+  lat: number,
+  lng: number,
   factors: Factor[],
-  distanceCurve: DistanceCurve = 'log',
-  sensitivity: number = 1
-): HeatmapPoint[] {
-  // Build spatial indexes
-  const spatialIndexes = new Map<string, SpatialIndex>();
+  pois: Record<string, POI[]>
+): FactorBreakdownResult {
+  const breakdown: FactorBreakdown[] = [];
+  let weightedSum = 0;
+  let totalWeight = 0;
+  const point = { lat, lng };
+
   for (const factor of factors) {
-    if (factor.enabled && factor.weight !== 0) {
-      const pois = poiData.get(factor.id) || [];
-      if (pois.length > 0) {
-        spatialIndexes.set(factor.id, new SpatialIndex(pois));
+    if (!factor.enabled || factor.weight === 0) continue;
+
+    const factorPOIs = pois[factor.id] || [];
+    const isNegative = factor.weight < 0;
+    const absWeight = Math.abs(factor.weight);
+    
+    let nearestDistance = Infinity;
+    let noPOIs = false;
+    let nearbyCount = 0;
+
+    if (factorPOIs.length === 0) {
+      noPOIs = true;
+      nearestDistance = factor.maxDistance;
+    } else {
+      // Find nearest POI and count nearby POIs
+      for (const poi of factorPOIs) {
+        const dist = haversineDistance(point, { lat: poi.lat, lng: poi.lng });
+        if (dist < nearestDistance) {
+          nearestDistance = dist;
+        }
+        // Count POIs within maxDistance
+        if (dist <= factor.maxDistance) {
+          nearbyCount++;
+        }
       }
     }
+
+    const cappedDistance = Math.min(nearestDistance, factor.maxDistance);
+    const normalizedDistance = cappedDistance / factor.maxDistance;
+    
+    // Score: 0 = good, 1 = bad
+    let score: number;
+    if (noPOIs) {
+      score = isNegative ? 0 : 1;
+    } else {
+      score = isNegative ? (1 - normalizedDistance) : normalizedDistance;
+    }
+
+    const contribution = score * absWeight;
+    weightedSum += contribution;
+    totalWeight += absWeight;
+
+    breakdown.push({
+      factorId: factor.id,
+      factorName: factor.name,
+      distance: nearestDistance,
+      maxDistance: factor.maxDistance,
+      score,
+      isNegative,
+      weight: factor.weight,
+      contribution,
+      noPOIs,
+      nearbyCount,
+    });
   }
 
-  return points.map((point) => ({
-    lat: point.lat,
-    lng: point.lng,
-    value: calculateK(point, poiData, factors, spatialIndexes, distanceCurve, sensitivity),
-  }));
+  const k = totalWeight > 0 ? weightedSum / totalWeight : 0.5;
+  
+  // Sort by contribution (highest impact first)
+  breakdown.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+
+  return { k, breakdown };
 }
 
-/**
- * Convert K value to heatmap intensity
- * K is 0-1 where lower is better
- * We want to show good areas (low K) as hot (high intensity)
- */
-export function kToIntensity(k: number): number {
-  // Invert K so that low K = high intensity (good areas are "hot")
-  return 1 - k;
-}
-
-/**
- * Get color for K value (for legend/display)
- */
-export function getKColor(k: number): string {
-  // Green (good) to Red (bad)
-  if (k < 0.2) return '#22c55e'; // green-500
-  if (k < 0.4) return '#84cc16'; // lime-500
-  if (k < 0.6) return '#eab308'; // yellow-500
-  if (k < 0.8) return '#f97316'; // orange-500
-  return '#ef4444'; // red-500
-}
-
-/**
- * Get label for K value range
- */
-export function getKLabel(k: number): string {
-  if (k < 0.2) return 'Excellent';
-  if (k < 0.4) return 'Good';
-  if (k < 0.6) return 'Average';
-  if (k < 0.8) return 'Below Average';
-  return 'Poor';
-}

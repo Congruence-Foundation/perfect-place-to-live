@@ -6,30 +6,15 @@ import { GripHorizontal, ChevronDown, ChevronUp, SlidersHorizontal, RotateCcw } 
 import { Button } from '@/components/ui/button';
 import { Factor } from '@/types';
 import { FACTOR_PROFILES } from '@/config/factors';
+import { useSnapPoints } from '@/hooks';
 import ProfileSelector from './ProfileSelector';
 import WeightSliders from './WeightSliders';
 
-// Snap points configuration (all in percentage of viewport height)
-const SNAP_POINTS = {
-  collapsedPercent: 7, // ~7% of viewport - minimal height showing just the drag handle
-  halfPercent: 50, // percentage of viewport
-  expandedPercent: 75, // percentage of viewport (reduced from 85%)
-};
-
-// Safe window height getter for SSR
-const getWindowHeight = () => {
-  if (typeof window === 'undefined') return 800; // Default for SSR
-  return window.innerHeight;
-};
-
-// Get snap point heights in pixels (for internal calculations)
-const getSnapHeights = () => {
-  const vh = getWindowHeight();
-  return {
-    collapsed: (SNAP_POINTS.collapsedPercent / 100) * vh,
-    half: (SNAP_POINTS.halfPercent / 100) * vh,
-    expanded: (SNAP_POINTS.expandedPercent / 100) * vh,
-  };
+// Snap points configuration
+const SNAP_CONFIG = {
+  collapsedPercent: 7,
+  halfPercent: 50,
+  expandedPercent: 75,
 };
 
 interface BottomSheetProps {
@@ -55,27 +40,22 @@ export default function BottomSheet({
   const tControls = useTranslations('controls');
   const tProfiles = useTranslations('profiles');
 
-  // Sheet height state (always in pixels, calculated from vh)
-  const [sheetHeight, setSheetHeight] = useState(() => {
-    // Initialize with collapsed height (will be recalculated on mount)
-    if (typeof window === 'undefined') return 56; // ~7% of 800px default
-    return (SNAP_POINTS.collapsedPercent / 100) * window.innerHeight;
-  });
+  const {
+    height: sheetHeight,
+    setHeight: setSheetHeight,
+    isMounted,
+    getSnapHeights,
+    getCurrentSnapPoint,
+    snapToNearest,
+    clampHeight,
+  } = useSnapPoints(SNAP_CONFIG);
+
   const [isDragging, setIsDragging] = useState(false);
   const [isFactorsExpanded, setIsFactorsExpanded] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
   
   const sheetRef = useRef<HTMLDivElement>(null);
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(0);
-
-  // Track mount state for SSR safety and set initial height
-  useEffect(() => {
-    setIsMounted(true);
-    // Set correct collapsed height based on actual viewport
-    const snaps = getSnapHeights();
-    setSheetHeight(snaps.collapsed);
-  }, []);
 
   // Notify parent of height changes
   useEffect(() => {
@@ -87,37 +67,15 @@ export default function BottomSheet({
   const enabledFactorCount = factors.filter((f) => f.enabled && f.weight !== 0).length;
   const currentProfile = FACTOR_PROFILES.find(p => p.id === selectedProfile);
 
-  // Get current snap point name
-  const getCurrentSnapPoint = useCallback(() => {
-    const snaps = getSnapHeights();
-    
-    if (sheetHeight < (snaps.collapsed + snaps.half) / 2) return 'collapsed';
-    if (sheetHeight < (snaps.half + snaps.expanded) / 2) return 'half';
-    return 'expanded';
-  }, [sheetHeight]);
-
-  // Snap to nearest point
-  const snapToNearest = useCallback((currentHeight: number) => {
-    const snaps = getSnapHeights();
-    
-    // Calculate distances to each snap point
-    const collapsedDist = Math.abs(currentHeight - snaps.collapsed);
-    const halfDist = Math.abs(currentHeight - snaps.half);
-    const expandedDist = Math.abs(currentHeight - snaps.expanded);
-    
-    // Find minimum
-    const minDist = Math.min(collapsedDist, halfDist, expandedDist);
-    
-    if (minDist === collapsedDist) {
-      setSheetHeight(snaps.collapsed);
+  // Handle snap with side effects
+  const handleSnapToNearest = useCallback((currentHeight: number) => {
+    const snapPoint = snapToNearest(currentHeight);
+    if (snapPoint === 'collapsed') {
       setIsFactorsExpanded(false);
-    } else if (minDist === halfDist) {
-      setSheetHeight(snaps.half);
-    } else {
-      setSheetHeight(snaps.expanded);
+    } else if (snapPoint === 'expanded') {
       setIsFactorsExpanded(true);
     }
-  }, []);
+  }, [snapToNearest]);
 
   // Handle drag start
   const handleDragStart = useCallback((clientY: number) => {
@@ -132,23 +90,15 @@ export default function BottomSheet({
     
     const deltaY = dragStartY.current - clientY;
     const newHeight = dragStartHeight.current + deltaY;
-    const snaps = getSnapHeights();
-    
-    // Clamp between min and max
-    const clampedHeight = Math.max(
-      snaps.collapsed,
-      Math.min(newHeight, snaps.expanded)
-    );
-    
-    setSheetHeight(clampedHeight);
-  }, [isDragging]);
+    setSheetHeight(clampHeight(newHeight));
+  }, [isDragging, clampHeight, setSheetHeight]);
 
   // Handle drag end
   const handleDragEnd = useCallback(() => {
     if (!isDragging) return;
     setIsDragging(false);
-    snapToNearest(sheetHeight);
-  }, [isDragging, sheetHeight, snapToNearest]);
+    handleSnapToNearest(sheetHeight);
+  }, [isDragging, sheetHeight, handleSnapToNearest]);
 
   // Touch event handlers
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -195,12 +145,12 @@ export default function BottomSheet({
     const snaps = getSnapHeights();
     
     if (current === 'collapsed') {
-      setSheetHeight(snaps.expanded); // Go to 75% instead of 50%
+      setSheetHeight(snaps.expanded);
     } else {
       setSheetHeight(snaps.collapsed);
       setIsFactorsExpanded(false);
     }
-  }, [getCurrentSnapPoint]);
+  }, [getCurrentSnapPoint, getSnapHeights, setSheetHeight]);
 
   // Don't render until mounted to avoid SSR hydration issues
   if (!isMounted) {

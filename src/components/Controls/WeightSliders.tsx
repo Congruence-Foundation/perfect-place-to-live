@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Factor } from '@/types';
+import { POI_COLORS, FACTOR_ICON_MAP, DEFAULT_FACTOR_ICON } from '@/constants';
+import { formatDistance } from '@/lib/utils';
 import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -12,98 +14,16 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  ShoppingCart,
-  Train,
-  HeartPulse,
-  Trees,
-  GraduationCap,
-  Package,
-  Utensils,
-  Landmark,
-  Dumbbell,
-  Baby,
-  Factory,
-  Route,
   Info,
   ChevronDown,
   ChevronUp,
   MapPin,
-  Trophy,
-  Wine,
-  BookOpen,
-  Church,
-  Dog,
-  Laptop,
-  Film,
-  Store,
-  Waves,
-  Plane,
-  TrainTrack,
-  Cross,
-  HardHat,
 } from 'lucide-react';
 
 interface WeightSlidersProps {
   factors: Factor[];
   onFactorChange: (factorId: string, updates: Partial<Factor>) => void;
 }
-
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
-  'shopping-cart': ShoppingCart,
-  train: Train,
-  'heart-pulse': HeartPulse,
-  trees: Trees,
-  'graduation-cap': GraduationCap,
-  package: Package,
-  utensils: Utensils,
-  landmark: Landmark,
-  dumbbell: Dumbbell,
-  baby: Baby,
-  factory: Factory,
-  road: Route,
-  trophy: Trophy,
-  wine: Wine,
-  'book-open': BookOpen,
-  church: Church,
-  dog: Dog,
-  laptop: Laptop,
-  film: Film,
-  store: Store,
-  waves: Waves,
-  plane: Plane,
-  'train-track': TrainTrack,
-  cross: Cross,
-  'hard-hat': HardHat,
-};
-
-// POI marker colors - must match MapView.tsx
-const POI_COLORS: Record<string, string> = {
-  grocery: '#22c55e',      // green
-  transit: '#3b82f6',      // blue
-  healthcare: '#ef4444',   // red
-  parks: '#84cc16',        // lime
-  schools: '#f59e0b',      // amber
-  post: '#8b5cf6',         // violet
-  restaurants: '#ec4899',  // pink
-  banks: '#14b8a6',        // teal
-  gyms: '#f97316',         // orange
-  playgrounds: '#a855f7',  // purple
-  industrial: '#6b7280',   // gray
-  highways: '#374151',     // dark gray
-  stadiums: '#dc2626',     // red
-  nightlife: '#7c3aed',    // violet
-  universities: '#0891b2', // cyan
-  religious: '#ca8a04',    // yellow
-  dog_parks: '#65a30d',    // lime
-  coworking: '#0284c7',    // sky
-  cinemas: '#be185d',      // pink
-  markets: '#ea580c',      // orange
-  water: '#0ea5e9',        // sky
-  airports: '#64748b',     // slate
-  railways: '#78716c',     // stone
-  cemeteries: '#57534e',   // stone
-  construction: '#fbbf24', // amber
-};
 
 // Max distance presets for different factor types
 const MAX_DISTANCE_LIMITS: Record<string, { min: number; max: number; step: number }> = {
@@ -136,16 +56,8 @@ const MAX_DISTANCE_LIMITS: Record<string, { min: number; max: number; step: numb
 
 const DEFAULT_LIMITS = { min: 100, max: 5000, step: 100 };
 
-function formatDistance(meters: number): string {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(1)}km`;
-  }
-  return `${meters}m`;
-}
-
 export default function WeightSliders({ factors, onFactorChange }: WeightSlidersProps) {
   const [expandedFactors, setExpandedFactors] = useState<Set<string>>(new Set());
-  const t = useTranslations();
   const tFactors = useTranslations('factors');
   const tCategories = useTranslations('categories');
   const tWeight = useTranslations('weight');
@@ -197,7 +109,7 @@ export default function WeightSliders({ factors, onFactorChange }: WeightSliders
   const environmentFactors = factors.filter((f) => f.category === 'environment');
 
   const renderFactor = (factor: Factor) => {
-    const IconComponent = ICON_MAP[factor.icon] || ShoppingCart;
+    const IconComponent = FACTOR_ICON_MAP[factor.icon] || DEFAULT_FACTOR_ICON;
     const color = POI_COLORS[factor.id] || '#6b7280';
     const tagDescription = formatOsmTags(factor.osmTags);
     const isExpanded = expandedFactors.has(factor.id);

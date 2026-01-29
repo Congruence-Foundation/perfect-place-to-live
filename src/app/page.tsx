@@ -3,30 +3,19 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import MapContainer, { MapContainerRef } from '@/components/Map/MapContainer';
-import { WeightSliders, CitySearch, HeatmapSettings, ProfileSelector, MapSettings, DebugInfo, AppInfo, LanguageSwitcher, BottomSheet } from '@/components/Controls';
+import { WeightSliders, CitySearch, HeatmapSettings, ProfileSelector, MapSettings, DebugInfo, AppInfo, LanguageSwitcher, BottomSheet, RefreshButton } from '@/components/Controls';
 import { Button } from '@/components/ui/button';
 import { DEFAULT_FACTORS, applyProfile, FACTOR_PROFILES } from '@/config/factors';
 import { Bounds, Factor } from '@/types';
 import { useHeatmap, useIsMobile } from '@/hooks';
 import { useDebounce } from '@/hooks/useDebounce';
-import { Loader2, RefreshCw, ChevronLeft, ChevronRight, Square, SlidersHorizontal, ChevronDown, RotateCcw, ZoomIn } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
+import { isViewportCovered, isBoundsTooLarge, expandBounds } from '@/lib/bounds';
 
 // Grid buffer used by the API (must match GRID_BUFFER_DEGREES in route.ts)
 const GRID_BUFFER_DEGREES = 0.05;
 
-// Check if viewport is fully contained within the covered bounds
-function isViewportCovered(viewport: Bounds, coveredBounds: Bounds | null): boolean {
-  if (!coveredBounds) return false;
-  return (
-    viewport.north <= coveredBounds.north &&
-    viewport.south >= coveredBounds.south &&
-    viewport.east <= coveredBounds.east &&
-    viewport.west >= coveredBounds.west
-  );
-}
-
 export default function Home() {
-  const t = useTranslations();
   const tApp = useTranslations('app');
   const tControls = useTranslations('controls');
   const tProfiles = useTranslations('profiles');
@@ -108,9 +97,7 @@ export default function Home() {
     // Use current values, not debounced, for immediate refresh
     if (bounds && mode === 'realtime') {
       // Check viewport size - require more zoom before rendering
-      const latRange = bounds.north - bounds.south;
-      const lngRange = bounds.east - bounds.west;
-      if (latRange > 0.5 || lngRange > 0.75) {
+      if (isBoundsTooLarge(bounds)) {
         // Show zoom warning message
         setShowZoomWarning(true);
         setTimeout(() => setShowZoomWarning(false), 3000);
@@ -161,12 +148,8 @@ export default function Home() {
       return;
     }
 
-    // Calculate viewport size to determine if we should fetch
-    const latRange = debouncedBounds.north - debouncedBounds.south;
-    const lngRange = debouncedBounds.east - debouncedBounds.west;
-
     // Don't fetch if viewport is too large (zoomed out too much) - require more zoom
-    if (latRange > 0.5 || lngRange > 0.75) {
+    if (isBoundsTooLarge(debouncedBounds)) {
       return;
     }
 
@@ -189,12 +172,7 @@ export default function Home() {
     }
 
     // Calculate the bounds that will be covered after this fetch (viewport + grid buffer)
-    const newCoveredBounds: Bounds = {
-      north: debouncedBounds.north + GRID_BUFFER_DEGREES,
-      south: debouncedBounds.south - GRID_BUFFER_DEGREES,
-      east: debouncedBounds.east + GRID_BUFFER_DEGREES,
-      west: debouncedBounds.west - GRID_BUFFER_DEGREES,
-    };
+    const newCoveredBounds = expandBounds(debouncedBounds, GRID_BUFFER_DEGREES);
 
     // Update covered bounds and params hash before fetching
     coveredBoundsRef.current = newCoveredBounds;
@@ -214,7 +192,7 @@ export default function Home() {
   const totalPOICount = Object.values(pois).reduce((sum, arr) => sum + arr.length, 0);
 
   // Check if viewport is too large (zoomed out too much) - matches the fetch threshold
-  const isZoomedOutTooMuch = bounds ? (bounds.north - bounds.south > 0.5 || bounds.east - bounds.west > 0.75) : false;
+  const isZoomedOutTooMuch = bounds ? isBoundsTooLarge(bounds) : false;
 
   // Calculate search box position - centered on map area, not whole screen (desktop only)
   const panelWidth = isPanelOpen && !isMobile ? 320 : 0; // 320px = w-80
@@ -366,42 +344,15 @@ export default function Home() {
         {!isMobile && (
           <>
             {/* Refresh/Abort Button - Bottom Center */}
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 z-[1000] flex flex-col items-center gap-2">
-              {/* Zoom warning message */}
-              {showZoomWarning && (
-                <div className="bg-amber-500/90 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                  <ZoomIn className="h-3.5 w-3.5" />
-                  <span>{tControls('zoomIn')}</span>
-                </div>
-              )}
-              {isLoading ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="shadow-lg rounded-full px-4"
-                  onClick={abortFetch}
-                >
-                  <Square className="h-4 w-4 fill-current" />
-                  <span className="ml-2">{tControls('stop')}</span>
-                </Button>
-              ) : (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className={`shadow-lg rounded-full px-4 bg-background/95 backdrop-blur-sm ${
-                    isZoomedOutTooMuch ? 'opacity-50' : ''
-                  }`}
-                  onClick={handleRefresh}
-                  disabled={!bounds || mode !== 'realtime'}
-                >
-                  {isZoomedOutTooMuch ? (
-                    <ZoomIn className="h-4 w-4" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  <span className="ml-2">{tControls('refresh')}</span>
-                </Button>
-              )}
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 z-[1000]">
+              <RefreshButton
+                isLoading={isLoading}
+                isZoomedOutTooMuch={isZoomedOutTooMuch}
+                showZoomWarning={showZoomWarning}
+                disabled={!bounds || mode !== 'realtime'}
+                onRefresh={handleRefresh}
+                onAbort={abortFetch}
+              />
             </div>
 
             {/* Debug Info - Bottom Left */}
@@ -465,42 +416,14 @@ export default function Home() {
               />
 
               {/* Refresh/Abort Button - Center */}
-              <div className="flex flex-col items-center gap-2">
-                {showZoomWarning && (
-                  <div className="bg-amber-500/90 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                    <ZoomIn className="h-3.5 w-3.5" />
-                    <span>{tControls('zoomIn')}</span>
-                  </div>
-                )}
-                {isLoading ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="shadow-lg rounded-full px-4"
-                    onClick={abortFetch}
-                  >
-                    <Square className="h-4 w-4 fill-current" />
-                    <span className="ml-2">{tControls('stop')}</span>
-                  </Button>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className={`shadow-lg rounded-full px-4 bg-background/95 backdrop-blur-sm ${
-                      isZoomedOutTooMuch ? 'opacity-50' : ''
-                    }`}
-                    onClick={handleRefresh}
-                    disabled={!bounds || mode !== 'realtime'}
-                  >
-                    {isZoomedOutTooMuch ? (
-                      <ZoomIn className="h-4 w-4" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4" />
-                    )}
-                    <span className="ml-2">{tControls('refresh')}</span>
-                  </Button>
-                )}
-              </div>
+              <RefreshButton
+                isLoading={isLoading}
+                isZoomedOutTooMuch={isZoomedOutTooMuch}
+                showZoomWarning={showZoomWarning}
+                disabled={!bounds || mode !== 'realtime'}
+                onRefresh={handleRefresh}
+                onAbort={abortFetch}
+              />
 
               {/* Map Settings - Right */}
               <MapSettings

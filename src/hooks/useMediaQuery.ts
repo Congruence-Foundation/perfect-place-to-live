@@ -40,11 +40,3 @@ export function useMediaQuery(query: string): boolean {
 export function useIsMobile(): boolean {
   return !useMediaQuery('(min-width: 768px)');
 }
-
-/**
- * Hook to detect if the viewport is desktop (md breakpoint and above)
- * @returns boolean - true if desktop, false if mobile
- */
-export function useIsDesktop(): boolean {
-  return useMediaQuery('(min-width: 768px)');
-}

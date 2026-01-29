@@ -82,7 +82,7 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
       const data: SearchResult[] = await response.json();
       setResults(data);
       setIsOpen(data.length > 0);
-    } catch (err) {
+    } catch {
       setError(t('failed'));
       setResults([]);
     } finally {

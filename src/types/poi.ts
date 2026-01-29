@@ -17,7 +17,3 @@ export interface POI {
   tags: Record<string, string>;
   name?: string;
 }
-
-export interface POIResponse {
-  [factorId: string]: POI[];
-}

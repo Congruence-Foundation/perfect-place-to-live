@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Settings, X, Eye, EyeOff, Info } from 'lucide-react';
+import { Settings, X, Eye, EyeOff } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -13,12 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { HeatmapSettings } from './AdvancedSettings';
+import { InfoTooltip } from '@/components/ui/info-tooltip';
+import { HeatmapSettings } from '@/types';
 import { DistanceCurve } from '@/types';
 
 const CURVE_VALUES: DistanceCurve[] = ['log', 'linear', 'exp', 'power'];
@@ -74,18 +70,9 @@ export default function MapSettings({
                   {showPOIs ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                   {t('showPOIs')}
                 </Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
-                      <Info className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left" className="max-w-xs">
-                    <p className="text-xs">
-                      {t('showPOIsTooltip')}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
+                <InfoTooltip>
+                  <p className="text-xs">{t('showPOIsTooltip')}</p>
+                </InfoTooltip>
               </div>
               <Switch
                 checked={showPOIs}
@@ -98,18 +85,9 @@ export default function MapSettings({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1">
                   <Label className="text-xs">{t('gridResolution')}</Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
-                        <Info className="h-3 w-3 text-muted-foreground" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="left" className="max-w-xs">
-                      <p className="text-xs">
-                        {t('gridResolutionTooltip')}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
+                  <InfoTooltip>
+                    <p className="text-xs">{t('gridResolutionTooltip')}</p>
+                  </InfoTooltip>
                 </div>
                 <span className="text-xs text-muted-foreground font-medium">{settings.gridCellSize}m</span>
               </div>
@@ -130,18 +108,9 @@ export default function MapSettings({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1">
                 <Label className="text-xs">{t('curve')}</Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
-                      <Info className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left" className="max-w-xs">
-                    <p className="text-xs">
-                      {t('curveTooltip')}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
+                <InfoTooltip>
+                  <p className="text-xs">{t('curveTooltip')}</p>
+                </InfoTooltip>
               </div>
               <Select
                 value={settings.distanceCurve}
@@ -155,21 +124,13 @@ export default function MapSettings({
                     <SelectItem key={curveValue} value={curveValue} className="text-xs py-2">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{tCurves(`${curveValue}.label`)}</span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button 
-                              type="button" 
-                              className="p-0.5 hover:bg-muted rounded transition-colors"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Info className="h-3 w-3 text-muted-foreground" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="left" className="max-w-xs z-[1200]">
-                            <p className="text-xs font-medium mb-1">{tCurves(`${curveValue}.description`)}</p>
-                            <p className="text-xs text-muted-foreground">{tCurves(`${curveValue}.useCase`)}</p>
-                          </TooltipContent>
-                        </Tooltip>
+                        <InfoTooltip 
+                          contentClassName="z-[1200]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <p className="text-xs font-medium mb-1">{tCurves(`${curveValue}.description`)}</p>
+                          <p className="text-xs text-muted-foreground">{tCurves(`${curveValue}.useCase`)}</p>
+                        </InfoTooltip>
                       </div>
                     </SelectItem>
                   ))}
@@ -183,18 +144,9 @@ export default function MapSettings({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1">
                     <Label className="text-xs">{t('sensitivity')}</Label>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
-                          <Info className="h-3 w-3 text-muted-foreground" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="left" className="max-w-xs">
-                        <p className="text-xs">
-                          {t('sensitivityTooltip')}
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
+                    <InfoTooltip>
+                      <p className="text-xs">{t('sensitivityTooltip')}</p>
+                    </InfoTooltip>
                   </div>
                   <span className="text-xs text-muted-foreground font-medium">{settings.sensitivity.toFixed(1)}x</span>
                 </div>
@@ -217,18 +169,9 @@ export default function MapSettings({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1">
                   <Label className="text-xs">{t('relativeMode')}</Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
-                        <Info className="h-3 w-3 text-muted-foreground" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="left" className="max-w-xs">
-                      <p className="text-xs">
-                        {t('relativeModeTooltip')}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
+                  <InfoTooltip>
+                    <p className="text-xs">{t('relativeModeTooltip')}</p>
+                  </InfoTooltip>
                 </div>
                 <Switch
                   checked={settings.normalizeToViewport}
@@ -241,18 +184,9 @@ export default function MapSettings({
             <div className="space-y-2">
               <div className="flex items-center gap-1">
                 <Label className="text-xs">{t('computation')}</Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" className="p-0.5 hover:bg-muted rounded transition-colors">
-                      <Info className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left" className="max-w-xs">
-                    <p className="text-xs">
-                      {t('computationTooltip')}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
+                <InfoTooltip>
+                  <p className="text-xs">{t('computationTooltip')}</p>
+                </InfoTooltip>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className={mode === 'realtime' ? 'font-medium' : 'text-muted-foreground'}>

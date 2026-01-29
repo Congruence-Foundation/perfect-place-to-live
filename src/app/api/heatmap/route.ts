@@ -3,8 +3,9 @@ import { fetchAllPOIsCombined, generatePOICacheKey } from '@/lib/overpass';
 import { calculateHeatmapParallel } from '@/lib/calculator-parallel';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS } from '@/config/factors';
-import { Bounds, Factor, POI, HeatmapRequest, DistanceCurve } from '@/types';
+import { Factor, POI, HeatmapRequest } from '@/types';
 import { estimateGridSize, calculateAdaptiveGridSize } from '@/lib/grid';
+import { expandBounds, isValidBounds } from '@/lib/bounds';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,26 +21,13 @@ const GRID_BUFFER_DEGREES = 0.05;
 // Maximum allowed grid points to prevent server overload
 const MAX_GRID_POINTS = 50000;
 
-/**
- * Expand bounds by a buffer to fetch POIs outside the visible area
- * This prevents edge effects where grid points near borders have artificially high K values
- */
-function expandBounds(bounds: Bounds, buffer: number): Bounds {
-  return {
-    north: bounds.north + buffer,
-    south: bounds.south - buffer,
-    east: bounds.east + buffer,
-    west: bounds.west - buffer,
-  };
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body: HeatmapRequest = await request.json();
     const { bounds, factors: requestFactors, gridSize, distanceCurve, sensitivity, normalizeToViewport } = body;
 
     // Validate bounds
-    if (!bounds || !bounds.north || !bounds.south || !bounds.east || !bounds.west) {
+    if (!isValidBounds(bounds)) {
       return NextResponse.json({ error: 'Invalid bounds' }, { status: 400 });
     }
 

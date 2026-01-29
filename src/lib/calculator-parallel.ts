@@ -12,6 +12,7 @@ import { Worker } from 'worker_threads';
 import * as os from 'os';
 import { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/types';
 import { generateGrid, calculateAdaptiveGridSize } from './grid';
+import { normalizeKValues, logKStats } from './calculator';
 
 // Use available CPU cores, but cap at 8 to avoid diminishing returns
 const MAX_WORKERS = Math.min(os.cpus().length, 8);
@@ -19,28 +20,6 @@ const MAX_WORKERS = Math.min(os.cpus().length, 8);
 const MIN_POINTS_PER_WORKER = 3000;
 // Minimum total points to use parallel processing (below this, single-threaded is faster)
 const MIN_POINTS_FOR_PARALLEL = 10000;
-
-/**
- * Normalize K values to the viewport range
- */
-function normalizeKValues(points: HeatmapPoint[]): HeatmapPoint[] {
-  if (points.length === 0) return points;
-
-  let minK = Infinity,
-    maxK = -Infinity;
-  for (const p of points) {
-    if (p.value < minK) minK = p.value;
-    if (p.value > maxK) maxK = p.value;
-  }
-
-  const range = maxK - minK;
-  if (range === 0) return points;
-
-  return points.map((p) => ({
-    ...p,
-    value: (p.value - minK) / range,
-  }));
-}
 
 /**
  * Split array into n roughly equal chunks
@@ -394,20 +373,7 @@ export async function calculateHeatmapParallel(
   }
 
   // Log stats
-  if (heatmapPoints.length > 0) {
-    let minK = Infinity,
-      maxK = -Infinity,
-      sumK = 0;
-    for (const p of heatmapPoints) {
-      if (p.value < minK) minK = p.value;
-      if (p.value > maxK) maxK = p.value;
-      sumK += p.value;
-    }
-    const avgK = sumK / heatmapPoints.length;
-    console.log(
-      `K value stats: min=${minK.toFixed(3)}, max=${maxK.toFixed(3)}, avg=${avgK.toFixed(3)} (workers: ${numWorkers})`
-    );
-  }
+  logKStats(heatmapPoints, `workers: ${numWorkers}`);
 
   const endTime = performance.now();
   console.log(

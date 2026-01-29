@@ -1,11 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Bounds, Factor, HeatmapPoint, HeatmapResponse, POI, DistanceCurve } from '@/types';
 
-interface UseHeatmapOptions {
-  debounceMs?: number;
-  minZoomForFetch?: number;
-}
-
 interface UseHeatmapReturn {
   heatmapPoints: HeatmapPoint[];
   pois: Record<string, POI[]>;
@@ -24,7 +19,7 @@ interface UseHeatmapReturn {
   abortFetch: () => void;
 }
 
-export function useHeatmap(options: UseHeatmapOptions = {}): UseHeatmapReturn {
+export function useHeatmap(): UseHeatmapReturn {
   const [heatmapPoints, setHeatmapPoints] = useState<HeatmapPoint[]>([]);
   const [pois, setPois] = useState<Record<string, POI[]>>({});
   const [isLoading, setIsLoading] = useState(false);

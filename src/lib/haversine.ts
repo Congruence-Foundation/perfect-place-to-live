@@ -24,64 +24,6 @@ export function haversineDistance(p1: Point, p2: Point): number {
 }
 
 /**
- * Find the distance to the nearest POI from a given point
- * Returns Infinity if no POIs are provided
- */
-export function findNearestDistance(point: Point, pois: POI[]): number {
-  if (pois.length === 0) {
-    return Infinity;
-  }
-
-  let minDistance = Infinity;
-
-  for (const poi of pois) {
-    const distance = haversineDistance(point, { lat: poi.lat, lng: poi.lng });
-    if (distance < minDistance) {
-      minDistance = distance;
-    }
-  }
-
-  return minDistance;
-}
-
-/**
- * Find the nearest POI from a given point
- * Returns null if no POIs are provided
- */
-export function findNearestPOI(point: Point, pois: POI[]): { poi: POI; distance: number } | null {
-  if (pois.length === 0) {
-    return null;
-  }
-
-  let nearestPOI: POI | null = null;
-  let minDistance = Infinity;
-
-  for (const poi of pois) {
-    const distance = haversineDistance(point, { lat: poi.lat, lng: poi.lng });
-    if (distance < minDistance) {
-      minDistance = distance;
-      nearestPOI = poi;
-    }
-  }
-
-  return nearestPOI ? { poi: nearestPOI, distance: minDistance } : null;
-}
-
-/**
- * Filter POIs within a maximum distance from a point
- */
-export function filterPOIsWithinDistance(
-  point: Point,
-  pois: POI[],
-  maxDistance: number
-): POI[] {
-  return pois.filter((poi) => {
-    const distance = haversineDistance(point, { lat: poi.lat, lng: poi.lng });
-    return distance <= maxDistance;
-  });
-}
-
-/**
  * Simple KD-tree-like spatial index for faster nearest neighbor queries
  * This is a simplified version that divides space into grid cells
  */

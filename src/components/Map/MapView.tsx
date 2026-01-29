@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
+import { POI_COLORS, getColorForK } from '@/constants';
+import { formatDistance } from '@/lib/utils';
+import { estimateCellSizeFromPoints } from '@/lib/grid';
+import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/calculator';
 
 // Popup translations interface
 export interface PopupTranslations {
@@ -19,74 +23,6 @@ export interface PopupTranslations {
 // Factor name translations type
 export type FactorTranslations = Record<string, string>;
 
-// POI marker colors by category
-const POI_COLORS: Record<string, string> = {
-  grocery: '#22c55e',      // green
-  transit: '#3b82f6',      // blue
-  healthcare: '#ef4444',   // red
-  parks: '#84cc16',        // lime
-  schools: '#f59e0b',      // amber
-  post: '#8b5cf6',         // violet
-  restaurants: '#ec4899',  // pink
-  banks: '#14b8a6',        // teal
-  gyms: '#f97316',         // orange
-  playgrounds: '#a855f7',  // purple
-  industrial: '#6b7280',   // gray
-  highways: '#374151',     // dark gray
-  stadiums: '#dc2626',     // red
-  nightlife: '#7c3aed',    // violet
-  universities: '#0891b2', // cyan
-  religious: '#ca8a04',    // yellow
-  dog_parks: '#65a30d',    // lime
-  coworking: '#0284c7',    // sky
-  cinemas: '#be185d',      // pink
-  markets: '#ea580c',      // orange
-  water: '#0ea5e9',        // sky
-  airports: '#64748b',     // slate
-  railways: '#78716c',     // stone
-  cemeteries: '#57534e',   // stone
-  construction: '#fbbf24', // amber
-};
-
-// Color interpolation for K values
-// Uses ABSOLUTE K values (not normalized) so colors are consistent
-function getColorForK(k: number): string {
-  // Color stops: green (good, low K) to red (bad, high K)
-  // K is 0-1 where 0 = excellent, 1 = poor
-  const colors = [
-    { pos: 0, r: 22, g: 163, b: 74 },    // green-600 - excellent (K=0)
-    { pos: 0.25, r: 101, g: 163, b: 13 }, // lime-600
-    { pos: 0.5, r: 202, g: 138, b: 4 },   // yellow-600
-    { pos: 0.75, r: 234, g: 88, b: 12 },  // orange-600
-    { pos: 1, r: 220, g: 38, b: 38 },     // red-600 - poor (K=1)
-  ];
-  
-  // Clamp K to 0-1 range
-  const normalized = Math.max(0, Math.min(1, k));
-  
-  // Find the two colors to interpolate between
-  let lower = colors[0];
-  let upper = colors[colors.length - 1];
-  
-  for (let i = 0; i < colors.length - 1; i++) {
-    if (normalized >= colors[i].pos && normalized <= colors[i + 1].pos) {
-      lower = colors[i];
-      upper = colors[i + 1];
-      break;
-    }
-  }
-  
-  // Interpolate
-  const range = upper.pos - lower.pos;
-  const t = range > 0 ? (normalized - lower.pos) / range : 0;
-  
-  const r = Math.round(lower.r + (upper.r - lower.r) * t);
-  const g = Math.round(lower.g + (upper.g - lower.g) * t);
-  const b = Math.round(lower.b + (upper.b - lower.b) * t);
-  
-  return `rgb(${r},${g},${b})`;
-}
-
 // Get rating label for K value
 function getRatingLabel(k: number, translations: PopupTranslations): { label: string; emoji: string } {
   if (k < 0.2) return { label: translations.excellent, emoji: '🌟' };
@@ -94,118 +30,6 @@ function getRatingLabel(k: number, translations: PopupTranslations): { label: st
   if (k < 0.6) return { label: translations.average, emoji: '😐' };
   if (k < 0.8) return { label: translations.belowAverage, emoji: '👎' };
   return { label: translations.poor, emoji: '⚠️' };
-}
-
-// Format distance for display
-function formatDistance(meters: number): string {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(1)}km`;
-  }
-  return `${Math.round(meters)}m`;
-}
-
-// Haversine distance calculation (simplified)
-function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000; // Earth's radius in meters
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-// Calculate factor breakdown for a point
-interface FactorBreakdown {
-  factorId: string;
-  factorName: string;
-  color: string;
-  distance: number;
-  maxDistance: number;
-  score: number; // 0-1, lower is better
-  isNegative: boolean; // derived from weight sign
-  weight: number;
-  contribution: number; // weighted contribution to final K
-  noPOIs: boolean;
-  nearbyCount: number; // count of POIs within maxDistance
-}
-
-function calculateFactorBreakdown(
-  lat: number,
-  lng: number,
-  factors: Factor[],
-  pois: Record<string, POI[]>
-): { k: number; breakdown: FactorBreakdown[] } {
-  const breakdown: FactorBreakdown[] = [];
-  let weightedSum = 0;
-  let totalWeight = 0;
-
-  for (const factor of factors) {
-    if (!factor.enabled || factor.weight === 0) continue;
-
-    const factorPOIs = pois[factor.id] || [];
-    const color = POI_COLORS[factor.id] || '#6b7280';
-    const isNegative = factor.weight < 0;
-    const absWeight = Math.abs(factor.weight);
-    
-    let nearestDistance = Infinity;
-    let noPOIs = false;
-    let nearbyCount = 0;
-
-    if (factorPOIs.length === 0) {
-      noPOIs = true;
-      nearestDistance = factor.maxDistance;
-    } else {
-      // Find nearest POI and count nearby POIs
-      for (const poi of factorPOIs) {
-        const dist = haversineDistance(lat, lng, poi.lat, poi.lng);
-        if (dist < nearestDistance) {
-          nearestDistance = dist;
-        }
-        // Count POIs within maxDistance
-        if (dist <= factor.maxDistance) {
-          nearbyCount++;
-        }
-      }
-    }
-
-    const cappedDistance = Math.min(nearestDistance, factor.maxDistance);
-    const normalizedDistance = cappedDistance / factor.maxDistance;
-    
-    // Score: 0 = good, 1 = bad
-    let score: number;
-    if (noPOIs) {
-      score = isNegative ? 0 : 1;
-    } else {
-      score = isNegative ? (1 - normalizedDistance) : normalizedDistance;
-    }
-
-    const contribution = score * absWeight;
-    weightedSum += contribution;
-    totalWeight += absWeight;
-
-    breakdown.push({
-      factorId: factor.id,
-      factorName: factor.name,
-      color,
-      distance: nearestDistance,
-      maxDistance: factor.maxDistance,
-      score,
-      isNegative,
-      weight: factor.weight,
-      contribution,
-      noPOIs,
-      nearbyCount,
-    });
-  }
-
-  const k = totalWeight > 0 ? weightedSum / totalWeight : 0.5;
-  
-  // Sort by contribution (highest impact first)
-  breakdown.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
-
-  return { k, breakdown };
 }
 
 // Generate popup HTML content - compact version
@@ -248,6 +72,7 @@ function generatePopupContent(
   `;
 
   for (const item of breakdown) {
+    const color = POI_COLORS[item.factorId] || '#6b7280';
     const distanceText = item.noPOIs ? '—' : formatDistance(item.distance);
     const barColor = item.score < 0.3 ? '#22c55e' : item.score < 0.6 ? '#eab308' : '#ef4444';
     const scoreBarWidth = Math.round(item.score * 100);
@@ -269,7 +94,7 @@ function generatePopupContent(
     html += `
       <tr style="height: 22px;">
         <td style="width: 10px; padding: 2px 0;">
-          <div style="width: 6px; height: 6px; border-radius: 50%; background: ${item.color};"></div>
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: ${color};"></div>
         </td>
         <td style="padding: 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px;" title="${factorName}${item.nearbyCount > 1 ? ` - ${item.nearbyCount} nearby` : ''}">
           ${factorName}
@@ -329,6 +154,151 @@ const defaultPopupTranslations: PopupTranslations = {
   improveLabel: 'improve',
   noData: 'No data available for this area. Zoom in or pan to load POIs.',
 };
+
+// Long press configuration
+const LONG_PRESS_DURATION_MS = 500;
+const TOUCH_MOVE_THRESHOLD_PX = 10;
+const MOUSE_MOVE_THRESHOLD_PX = 5;
+
+/**
+ * Long press state for tracking touch/mouse interactions
+ */
+interface LongPressState {
+  timer: ReturnType<typeof setTimeout> | null;
+  startPos: { x: number; y: number } | null;
+  latLng: L.LatLng | null;
+}
+
+/**
+ * Setup touch-based long press handler for mobile devices
+ * Returns cleanup function to remove event listeners
+ */
+function setupTouchLongPress(
+  container: HTMLElement,
+  mapInstance: L.Map,
+  onLongPress: (latlng: L.LatLng) => void
+): () => void {
+  const state: LongPressState = { timer: null, startPos: null, latLng: null };
+
+  const clearState = () => {
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = null;
+    state.startPos = null;
+    state.latLng = null;
+  };
+
+  const handleTouchStart = (e: TouchEvent) => {
+    clearState();
+    
+    const touch = e.touches[0];
+    state.startPos = { x: touch.clientX, y: touch.clientY };
+    
+    const containerPoint = mapInstance.mouseEventToContainerPoint({
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+    } as MouseEvent);
+    state.latLng = mapInstance.containerPointToLatLng(containerPoint);
+    
+    state.timer = setTimeout(() => {
+      if (state.latLng) {
+        e.preventDefault();
+        onLongPress(state.latLng);
+      }
+      clearState();
+    }, LONG_PRESS_DURATION_MS);
+  };
+
+  const handleTouchMove = (e: TouchEvent) => {
+    if (!state.timer || !state.startPos) return;
+    
+    const touch = e.touches[0];
+    const dx = touch.clientX - state.startPos.x;
+    const dy = touch.clientY - state.startPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance > TOUCH_MOVE_THRESHOLD_PX) {
+      clearState();
+    }
+  };
+
+  const handleTouchEnd = () => clearState();
+
+  container.addEventListener('touchstart', handleTouchStart, { passive: false });
+  container.addEventListener('touchmove', handleTouchMove, { passive: true });
+  container.addEventListener('touchend', handleTouchEnd, { passive: true });
+  container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+
+  return () => {
+    clearState();
+    container.removeEventListener('touchstart', handleTouchStart);
+    container.removeEventListener('touchmove', handleTouchMove);
+    container.removeEventListener('touchend', handleTouchEnd);
+    container.removeEventListener('touchcancel', handleTouchEnd);
+  };
+}
+
+/**
+ * Setup mouse-based long press handler for desktop
+ * Returns cleanup function to remove event listeners
+ */
+function setupMouseLongPress(
+  container: HTMLElement,
+  mapInstance: L.Map,
+  onLongPress: (latlng: L.LatLng) => void
+): () => void {
+  const state: LongPressState = { timer: null, startPos: null, latLng: null };
+
+  const clearState = () => {
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = null;
+    state.startPos = null;
+    state.latLng = null;
+  };
+
+  const handleMouseDown = (e: MouseEvent) => {
+    if (e.button !== 0) return; // Only left click
+    
+    clearState();
+    state.startPos = { x: e.clientX, y: e.clientY };
+    
+    const containerPoint = mapInstance.mouseEventToContainerPoint(e);
+    state.latLng = mapInstance.containerPointToLatLng(containerPoint);
+    
+    state.timer = setTimeout(() => {
+      if (state.latLng) {
+        onLongPress(state.latLng);
+      }
+      clearState();
+    }, LONG_PRESS_DURATION_MS);
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!state.timer || !state.startPos) return;
+    
+    const dx = e.clientX - state.startPos.x;
+    const dy = e.clientY - state.startPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance > MOUSE_MOVE_THRESHOLD_PX) {
+      clearState();
+    }
+  };
+
+  const handleMouseUp = () => clearState();
+
+  container.addEventListener('mousedown', handleMouseDown);
+  container.addEventListener('mousemove', handleMouseMove);
+  container.addEventListener('mouseup', handleMouseUp);
+  container.addEventListener('mouseleave', handleMouseUp);
+
+  return () => {
+    clearState();
+    container.removeEventListener('mousedown', handleMouseDown);
+    container.removeEventListener('mousemove', handleMouseMove);
+    container.removeEventListener('mouseup', handleMouseUp);
+    container.removeEventListener('mouseleave', handleMouseUp);
+  };
+}
 
 const MapView = forwardRef<MapViewRef, MapViewProps>(({
   center,
@@ -500,7 +470,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
               east: bounds.getEast(),
               west: bounds.getWest(),
             });
-          } catch (e) {
+          } catch {
             // Ignore errors during cleanup
           }
         };
@@ -511,148 +481,16 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         // Add right-click (context menu) handler for location details popup (works on desktop)
         map.on('contextmenu', handleMapClick);
 
-        // Long-press handler for mobile (alternative to right-click)
-        // Using native DOM events to properly prevent iOS default behavior
-        let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-        let longPressLatLng: L.LatLng | null = null;
-        let touchStartPos: { x: number; y: number } | null = null;
+        // Long press callback for showing popup
+        const onLongPress = (latlng: L.LatLng) => {
+          handleMapClick({ latlng } as L.LeafletMouseEvent);
+        };
 
+        // Setup long-press handlers for touch and mouse
         const mapContainer = containerRef.current;
-        
-        const handleTouchStart = (e: TouchEvent) => {
-          // Clear any existing timer
-          if (longPressTimer) {
-            clearTimeout(longPressTimer);
-          }
-          
-          const touch = e.touches[0];
-          touchStartPos = { x: touch.clientX, y: touch.clientY };
-          
-          // Convert touch position to map coordinates
-          if (mapInstanceRef.current) {
-            const containerPoint = mapInstanceRef.current.mouseEventToContainerPoint({
-              clientX: touch.clientX,
-              clientY: touch.clientY,
-            } as MouseEvent);
-            longPressLatLng = mapInstanceRef.current.containerPointToLatLng(containerPoint);
-          }
-          
-          longPressTimer = setTimeout(() => {
-            if (longPressLatLng && mapInstanceRef.current) {
-              // Prevent any default behavior
-              e.preventDefault();
-              
-              // Show popup at the long-press location
-              handleMapClick({
-                latlng: longPressLatLng,
-              } as L.LeafletMouseEvent);
-            }
-            longPressTimer = null;
-            longPressLatLng = null;
-            touchStartPos = null;
-          }, 500);
-        };
-        
-        const handleTouchMove = (e: TouchEvent) => {
-          if (longPressTimer && touchStartPos) {
-            const touch = e.touches[0];
-            const dx = touch.clientX - touchStartPos.x;
-            const dy = touch.clientY - touchStartPos.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            // Cancel if moved more than 10px
-            if (distance > 10) {
-              clearTimeout(longPressTimer);
-              longPressTimer = null;
-              longPressLatLng = null;
-              touchStartPos = null;
-            }
-          }
-        };
-        
-        const handleTouchEnd = () => {
-          if (longPressTimer) {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-            longPressLatLng = null;
-            touchStartPos = null;
-          }
-        };
-        
-        // Add native touch event listeners with passive: false to allow preventDefault
         if (mapContainer) {
-          mapContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
-          mapContainer.addEventListener('touchmove', handleTouchMove, { passive: true });
-          mapContainer.addEventListener('touchend', handleTouchEnd, { passive: true });
-          mapContainer.addEventListener('touchcancel', handleTouchEnd, { passive: true });
-        }
-
-        // Mouse-based long-press for desktop testing
-        let mouseLongPressTimer: ReturnType<typeof setTimeout> | null = null;
-        let mouseStartPos: { x: number; y: number } | null = null;
-        let mouseLongPressLatLng: L.LatLng | null = null;
-
-        const handleMouseDown = (e: MouseEvent) => {
-          // Only handle left click
-          if (e.button !== 0) return;
-          
-          // Clear any existing timer
-          if (mouseLongPressTimer) {
-            clearTimeout(mouseLongPressTimer);
-          }
-          
-          mouseStartPos = { x: e.clientX, y: e.clientY };
-          
-          // Convert mouse position to map coordinates
-          if (mapInstanceRef.current) {
-            const containerPoint = mapInstanceRef.current.mouseEventToContainerPoint(e);
-            mouseLongPressLatLng = mapInstanceRef.current.containerPointToLatLng(containerPoint);
-          }
-          
-          mouseLongPressTimer = setTimeout(() => {
-            if (mouseLongPressLatLng && mapInstanceRef.current) {
-              // Show popup at the long-press location
-              handleMapClick({
-                latlng: mouseLongPressLatLng,
-              } as L.LeafletMouseEvent);
-            }
-            mouseLongPressTimer = null;
-            mouseLongPressLatLng = null;
-            mouseStartPos = null;
-          }, 500);
-        };
-        
-        const handleMouseMove = (e: MouseEvent) => {
-          if (mouseLongPressTimer && mouseStartPos) {
-            const dx = e.clientX - mouseStartPos.x;
-            const dy = e.clientY - mouseStartPos.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            // Cancel if moved more than 5px (stricter for mouse)
-            if (distance > 5) {
-              clearTimeout(mouseLongPressTimer);
-              mouseLongPressTimer = null;
-              mouseLongPressLatLng = null;
-              mouseStartPos = null;
-            }
-          }
-        };
-        
-        const handleMouseUp = () => {
-          if (mouseLongPressTimer) {
-            clearTimeout(mouseLongPressTimer);
-            mouseLongPressTimer = null;
-            mouseLongPressLatLng = null;
-            mouseStartPos = null;
-          }
-        };
-        
-        // Add mouse event listeners for desktop long-press testing
-        if (mapContainer) {
-          mapContainer.addEventListener('mousedown', handleMouseDown);
-          mapContainer.addEventListener('mousemove', handleMouseMove);
-          mapContainer.addEventListener('mouseup', handleMouseUp);
-          mapContainer.addEventListener('mouseleave', handleMouseUp);
+          setupTouchLongPress(mapContainer, map, onLongPress);
+          setupMouseLongPress(mapContainer, map, onLongPress);
         }
 
         // Trigger initial bounds after a short delay to ensure map is ready
@@ -674,7 +512,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
       if (mapInstanceRef.current) {
         try {
           mapInstanceRef.current.remove();
-        } catch (e) {
+        } catch {
           // Ignore cleanup errors
         }
         mapInstanceRef.current = null;
@@ -711,35 +549,11 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         console.log(`Grid K range: min=${minK.toFixed(3)}, max=${maxK.toFixed(3)}`);
 
         // Estimate cell size from point spacing
-        // Find average distance between adjacent points
-        let cellSizeLat = 0.001; // default
-        let cellSizeLng = 0.001;
-        
-        if (heatmapPoints.length > 1) {
-          // Sort points to find grid spacing
-          const sortedByLat = [...heatmapPoints].sort((a, b) => a.lat - b.lat);
-          const sortedByLng = [...heatmapPoints].sort((a, b) => a.lng - b.lng);
-          
-          // Find minimum non-zero differences
-          for (let i = 1; i < sortedByLat.length; i++) {
-            const diff = sortedByLat[i].lat - sortedByLat[i-1].lat;
-            if (diff > 0.0001) {
-              cellSizeLat = diff;
-              break;
-            }
-          }
-          for (let i = 1; i < sortedByLng.length; i++) {
-            const diff = sortedByLng[i].lng - sortedByLng[i-1].lng;
-            if (diff > 0.0001) {
-              cellSizeLng = diff;
-              break;
-            }
-          }
-        }
+        const cellSize = estimateCellSizeFromPoints(heatmapPoints);
 
         // Create rectangles for each grid cell
-        const halfLat = cellSizeLat / 2;
-        const halfLng = cellSizeLng / 2;
+        const halfLat = cellSize.lat / 2;
+        const halfLng = cellSize.lng / 2;
 
         for (const point of heatmapPoints) {
           // Use absolute K value for color (not normalized)

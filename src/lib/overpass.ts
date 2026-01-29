@@ -20,6 +20,74 @@ async function waitForRateLimit(): Promise<void> {
 }
 
 /**
+ * Options for fetchWithRetry
+ */
+interface RetryOptions {
+  retries: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+  signal?: AbortSignal;
+  retryableStatuses?: number[];
+}
+
+const DEFAULT_RETRY_OPTIONS: Omit<RetryOptions, 'signal'> = {
+  retries: 3,
+  baseDelayMs: 1000,
+  maxDelayMs: 10000,
+  retryableStatuses: [429, 503, 504],
+};
+
+/**
+ * Generic fetch with retry and exponential backoff
+ */
+async function fetchWithRetry(
+  url: string,
+  fetchOptions: RequestInit,
+  retryOptions: Partial<RetryOptions> = {}
+): Promise<Response> {
+  const options = { ...DEFAULT_RETRY_OPTIONS, ...retryOptions };
+  const { retries, baseDelayMs, maxDelayMs, signal, retryableStatuses } = options;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    await waitForRateLimit();
+
+    try {
+      const response = await fetch(url, { ...fetchOptions, signal });
+
+      if (retryableStatuses?.includes(response.status)) {
+        if (attempt < retries) {
+          const waitTime = Math.min((attempt + 1) * baseDelayMs, maxDelayMs);
+          console.log(`API ${response.status}, waiting ${waitTime}ms before retry ${attempt + 1}/${retries}...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+        throw new Error(`API error: ${response.status} ${response.statusText} (after ${retries} retries)`);
+      }
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+
+      return response;
+    } catch (error) {
+      // Don't retry if user cancelled
+      if (signal?.aborted) throw error;
+
+      if (attempt < retries) {
+        const waitTime = Math.min((attempt + 1) * baseDelayMs, maxDelayMs);
+        console.log(`Fetch error, waiting ${waitTime}ms before retry ${attempt + 1}/${retries}...`, error);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  // Should never reach here
+  throw new Error('Unexpected end of retry loop');
+}
+
+/**
  * Build an Overpass QL query for fetching POIs within bounds
  */
 export function buildOverpassQuery(osmTags: string[], bounds: Bounds): string {
@@ -159,46 +227,22 @@ export async function fetchPOIs(
   signal?: AbortSignal,
   retries: number = 2
 ): Promise<POI[]> {
-  await waitForRateLimit();
-  
   const query = buildOverpassQuery(osmTags, bounds);
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const response = await fetch(OVERPASS_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: `data=${encodeURIComponent(query)}`,
-        signal,
-      });
+  const response = await fetchWithRetry(
+    OVERPASS_API_URL,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `data=${encodeURIComponent(query)}`,
+    },
+    { retries, signal, baseDelayMs: 1000 }
+  );
 
-      if (response.status === 429) {
-        // Rate limited - wait and retry
-        if (attempt < retries) {
-          const waitTime = (attempt + 1) * 1000; // Exponential backoff
-          console.log(`Rate limited, waiting ${waitTime}ms before retry...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-          continue;
-        }
-        throw new Error('Overpass API rate limit exceeded');
-      }
-
-      if (!response.ok) {
-        throw new Error(`Overpass API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data: OverpassResponse = await response.json();
-      return parseOverpassResponse(data);
-    } catch (error) {
-      if (attempt === retries) throw error;
-      // Wait before retry on other errors
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-  }
-
-  return [];
+  const data: OverpassResponse = await response.json();
+  return parseOverpassResponse(data);
 }
 
 /**
@@ -213,82 +257,22 @@ export async function fetchAllPOIsCombined(
 ): Promise<Record<string, POI[]>> {
   const query = buildCombinedOverpassQuery(factorTags, bounds);
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    await waitForRateLimit();
-    
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
-      
-      const response = await fetch(OVERPASS_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: signal || controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
+  const response = await fetchWithRetry(
+    OVERPASS_API_URL,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `data=${encodeURIComponent(query)}`,
+    },
+    { retries, signal, baseDelayMs: 2000, maxDelayMs: 10000 }
+  );
 
-      if (response.status === 429 || response.status === 504 || response.status === 503) {
-        // Rate limited or timeout - wait and retry
-        if (attempt < retries) {
-          const waitTime = Math.min((attempt + 1) * 2000, 10000); // 2s, 4s, 6s... max 10s
-          console.log(`Overpass API ${response.status}, waiting ${waitTime}ms before retry ${attempt + 1}/${retries}...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-          continue;
-        }
-        throw new Error(`Overpass API error: ${response.status} ${response.statusText} (after ${retries} retries)`);
-      }
-
-      if (!response.ok) {
-        throw new Error(`Overpass API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data: OverpassResponse = await response.json();
-      const allPOIs = parseOverpassResponse(data);
-      
-      return categorizePOIsByFactor(allPOIs, factorTags);
-    } catch (error) {
-      if (signal?.aborted) throw error; // Don't retry if user cancelled
-      
-      if (attempt < retries) {
-        const waitTime = Math.min((attempt + 1) * 2000, 10000);
-        console.log(`Overpass fetch error, waiting ${waitTime}ms before retry ${attempt + 1}/${retries}...`, error);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  // Should never reach here, but return empty result as fallback
-  return factorTags.reduce((acc, f) => ({ ...acc, [f.id]: [] }), {});
-}
-
-/**
- * Fetch POIs for multiple factors sequentially (to avoid rate limiting)
- */
-export async function fetchPOIsForFactors(
-  factors: { id: string; osmTags: string[] }[],
-  bounds: Bounds,
-  signal?: AbortSignal
-): Promise<Record<string, POI[]>> {
-  const results: Record<string, POI[]> = {};
-
-  // Fetch sequentially to avoid rate limiting
-  for (const factor of factors) {
-    try {
-      const pois = await fetchPOIs(factor.osmTags, bounds, signal);
-      results[factor.id] = pois;
-    } catch (error) {
-      console.error(`Error fetching POIs for ${factor.id}:`, error);
-      results[factor.id] = [];
-    }
-  }
-
-  return results;
+  const data: OverpassResponse = await response.json();
+  const allPOIs = parseOverpassResponse(data);
+  
+  return categorizePOIsByFactor(allPOIs, factorTags);
 }
 
 /**

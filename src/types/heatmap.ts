@@ -1,4 +1,4 @@
-import { Bounds, Point } from './poi';
+import { Bounds } from './poi';
 import { Factor } from './factors';
 import { POI } from './poi';
 
@@ -8,6 +8,16 @@ export interface HeatmapPoint {
   lat: number;
   lng: number;
   value: number;
+}
+
+/**
+ * Settings for heatmap calculation and display
+ */
+export interface HeatmapSettings {
+  gridCellSize: number; // in meters (25-300)
+  distanceCurve: DistanceCurve; // distance scoring function
+  sensitivity: number; // curve steepness (0.5-3, default 1)
+  normalizeToViewport: boolean; // normalize K values to viewport range
 }
 
 export interface HeatmapRequest {

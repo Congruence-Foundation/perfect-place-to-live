@@ -9,9 +9,3 @@ export interface Factor {
   category: 'essential' | 'lifestyle' | 'environment';
   defaultWeight: number; // Store original default for reset
 }
-
-export interface FactorConfig {
-  factors: Factor[];
-  mode: 'realtime' | 'precomputed';
-  gridSize: number;
-}

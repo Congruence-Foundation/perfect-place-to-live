@@ -2,32 +2,12 @@
 
 import { useTranslations } from 'next-intl';
 import { FACTOR_PROFILES } from '@/config/factors';
-import {
-  Scale,
-  Users,
-  Briefcase,
-  Laptop,
-  Activity,
-  Heart,
-  GraduationCap,
-  Gem,
-} from 'lucide-react';
+import { PROFILE_ICON_MAP, DEFAULT_PROFILE_ICON } from '@/constants';
 
 interface ProfileSelectorProps {
   selectedProfile: string | null;
   onProfileSelect: (profileId: string) => void;
 }
-
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
-  scale: Scale,
-  users: Users,
-  briefcase: Briefcase,
-  laptop: Laptop,
-  activity: Activity,
-  heart: Heart,
-  'graduation-cap': GraduationCap,
-  gem: Gem,
-};
 
 export default function ProfileSelector({
   selectedProfile,
@@ -38,7 +18,7 @@ export default function ProfileSelector({
   return (
     <div className="grid grid-cols-4 gap-2">
       {FACTOR_PROFILES.map((profile) => {
-        const IconComponent = ICON_MAP[profile.icon] || Scale;
+        const IconComponent = PROFILE_ICON_MAP[profile.icon] || DEFAULT_PROFILE_ICON;
         const isSelected = selectedProfile === profile.id;
         const profileName = t(`${profile.id}.name`);
 

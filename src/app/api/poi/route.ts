@@ -3,6 +3,7 @@ import { fetchPOIs, generatePOICacheKey } from '@/lib/overpass';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS } from '@/config/factors';
 import { Bounds, POI } from '@/types';
+import { isValidBounds } from '@/lib/bounds';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,13 +13,76 @@ interface POIRequestBody {
   factorIds: string[];
 }
 
+interface POIResponse {
+  pois: Record<string, POI[]>;
+  metadata: {
+    factorCount: number;
+    totalPOIs: number;
+  };
+}
+
+/**
+ * Fetch POIs for given factors with caching
+ */
+async function fetchPOIsWithCache(
+  bounds: Bounds,
+  factorIds: string[]
+): Promise<POIResponse> {
+  // Get factor configurations
+  const factors = DEFAULT_FACTORS.filter((f) => factorIds.includes(f.id));
+
+  if (factors.length === 0) {
+    throw new Error('No valid factors found');
+  }
+
+  const results: Record<string, POI[]> = {};
+  const fetchPromises: Promise<void>[] = [];
+
+  for (const factor of factors) {
+    const cacheKey = generatePOICacheKey(factor.id, bounds);
+
+    fetchPromises.push(
+      (async () => {
+        // Try cache first
+        const cached = await cacheGet<POI[]>(cacheKey);
+        if (cached) {
+          results[factor.id] = cached;
+          return;
+        }
+
+        // Fetch from Overpass API
+        try {
+          const pois = await fetchPOIs(factor.osmTags, bounds);
+          results[factor.id] = pois;
+
+          // Cache the results
+          await cacheSet(cacheKey, pois, 3600); // 1 hour TTL
+        } catch (error) {
+          console.error(`Error fetching POIs for ${factor.id}:`, error);
+          results[factor.id] = [];
+        }
+      })()
+    );
+  }
+
+  await Promise.all(fetchPromises);
+
+  return {
+    pois: results,
+    metadata: {
+      factorCount: factors.length,
+      totalPOIs: Object.values(results).reduce((sum, pois) => sum + pois.length, 0),
+    },
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: POIRequestBody = await request.json();
     const { bounds, factorIds } = body;
 
     // Validate bounds
-    if (!bounds || !bounds.north || !bounds.south || !bounds.east || !bounds.west) {
+    if (!isValidBounds(bounds)) {
       return NextResponse.json({ error: 'Invalid bounds' }, { status: 400 });
     }
 
@@ -27,58 +91,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid factor IDs' }, { status: 400 });
     }
 
-    // Get factor configurations
-    const factors = DEFAULT_FACTORS.filter((f) => factorIds.includes(f.id));
-
-    if (factors.length === 0) {
-      return NextResponse.json({ error: 'No valid factors found' }, { status: 400 });
-    }
-
-    const results: Record<string, POI[]> = {};
-    const fetchPromises: Promise<void>[] = [];
-
-    for (const factor of factors) {
-      const cacheKey = generatePOICacheKey(factor.id, bounds);
-
-      fetchPromises.push(
-        (async () => {
-          // Try cache first
-          const cached = await cacheGet<POI[]>(cacheKey);
-          if (cached) {
-            results[factor.id] = cached;
-            return;
-          }
-
-          // Fetch from Overpass API
-          try {
-            const pois = await fetchPOIs(factor.osmTags, bounds);
-            results[factor.id] = pois;
-
-            // Cache the results
-            await cacheSet(cacheKey, pois, 3600); // 1 hour TTL
-          } catch (error) {
-            console.error(`Error fetching POIs for ${factor.id}:`, error);
-            results[factor.id] = [];
-          }
-        })()
-      );
-    }
-
-    await Promise.all(fetchPromises);
-
-    return NextResponse.json({
-      pois: results,
-      metadata: {
-        factorCount: factors.length,
-        totalPOIs: Object.values(results).reduce((sum, pois) => sum + pois.length, 0),
-      },
-    });
+    const result = await fetchPOIsWithCache(bounds, factorIds);
+    return NextResponse.json(result);
   } catch (error) {
     console.error('POI API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    const status = message === 'No valid factors found' ? 400 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
@@ -95,41 +114,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid bounds' }, { status: 400 });
   }
 
-  // Reuse POST logic
-  const bounds: Bounds = { north, south, east, west };
-
-  const factors = DEFAULT_FACTORS.filter((f) => factorIds.includes(f.id));
-
-  if (factors.length === 0) {
-    return NextResponse.json({ error: 'No valid factors found' }, { status: 400 });
+  if (factorIds.length === 0) {
+    return NextResponse.json({ error: 'Invalid factor IDs' }, { status: 400 });
   }
 
-  const results: Record<string, POI[]> = {};
-
-  for (const factor of factors) {
-    const cacheKey = generatePOICacheKey(factor.id, bounds);
-
-    const cached = await cacheGet<POI[]>(cacheKey);
-    if (cached) {
-      results[factor.id] = cached;
-      continue;
-    }
-
-    try {
-      const pois = await fetchPOIs(factor.osmTags, bounds);
-      results[factor.id] = pois;
-      await cacheSet(cacheKey, pois, 3600);
-    } catch (error) {
-      console.error(`Error fetching POIs for ${factor.id}:`, error);
-      results[factor.id] = [];
-    }
+  try {
+    const bounds: Bounds = { north, south, east, west };
+    const result = await fetchPOIsWithCache(bounds, factorIds);
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error('POI API error:', error);
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    const status = message === 'No valid factors found' ? 400 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
-
-  return NextResponse.json({
-    pois: results,
-    metadata: {
-      factorCount: factors.length,
-      totalPOIs: Object.values(results).reduce((sum, pois) => sum + pois.length, 0),
-    },
-  });
 }

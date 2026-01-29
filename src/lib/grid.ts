@@ -1,4 +1,4 @@
-import { Bounds, Point } from '@/types';
+import { Bounds, Point, HeatmapPoint } from '@/types';
 
 // Meters per degree of latitude (approximately constant)
 const METERS_PER_DEGREE_LAT = 111320;
@@ -29,37 +29,6 @@ export function generateGrid(bounds: Bounds, cellSize: number): Point[] {
     for (let lng = bounds.west; lng <= bounds.east; lng += lngStep) {
       points.push({ lat, lng });
     }
-  }
-
-  return points;
-}
-
-/**
- * Generate a hexagonal grid of sample points (better coverage than square grid)
- * @param bounds - The geographic bounds to cover
- * @param cellSize - The distance between grid points in meters
- * @returns Array of points forming the hexagonal grid
- */
-export function generateHexGrid(bounds: Bounds, cellSize: number): Point[] {
-  const points: Point[] = [];
-
-  const centerLat = (bounds.north + bounds.south) / 2;
-  const latStep = cellSize / METERS_PER_DEGREE_LAT;
-  const lngStep = cellSize / metersPerDegreeLng(centerLat);
-
-  // Hex grid offset
-  const hexOffset = lngStep / 2;
-
-  let rowIndex = 0;
-  for (let lat = bounds.south; lat <= bounds.north; lat += latStep * 0.866) {
-    // 0.866 = sqrt(3)/2 for hex spacing
-    const offset = rowIndex % 2 === 0 ? 0 : hexOffset;
-
-    for (let lng = bounds.west + offset; lng <= bounds.east; lng += lngStep) {
-      points.push({ lat, lng });
-    }
-
-    rowIndex++;
   }
 
   return points;
@@ -146,4 +115,47 @@ export function getTilesForBounds(bounds: Bounds, z: number): { x: number; y: nu
   }
 
   return tiles;
+}
+
+/**
+ * Estimate cell size from heatmap points by analyzing point spacing
+ * Useful for rendering grid cells when the original cell size is unknown
+ * 
+ * @param points - Array of heatmap points
+ * @returns Estimated cell size in degrees { lat, lng }
+ */
+export function estimateCellSizeFromPoints(points: HeatmapPoint[]): { lat: number; lng: number } {
+  const DEFAULT_CELL_SIZE = 0.001;
+  
+  if (points.length <= 1) {
+    return { lat: DEFAULT_CELL_SIZE, lng: DEFAULT_CELL_SIZE };
+  }
+  
+  // Sort points to find grid spacing
+  const sortedByLat = [...points].sort((a, b) => a.lat - b.lat);
+  const sortedByLng = [...points].sort((a, b) => a.lng - b.lng);
+  
+  let cellSizeLat = DEFAULT_CELL_SIZE;
+  let cellSizeLng = DEFAULT_CELL_SIZE;
+  
+  // Find minimum non-zero differences (grid spacing)
+  const MIN_DIFF_THRESHOLD = 0.0001;
+  
+  for (let i = 1; i < sortedByLat.length; i++) {
+    const diff = sortedByLat[i].lat - sortedByLat[i - 1].lat;
+    if (diff > MIN_DIFF_THRESHOLD) {
+      cellSizeLat = diff;
+      break;
+    }
+  }
+  
+  for (let i = 1; i < sortedByLng.length; i++) {
+    const diff = sortedByLng[i].lng - sortedByLng[i - 1].lng;
+    if (diff > MIN_DIFF_THRESHOLD) {
+      cellSizeLng = diff;
+      break;
+    }
+  }
+  
+  return { lat: cellSizeLat, lng: cellSizeLng };
 }
