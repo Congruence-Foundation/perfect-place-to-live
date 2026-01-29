@@ -167,7 +167,8 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
             }, 150);
           }}
           onKeyDown={handleKeyDown}
-          className="pl-8 pr-7 bg-background border-0 shadow-none h-8 text-xs rounded-full"
+          className="pl-8 pr-7 bg-background border-0 shadow-none h-8 text-base rounded-full"
+          style={{ fontSize: '16px' }} // Prevent iOS zoom on focus
         />
         {query && (
           <Button

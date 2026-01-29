@@ -395,10 +395,13 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
       factorTranslationsRef.current
     );
     
-    L.popup({
+    const popupOptions: L.PopupOptions = {
       maxWidth: 300,
       className: 'location-rating-popup',
-    })
+      autoPan: false, // Disable auto-pan to prevent map movement
+    };
+    
+    L.popup(popupOptions)
       .setLatLng([lat, lng])
       .setContent(popupContent)
       .openOn(mapInstanceRef.current!);
@@ -509,46 +512,148 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         map.on('contextmenu', handleMapClick);
 
         // Long-press handler for mobile (alternative to right-click)
+        // Using native DOM events to properly prevent iOS default behavior
         let longPressTimer: ReturnType<typeof setTimeout> | null = null;
         let longPressLatLng: L.LatLng | null = null;
+        let touchStartPos: { x: number; y: number } | null = null;
 
-        // Touch events for mobile long-press
-        map.on('touchstart', (e: L.LeafletEvent) => {
+        const mapContainer = containerRef.current;
+        
+        const handleTouchStart = (e: TouchEvent) => {
           // Clear any existing timer
           if (longPressTimer) {
             clearTimeout(longPressTimer);
           }
           
-          const touchEvent = e as L.LeafletMouseEvent;
-          if (touchEvent.latlng) {
-            longPressLatLng = touchEvent.latlng;
-            longPressTimer = setTimeout(() => {
-              if (longPressLatLng && mapInstanceRef.current) {
-                handleMapClick({
-                  latlng: longPressLatLng,
-                } as L.LeafletMouseEvent);
-              }
+          const touch = e.touches[0];
+          touchStartPos = { x: touch.clientX, y: touch.clientY };
+          
+          // Convert touch position to map coordinates
+          if (mapInstanceRef.current) {
+            const containerPoint = mapInstanceRef.current.mouseEventToContainerPoint({
+              clientX: touch.clientX,
+              clientY: touch.clientY,
+            } as MouseEvent);
+            longPressLatLng = mapInstanceRef.current.containerPointToLatLng(containerPoint);
+          }
+          
+          longPressTimer = setTimeout(() => {
+            if (longPressLatLng && mapInstanceRef.current) {
+              // Prevent any default behavior
+              e.preventDefault();
+              
+              // Show popup at the long-press location
+              handleMapClick({
+                latlng: longPressLatLng,
+              } as L.LeafletMouseEvent);
+            }
+            longPressTimer = null;
+            longPressLatLng = null;
+            touchStartPos = null;
+          }, 500);
+        };
+        
+        const handleTouchMove = (e: TouchEvent) => {
+          if (longPressTimer && touchStartPos) {
+            const touch = e.touches[0];
+            const dx = touch.clientX - touchStartPos.x;
+            const dy = touch.clientY - touchStartPos.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Cancel if moved more than 10px
+            if (distance > 10) {
+              clearTimeout(longPressTimer);
               longPressTimer = null;
               longPressLatLng = null;
-            }, 600);
+              touchStartPos = null;
+            }
           }
-        });
-
-        map.on('touchmove', () => {
+        };
+        
+        const handleTouchEnd = () => {
           if (longPressTimer) {
             clearTimeout(longPressTimer);
             longPressTimer = null;
             longPressLatLng = null;
+            touchStartPos = null;
           }
-        });
+        };
+        
+        // Add native touch event listeners with passive: false to allow preventDefault
+        if (mapContainer) {
+          mapContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
+          mapContainer.addEventListener('touchmove', handleTouchMove, { passive: true });
+          mapContainer.addEventListener('touchend', handleTouchEnd, { passive: true });
+          mapContainer.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+        }
 
-        map.on('touchend', () => {
-          if (longPressTimer) {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-            longPressLatLng = null;
+        // Mouse-based long-press for desktop testing
+        let mouseLongPressTimer: ReturnType<typeof setTimeout> | null = null;
+        let mouseStartPos: { x: number; y: number } | null = null;
+        let mouseLongPressLatLng: L.LatLng | null = null;
+
+        const handleMouseDown = (e: MouseEvent) => {
+          // Only handle left click
+          if (e.button !== 0) return;
+          
+          // Clear any existing timer
+          if (mouseLongPressTimer) {
+            clearTimeout(mouseLongPressTimer);
           }
-        });
+          
+          mouseStartPos = { x: e.clientX, y: e.clientY };
+          
+          // Convert mouse position to map coordinates
+          if (mapInstanceRef.current) {
+            const containerPoint = mapInstanceRef.current.mouseEventToContainerPoint(e);
+            mouseLongPressLatLng = mapInstanceRef.current.containerPointToLatLng(containerPoint);
+          }
+          
+          mouseLongPressTimer = setTimeout(() => {
+            if (mouseLongPressLatLng && mapInstanceRef.current) {
+              // Show popup at the long-press location
+              handleMapClick({
+                latlng: mouseLongPressLatLng,
+              } as L.LeafletMouseEvent);
+            }
+            mouseLongPressTimer = null;
+            mouseLongPressLatLng = null;
+            mouseStartPos = null;
+          }, 500);
+        };
+        
+        const handleMouseMove = (e: MouseEvent) => {
+          if (mouseLongPressTimer && mouseStartPos) {
+            const dx = e.clientX - mouseStartPos.x;
+            const dy = e.clientY - mouseStartPos.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Cancel if moved more than 5px (stricter for mouse)
+            if (distance > 5) {
+              clearTimeout(mouseLongPressTimer);
+              mouseLongPressTimer = null;
+              mouseLongPressLatLng = null;
+              mouseStartPos = null;
+            }
+          }
+        };
+        
+        const handleMouseUp = () => {
+          if (mouseLongPressTimer) {
+            clearTimeout(mouseLongPressTimer);
+            mouseLongPressTimer = null;
+            mouseLongPressLatLng = null;
+            mouseStartPos = null;
+          }
+        };
+        
+        // Add mouse event listeners for desktop long-press testing
+        if (mapContainer) {
+          mapContainer.addEventListener('mousedown', handleMouseDown);
+          mapContainer.addEventListener('mousemove', handleMouseMove);
+          mapContainer.addEventListener('mouseup', handleMouseUp);
+          mapContainer.addEventListener('mouseleave', handleMouseUp);
+        }
 
         // Trigger initial bounds after a short delay to ensure map is ready
         setTimeout(() => {

@@ -47,12 +47,12 @@ export default function MapSettings({
   const tCurves = useTranslations('curves');
 
   return (
-    <div className={`absolute z-[1000] flex flex-col items-end ${
-      isMobile ? 'bottom-[64px] right-4' : 'bottom-4 right-4'
-    }`}>
-      {/* Expanded Panel */}
+    <div className={`${
+      isMobile ? 'relative' : 'absolute bottom-4 right-4'
+    } z-[1000]`}>
+      {/* Expanded Panel - Absolutely positioned above the button */}
       {isOpen && (
-        <div className={`mb-2 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-64 animate-in fade-in slide-in-from-bottom-2 duration-200 ${
+        <div className={`absolute ${isMobile ? 'bottom-12 right-0' : 'bottom-12 right-0'} bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-64 animate-in fade-in slide-in-from-bottom-2 duration-200 ${
           isMobile ? 'max-h-[50vh] overflow-y-auto' : ''
         }`}>
           {/* Header */}
@@ -276,20 +276,18 @@ export default function MapSettings({
         </div>
       )}
 
-      {/* Toggle Button - Fixed width container to prevent movement */}
-      <div className="w-10 h-10">
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className={`flex items-center justify-center w-10 h-10 rounded-full shadow-lg transition-all ${
-            isOpen 
-              ? 'bg-primary text-primary-foreground' 
-              : 'bg-background/95 backdrop-blur-sm hover:bg-muted border'
-          }`}
-          title={t('title')}
-        >
-          <Settings className={`h-5 w-5 ${isOpen ? '' : 'text-muted-foreground'}`} />
-        </button>
-      </div>
+      {/* Toggle Button */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center justify-center w-10 h-10 rounded-full shadow-lg transition-all ${
+          isOpen 
+            ? 'bg-primary text-primary-foreground' 
+            : 'bg-background/95 backdrop-blur-sm hover:bg-muted border'
+        }`}
+        title={t('title')}
+      >
+        <Settings className={`h-5 w-5 ${isOpen ? '' : 'text-muted-foreground'}`} />
+      </button>
     </div>
   );
 }

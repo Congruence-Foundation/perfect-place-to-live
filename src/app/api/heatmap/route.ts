@@ -9,9 +9,13 @@ import { estimateGridSize, calculateAdaptiveGridSize } from '@/lib/grid';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Buffer distance in degrees (approximately 3km at mid-latitudes)
-// This ensures POIs just outside the viewport are included for edge calculations
-const POI_BUFFER_DEGREES = 0.03;
+// Buffer distance in degrees for POI fetching (approximately 10km at mid-latitudes)
+// This ensures POIs well outside the viewport are included for accurate edge calculations
+const POI_BUFFER_DEGREES = 0.1;
+
+// Buffer distance in degrees for grid/canvas (approximately 5km at mid-latitudes)
+// This extends the heatmap canvas beyond the viewport to prevent reloads on small scrolls
+const GRID_BUFFER_DEGREES = 0.05;
 
 // Maximum allowed grid points to prevent server overload
 const MAX_GRID_POINTS = 50000;
@@ -47,17 +51,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No enabled factors' }, { status: 400 });
     }
 
-    // Calculate effective grid size
+    // Expand bounds for grid/canvas to extend beyond viewport (prevents reload on small scrolls)
+    const gridBounds = expandBounds(bounds, GRID_BUFFER_DEGREES);
+
+    // Calculate effective grid size using expanded grid bounds
     // If user specified a grid size, check if it would generate too many points
     // If so, automatically increase the grid size to stay within limits
-    let effectiveGridSize = gridSize || calculateAdaptiveGridSize(bounds, 5000, 100, 500);
-    let estimatedPoints = estimateGridSize(bounds, effectiveGridSize);
+    let effectiveGridSize = gridSize || calculateAdaptiveGridSize(gridBounds, 5000, 100, 500);
+    let estimatedPoints = estimateGridSize(gridBounds, effectiveGridSize);
 
     // If too many points, increase grid size to stay within limits
     if (estimatedPoints > MAX_GRID_POINTS) {
       // Calculate the minimum grid size needed to stay under the limit
-      effectiveGridSize = calculateAdaptiveGridSize(bounds, MAX_GRID_POINTS, 50, 2000);
-      estimatedPoints = estimateGridSize(bounds, effectiveGridSize);
+      effectiveGridSize = calculateAdaptiveGridSize(gridBounds, MAX_GRID_POINTS, 50, 2000);
+      estimatedPoints = estimateGridSize(gridBounds, effectiveGridSize);
       
       // If still too many points even with max grid size, reject
       if (estimatedPoints > MAX_GRID_POINTS * 1.5) {
@@ -74,16 +81,16 @@ export async function POST(request: NextRequest) {
     }
 
     const startTime = performance.now();
+    
+    // Expand bounds even more for POI fetching to avoid edge effects
+    const poiBounds = expandBounds(bounds, POI_BUFFER_DEGREES);
 
-    // Expand bounds for POI fetching to avoid edge effects
-    const expandedBounds = expandBounds(bounds, POI_BUFFER_DEGREES);
-
-    // Check cache for all factors first (using expanded bounds)
+    // Check cache for all factors first (using POI bounds)
     const poiData = new Map<string, POI[]>();
     const uncachedFactors: { id: string; osmTags: string[] }[] = [];
 
     for (const factor of enabledFactors) {
-      const cacheKey = generatePOICacheKey(factor.id, expandedBounds);
+      const cacheKey = generatePOICacheKey(factor.id, poiBounds);
       const cached = await cacheGet<POI[]>(cacheKey);
       
       if (cached) {
@@ -93,15 +100,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fetch uncached POIs in a single combined query (using expanded bounds)
+    // Fetch uncached POIs in a single combined query (using POI bounds)
     if (uncachedFactors.length > 0) {
       try {
-        const fetchedPOIs = await fetchAllPOIsCombined(uncachedFactors, expandedBounds);
+        const fetchedPOIs = await fetchAllPOIsCombined(uncachedFactors, poiBounds);
         
         // Store in cache and add to poiData
         for (const [factorId, pois] of Object.entries(fetchedPOIs)) {
           poiData.set(factorId, pois);
-          const cacheKey = generatePOICacheKey(factorId, expandedBounds);
+          const cacheKey = generatePOICacheKey(factorId, poiBounds);
           await cacheSet(cacheKey, pois, 3600); // 1 hour TTL
         }
       } catch (error) {
@@ -115,9 +122,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Calculate heatmap using original bounds (for grid) but expanded POI data
+    // Calculate heatmap using expanded grid bounds (extends beyond viewport)
     const heatmapPoints = await calculateHeatmapParallel(
-      bounds,
+      gridBounds,
       poiData,
       enabledFactors,
       effectiveGridSize,

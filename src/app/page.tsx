@@ -11,6 +11,20 @@ import { useHeatmap, useIsMobile } from '@/hooks';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Loader2, RefreshCw, ChevronLeft, ChevronRight, Square, SlidersHorizontal, ChevronDown, RotateCcw, ZoomIn } from 'lucide-react';
 
+// Grid buffer used by the API (must match GRID_BUFFER_DEGREES in route.ts)
+const GRID_BUFFER_DEGREES = 0.05;
+
+// Check if viewport is fully contained within the covered bounds
+function isViewportCovered(viewport: Bounds, coveredBounds: Bounds | null): boolean {
+  if (!coveredBounds) return false;
+  return (
+    viewport.north <= coveredBounds.north &&
+    viewport.south >= coveredBounds.south &&
+    viewport.east <= coveredBounds.east &&
+    viewport.west >= coveredBounds.west
+  );
+}
+
 export default function Home() {
   const t = useTranslations();
   const tApp = useTranslations('app');
@@ -28,10 +42,17 @@ export default function Home() {
   const [showPOIs, setShowPOIs] = useState(false);
   const [showZoomWarning, setShowZoomWarning] = useState(false);
   const [heatmapSettings, setHeatmapSettings] = useState<HeatmapSettings>({
-    gridCellSize: 150, // default 150m
+    gridCellSize: 200, // default 200m
     distanceCurve: 'exp', // exponential for sharp drop-off near POIs
     sensitivity: 2, // 2x sensitivity for more pronounced differences
     normalizeToViewport: false, // absolute scoring by default
+  });
+
+  // Track bottom sheet height for mobile loading overlay positioning
+  // Default to ~7% of viewport height (will be updated by BottomSheet)
+  const [bottomSheetHeight, setBottomSheetHeight] = useState(() => {
+    if (typeof window === 'undefined') return 56; // ~7% of 800px
+    return window.innerHeight * 0.07;
   });
 
   const mapRef = useRef<MapContainerRef>(null);
@@ -45,6 +66,11 @@ export default function Home() {
 
   // Track if user has interacted (searched for a city)
   const hasInteracted = useRef(false);
+  
+  // Track the bounds that are currently covered by the heatmap grid (with buffer)
+  const coveredBoundsRef = useRef<Bounds | null>(null);
+  // Track the factors/settings hash to detect changes that require refetch
+  const lastFetchParamsRef = useRef<string>('');
 
   const handleBoundsChange = useCallback((newBounds: Bounds) => {
     setBounds(newBounds);
@@ -81,10 +107,10 @@ export default function Home() {
   const handleRefresh = useCallback(() => {
     // Use current values, not debounced, for immediate refresh
     if (bounds && mode === 'realtime') {
-      // Check viewport size
+      // Check viewport size - require more zoom before rendering
       const latRange = bounds.north - bounds.south;
       const lngRange = bounds.east - bounds.west;
-      if (latRange > 1 || lngRange > 1.5) {
+      if (latRange > 0.5 || lngRange > 0.75) {
         // Show zoom warning message
         setShowZoomWarning(true);
         setTimeout(() => setShowZoomWarning(false), 3000);
@@ -130,6 +156,8 @@ export default function Home() {
     const enabledFactors = debouncedFactors.filter((f) => f.enabled && f.weight !== 0);
     if (enabledFactors.length === 0) {
       clearHeatmap();
+      coveredBoundsRef.current = null;
+      lastFetchParamsRef.current = '';
       return;
     }
 
@@ -137,10 +165,40 @@ export default function Home() {
     const latRange = debouncedBounds.north - debouncedBounds.south;
     const lngRange = debouncedBounds.east - debouncedBounds.west;
 
-    // Don't fetch if viewport is too large (zoomed out too much)
-    if (latRange > 1 || lngRange > 1.5) {
+    // Don't fetch if viewport is too large (zoomed out too much) - require more zoom
+    if (latRange > 0.5 || lngRange > 0.75) {
       return;
     }
+
+    // Create a hash of the current fetch parameters (excluding bounds)
+    const currentParamsHash = JSON.stringify({
+      factors: enabledFactors.map(f => ({ id: f.id, weight: f.weight, maxDistance: f.maxDistance })),
+      gridCellSize: debouncedSettings.gridCellSize,
+      distanceCurve: debouncedSettings.distanceCurve,
+      sensitivity: debouncedSettings.sensitivity,
+      normalizeToViewport: debouncedSettings.normalizeToViewport,
+    });
+
+    // Check if viewport is still covered by existing heatmap AND params haven't changed
+    if (
+      isViewportCovered(debouncedBounds, coveredBoundsRef.current) &&
+      currentParamsHash === lastFetchParamsRef.current
+    ) {
+      // Viewport is still within the covered area and params are the same, skip fetch
+      return;
+    }
+
+    // Calculate the bounds that will be covered after this fetch (viewport + grid buffer)
+    const newCoveredBounds: Bounds = {
+      north: debouncedBounds.north + GRID_BUFFER_DEGREES,
+      south: debouncedBounds.south - GRID_BUFFER_DEGREES,
+      east: debouncedBounds.east + GRID_BUFFER_DEGREES,
+      west: debouncedBounds.west - GRID_BUFFER_DEGREES,
+    };
+
+    // Update covered bounds and params hash before fetching
+    coveredBoundsRef.current = newCoveredBounds;
+    lastFetchParamsRef.current = currentParamsHash;
 
     fetchHeatmap(
       debouncedBounds,
@@ -155,8 +213,8 @@ export default function Home() {
   const enabledFactorCount = factors.filter((f) => f.enabled && f.weight !== 0).length;
   const totalPOICount = Object.values(pois).reduce((sum, arr) => sum + arr.length, 0);
 
-  // Check if viewport is too large (zoomed out too much)
-  const isZoomedOutTooMuch = bounds ? (bounds.north - bounds.south > 1 || bounds.east - bounds.west > 1.5) : false;
+  // Check if viewport is too large (zoomed out too much) - matches the fetch threshold
+  const isZoomedOutTooMuch = bounds ? (bounds.north - bounds.south > 0.5 || bounds.east - bounds.west > 0.75) : false;
 
   // Calculate search box position - centered on map area, not whole screen (desktop only)
   const panelWidth = isPanelOpen && !isMobile ? 320 : 0; // 320px = w-80
@@ -304,70 +362,80 @@ export default function Home() {
           <AppInfo isMobile={isMobile} />
         </div>
 
-        {/* Refresh/Abort Button - Bottom Center */}
-        <div className={`absolute left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center gap-2 ${
-          isMobile ? 'bottom-[68px]' : 'bottom-4'
-        }`}>
-          {/* Zoom warning message */}
-          {showZoomWarning && (
-            <div className="bg-amber-500/90 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
-              <ZoomIn className="h-3.5 w-3.5" />
-              <span>{tControls('zoomIn')}</span>
-            </div>
-          )}
-          {isLoading ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              className="shadow-lg rounded-full px-4"
-              onClick={abortFetch}
-            >
-              <Square className="h-4 w-4 fill-current" />
-              <span className="ml-2">{tControls('stop')}</span>
-            </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              className={`shadow-lg rounded-full px-4 bg-background/95 backdrop-blur-sm ${
-                isZoomedOutTooMuch ? 'opacity-50' : ''
-              }`}
-              onClick={handleRefresh}
-              disabled={!bounds || mode !== 'realtime'}
-            >
-              {isZoomedOutTooMuch ? (
-                <ZoomIn className="h-4 w-4" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
+        {/* Desktop: Bottom Controls */}
+        {!isMobile && (
+          <>
+            {/* Refresh/Abort Button - Bottom Center */}
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 z-[1000] flex flex-col items-center gap-2">
+              {/* Zoom warning message */}
+              {showZoomWarning && (
+                <div className="bg-amber-500/90 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  <ZoomIn className="h-3.5 w-3.5" />
+                  <span>{tControls('zoomIn')}</span>
+                </div>
               )}
-              <span className="ml-2">{tControls('refresh')}</span>
-            </Button>
-          )}
-        </div>
+              {isLoading ? (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="shadow-lg rounded-full px-4"
+                  onClick={abortFetch}
+                >
+                  <Square className="h-4 w-4 fill-current" />
+                  <span className="ml-2">{tControls('stop')}</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className={`shadow-lg rounded-full px-4 bg-background/95 backdrop-blur-sm ${
+                    isZoomedOutTooMuch ? 'opacity-50' : ''
+                  }`}
+                  onClick={handleRefresh}
+                  disabled={!bounds || mode !== 'realtime'}
+                >
+                  {isZoomedOutTooMuch ? (
+                    <ZoomIn className="h-4 w-4" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  <span className="ml-2">{tControls('refresh')}</span>
+                </Button>
+              )}
+            </div>
 
-        {/* Debug Info - Bottom Left */}
-        <DebugInfo
-          enabledFactorCount={enabledFactorCount}
-          metadata={metadata}
-          totalPOICount={totalPOICount}
-          error={error}
-          isMobile={isMobile}
-        />
+            {/* Debug Info - Bottom Left */}
+            <DebugInfo
+              enabledFactorCount={enabledFactorCount}
+              metadata={metadata}
+              totalPOICount={totalPOICount}
+              error={error}
+              isMobile={false}
+            />
 
-        {/* Map Settings - Bottom Right */}
-        <MapSettings
-          settings={heatmapSettings}
-          onSettingsChange={handleSettingsChange}
-          showPOIs={showPOIs}
-          onShowPOIsChange={setShowPOIs}
-          mode={mode}
-          onModeChange={setMode}
-          isMobile={isMobile}
-        />
+            {/* Map Settings - Bottom Right */}
+            <MapSettings
+              settings={heatmapSettings}
+              onSettingsChange={handleSettingsChange}
+              showPOIs={showPOIs}
+              onShowPOIsChange={setShowPOIs}
+              mode={mode}
+              onModeChange={setMode}
+              isMobile={false}
+            />
+          </>
+        )}
 
-        {/* Loading Overlay */}
+        {/* Loading Overlay - centered in visible map area (above bottom sheet on mobile) */}
         {isLoading && (
-          <div className="absolute inset-0 bg-background/30 backdrop-blur-[2px] flex items-center justify-center z-[999]">
+          <div 
+            className="absolute inset-0 bg-background/30 backdrop-blur-[2px] flex items-center justify-center z-[999]"
+            style={isMobile ? { 
+              // On mobile, don't cover the bottom sheet area - center in visible map
+              bottom: `${bottomSheetHeight}px`,
+              alignItems: 'center',
+            } : undefined}
+          >
             <div className="bg-background/95 backdrop-blur-sm px-5 py-3 rounded-2xl shadow-lg flex items-center gap-3">
               <Loader2 className="h-5 w-5 animate-spin" />
               <span className="text-sm font-medium">{tControls('calculating')}</span>
@@ -384,6 +452,68 @@ export default function Home() {
           onFactorChange={handleFactorChange}
           onProfileSelect={handleProfileSelect}
           onResetFactors={handleResetFactors}
+          onHeightChange={setBottomSheetHeight}
+          floatingControls={
+            <>
+              {/* Debug Info - Left */}
+              <DebugInfo
+                enabledFactorCount={enabledFactorCount}
+                metadata={metadata}
+                totalPOICount={totalPOICount}
+                error={error}
+                isMobile={true}
+              />
+
+              {/* Refresh/Abort Button - Center */}
+              <div className="flex flex-col items-center gap-2">
+                {showZoomWarning && (
+                  <div className="bg-amber-500/90 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                    <ZoomIn className="h-3.5 w-3.5" />
+                    <span>{tControls('zoomIn')}</span>
+                  </div>
+                )}
+                {isLoading ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="shadow-lg rounded-full px-4"
+                    onClick={abortFetch}
+                  >
+                    <Square className="h-4 w-4 fill-current" />
+                    <span className="ml-2">{tControls('stop')}</span>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className={`shadow-lg rounded-full px-4 bg-background/95 backdrop-blur-sm ${
+                      isZoomedOutTooMuch ? 'opacity-50' : ''
+                    }`}
+                    onClick={handleRefresh}
+                    disabled={!bounds || mode !== 'realtime'}
+                  >
+                    {isZoomedOutTooMuch ? (
+                      <ZoomIn className="h-4 w-4" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    <span className="ml-2">{tControls('refresh')}</span>
+                  </Button>
+                )}
+              </div>
+
+              {/* Map Settings - Right */}
+              <MapSettings
+                settings={heatmapSettings}
+                onSettingsChange={handleSettingsChange}
+                showPOIs={showPOIs}
+                onShowPOIsChange={setShowPOIs}
+                mode={mode}
+                onModeChange={setMode}
+                isMobile={true}
+              />
+            </>
+          }
         />
       )}
     </main>

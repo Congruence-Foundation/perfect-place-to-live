@@ -157,7 +157,18 @@
 
 /* Bottom sheet transitions */
 .bottom-sheet {
-  transition: height 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: height 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+              bottom 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Prevent text selection on map for mobile long-press */
+.leaflet-container {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Safe area padding for mobile devices with notches */
