@@ -75,6 +75,9 @@
     "noResults": "No results found",
     "failed": "Search failed. Please try again."
   },
+  "hint": {
+    "rightClick": "Right-click on map for location details"
+  },
   "categories": {
     "essential": "Essential",
     "lifestyle": "Lifestyle",

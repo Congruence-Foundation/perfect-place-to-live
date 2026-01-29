@@ -75,6 +75,9 @@
     "noResults": "Nie znaleziono wyników",
     "failed": "Wyszukiwanie nie powiodło się. Spróbuj ponownie."
   },
+  "hint": {
+    "rightClick": "Kliknij prawym na mapie, aby zobaczyć szczegóły"
+  },
   "categories": {
     "essential": "Podstawowe",
     "lifestyle": "Styl życia",
