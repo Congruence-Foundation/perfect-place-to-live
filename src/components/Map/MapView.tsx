@@ -505,8 +505,50 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         map.on('moveend', handleBoundsChange);
         map.on('zoomend', handleBoundsChange);
         
-        // Add right-click (context menu) handler for location details popup
+        // Add right-click (context menu) handler for location details popup (works on desktop)
         map.on('contextmenu', handleMapClick);
+
+        // Long-press handler for mobile (alternative to right-click)
+        let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+        let longPressLatLng: L.LatLng | null = null;
+
+        // Touch events for mobile long-press
+        map.on('touchstart', (e: L.LeafletEvent) => {
+          // Clear any existing timer
+          if (longPressTimer) {
+            clearTimeout(longPressTimer);
+          }
+          
+          const touchEvent = e as L.LeafletMouseEvent;
+          if (touchEvent.latlng) {
+            longPressLatLng = touchEvent.latlng;
+            longPressTimer = setTimeout(() => {
+              if (longPressLatLng && mapInstanceRef.current) {
+                handleMapClick({
+                  latlng: longPressLatLng,
+                } as L.LeafletMouseEvent);
+              }
+              longPressTimer = null;
+              longPressLatLng = null;
+            }, 600);
+          }
+        });
+
+        map.on('touchmove', () => {
+          if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+            longPressLatLng = null;
+          }
+        });
+
+        map.on('touchend', () => {
+          if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+            longPressLatLng = null;
+          }
+        });
 
         // Trigger initial bounds after a short delay to ensure map is ready
         setTimeout(() => {

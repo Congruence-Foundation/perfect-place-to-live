@@ -30,6 +30,7 @@ interface MapSettingsProps {
   onShowPOIsChange: (show: boolean) => void;
   mode: 'realtime' | 'precomputed';
   onModeChange: (mode: 'realtime' | 'precomputed') => void;
+  isMobile?: boolean;
 }
 
 export default function MapSettings({
@@ -39,16 +40,21 @@ export default function MapSettings({
   onShowPOIsChange,
   mode,
   onModeChange,
+  isMobile = false,
 }: MapSettingsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const t = useTranslations('settings');
   const tCurves = useTranslations('curves');
 
   return (
-    <div className="absolute bottom-4 right-4 z-[1000] flex flex-col items-end">
+    <div className={`absolute z-[1000] flex flex-col items-end ${
+      isMobile ? 'bottom-[64px] right-4' : 'bottom-4 right-4'
+    }`}>
       {/* Expanded Panel */}
       {isOpen && (
-        <div className="mb-2 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-64 animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div className={`mb-2 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-64 animate-in fade-in slide-in-from-bottom-2 duration-200 ${
+          isMobile ? 'max-h-[50vh] overflow-y-auto' : ''
+        }`}>
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-semibold">{t('title')}</span>

@@ -3,19 +3,21 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import MapContainer, { MapContainerRef } from '@/components/Map/MapContainer';
-import { WeightSliders, CitySearch, HeatmapSettings, ProfileSelector, MapSettings, DebugInfo, AppInfo, LanguageSwitcher } from '@/components/Controls';
+import { WeightSliders, CitySearch, HeatmapSettings, ProfileSelector, MapSettings, DebugInfo, AppInfo, LanguageSwitcher, BottomSheet } from '@/components/Controls';
 import { Button } from '@/components/ui/button';
 import { DEFAULT_FACTORS, applyProfile, FACTOR_PROFILES } from '@/config/factors';
 import { Bounds, Factor } from '@/types';
-import { useHeatmap } from '@/hooks';
+import { useHeatmap, useIsMobile } from '@/hooks';
 import { useDebounce } from '@/hooks/useDebounce';
-import { Loader2, RefreshCw, ChevronLeft, ChevronRight, Square, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
+import { Loader2, RefreshCw, ChevronLeft, ChevronRight, Square, SlidersHorizontal, ChevronDown, RotateCcw, ZoomIn } from 'lucide-react';
 
 export default function Home() {
   const t = useTranslations();
   const tApp = useTranslations('app');
   const tControls = useTranslations('controls');
   const tProfiles = useTranslations('profiles');
+
+  const isMobile = useIsMobile();
 
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [factors, setFactors] = useState<Factor[]>(DEFAULT_FACTORS);
@@ -24,6 +26,7 @@ export default function Home() {
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [isFactorsExpanded, setIsFactorsExpanded] = useState(false);
   const [showPOIs, setShowPOIs] = useState(false);
+  const [showZoomWarning, setShowZoomWarning] = useState(false);
   const [heatmapSettings, setHeatmapSettings] = useState<HeatmapSettings>({
     gridCellSize: 150, // default 150m
     distanceCurve: 'exp', // exponential for sharp drop-off near POIs
@@ -78,16 +81,18 @@ export default function Home() {
   const handleRefresh = useCallback(() => {
     // Use current values, not debounced, for immediate refresh
     if (bounds && mode === 'realtime') {
-      // Mark as interacted so future auto-updates work
-      hasInteracted.current = true;
-      
       // Check viewport size
       const latRange = bounds.north - bounds.south;
       const lngRange = bounds.east - bounds.west;
       if (latRange > 1 || lngRange > 1.5) {
-        console.log('Viewport too large for refresh');
+        // Show zoom warning message
+        setShowZoomWarning(true);
+        setTimeout(() => setShowZoomWarning(false), 3000);
         return;
       }
+      
+      // Mark as interacted so future auto-updates work
+      hasInteracted.current = true;
       
       fetchHeatmap(
         bounds,
@@ -150,125 +155,136 @@ export default function Home() {
   const enabledFactorCount = factors.filter((f) => f.enabled && f.weight !== 0).length;
   const totalPOICount = Object.values(pois).reduce((sum, arr) => sum + arr.length, 0);
 
-  // Calculate search box position - centered on map area, not whole screen
-  const panelWidth = isPanelOpen ? 320 : 0; // 320px = w-80
+  // Check if viewport is too large (zoomed out too much)
+  const isZoomedOutTooMuch = bounds ? (bounds.north - bounds.south > 1 || bounds.east - bounds.west > 1.5) : false;
+
+  // Calculate search box position - centered on map area, not whole screen (desktop only)
+  const panelWidth = isPanelOpen && !isMobile ? 320 : 0; // 320px = w-80
 
   // Get current profile description
   const currentProfile = FACTOR_PROFILES.find(p => p.id === selectedProfile);
 
   return (
     <main className="h-screen w-screen flex overflow-hidden relative">
-      {/* Search Box - Floating on top center of MAP area */}
+      {/* Search Box - Floating on top center */}
       <div 
-        className="absolute top-4 z-[1001] transition-all duration-300"
-        style={{ 
+        className={`absolute z-[1001] transition-all duration-300 ${
+          isMobile 
+            ? 'top-4 left-14 right-24' 
+            : 'top-4'
+        }`}
+        style={!isMobile ? { 
           left: `calc(${panelWidth}px + (100% - ${panelWidth}px) / 2)`,
           transform: 'translateX(-50%)'
-        }}
+        } : undefined}
       >
-        <CitySearch onCitySelect={handleCitySelect} />
+        <CitySearch onCitySelect={handleCitySelect} isMobile={isMobile} />
       </div>
 
-      {/* Control Panel - Clean, borderless design */}
-      <div
-        className={`${
-          isPanelOpen ? 'w-80' : 'w-0'
-        } transition-all duration-300 flex-shrink-0 overflow-hidden bg-background/95 backdrop-blur-sm relative z-[1002]`}
-      >
-        <div className="w-80 h-full overflow-y-auto scrollbar-hidden">
-          {/* Header */}
-          <div className="px-5 pt-5 pb-4">
-            <h1 className="text-xl font-semibold tracking-tight">{tApp('title')}</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">{tApp('subtitle')}</p>
-          </div>
-
-          {/* Profiles Section */}
-          <div className="px-5 pb-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{tControls('profile')}</span>
+      {/* Desktop: Control Panel - Clean, borderless design */}
+      {!isMobile && (
+        <div
+          className={`${
+            isPanelOpen ? 'w-80' : 'w-0'
+          } transition-all duration-300 flex-shrink-0 overflow-hidden bg-background/95 backdrop-blur-sm relative z-[1002]`}
+        >
+          <div className="w-80 h-full overflow-y-auto scrollbar-hidden">
+            {/* Header */}
+            <div className="px-5 pt-5 pb-4">
+              <h1 className="text-xl font-semibold tracking-tight">{tApp('title')}</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">{tApp('subtitle')}</p>
             </div>
-            <ProfileSelector
-              selectedProfile={selectedProfile}
-              onProfileSelect={handleProfileSelect}
-            />
-            {currentProfile && (
-              <p className="text-xs text-muted-foreground mt-2 text-center">
-                {tProfiles(`${currentProfile.id}.description`)}
-              </p>
-            )}
-          </div>
 
-          {/* Divider */}
-          <div className="mx-5 border-t" />
+            {/* Profiles Section */}
+            <div className="px-5 pb-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{tControls('profile')}</span>
+              </div>
+              <ProfileSelector
+                selectedProfile={selectedProfile}
+                onProfileSelect={handleProfileSelect}
+              />
+              {currentProfile && (
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  {tProfiles(`${currentProfile.id}.description`)}
+                </p>
+              )}
+            </div>
 
-          {/* Factors Section - Collapsible */}
-          <div className="px-5 py-4">
-            <div className={`rounded-xl bg-muted/50 transition-colors ${isFactorsExpanded ? '' : 'hover:bg-muted'}`}>
-              {/* Header - always visible */}
-              <div className="flex items-center justify-between p-3">
-                <button
-                  onClick={() => setIsFactorsExpanded(!isFactorsExpanded)}
-                  className="flex items-center gap-3 flex-1"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-background flex items-center justify-center shadow-sm">
-                    <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="text-left">
-                    <span className="text-sm font-medium block">{tControls('factors')}</span>
-                    <span className="text-xs text-muted-foreground">{tControls('active', { count: enabledFactorCount })}</span>
-                  </div>
-                </button>
-                <div className="flex items-center gap-1">
-                  {isFactorsExpanded && (
-                    <Button variant="ghost" size="sm" onClick={handleResetFactors} className="h-7 px-2 text-xs animate-in fade-in slide-in-from-right-2 duration-200">
-                      <RotateCcw className="h-3 w-3 mr-1" />
-                      {tControls('reset')}
-                    </Button>
-                  )}
+            {/* Divider */}
+            <div className="mx-5 border-t" />
+
+            {/* Factors Section - Collapsible */}
+            <div className="px-5 py-4">
+              <div className={`rounded-xl bg-muted/50 transition-colors ${isFactorsExpanded ? '' : 'hover:bg-muted'}`}>
+                {/* Header - always visible */}
+                <div className="flex items-center justify-between p-3">
                   <button
                     onClick={() => setIsFactorsExpanded(!isFactorsExpanded)}
-                    className="p-1 hover:bg-background/50 rounded transition-colors"
+                    className="flex items-center gap-3 flex-1"
                   >
-                    <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isFactorsExpanded ? 'rotate-180' : ''}`} />
+                    <div className="w-8 h-8 rounded-lg bg-background flex items-center justify-center shadow-sm">
+                      <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="text-left">
+                      <span className="text-sm font-medium block">{tControls('factors')}</span>
+                      <span className="text-xs text-muted-foreground">{tControls('active', { count: enabledFactorCount })}</span>
+                    </div>
                   </button>
-                </div>
-              </div>
-
-              {/* Expanded content - inside the panel */}
-              {isFactorsExpanded && (
-                <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="border-t border-background/50 pt-3">
-                    {/* Factor Sliders */}
-                    <WeightSliders factors={factors} onFactorChange={handleFactorChange} />
+                  <div className="flex items-center gap-1">
+                    {isFactorsExpanded && (
+                      <Button variant="ghost" size="sm" onClick={handleResetFactors} className="h-7 px-2 text-xs animate-in fade-in slide-in-from-right-2 duration-200">
+                        <RotateCcw className="h-3 w-3 mr-1" />
+                        {tControls('reset')}
+                      </Button>
+                    )}
+                    <button
+                      onClick={() => setIsFactorsExpanded(!isFactorsExpanded)}
+                      className="p-1 hover:bg-background/50 rounded transition-colors"
+                    >
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isFactorsExpanded ? 'rotate-180' : ''}`} />
+                    </button>
                   </div>
                 </div>
-              )}
+
+                {/* Expanded content - inside the panel */}
+                {isFactorsExpanded && (
+                  <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="border-t border-background/50 pt-3">
+                      {/* Factor Sliders */}
+                      <WeightSliders factors={factors} onFactorChange={handleFactorChange} />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Collapse/Expand Toggle */}
-      <button
-        onClick={() => {
-          setIsPanelOpen(!isPanelOpen);
-          setTimeout(() => {
-            mapRef.current?.invalidateSize();
-          }, 350);
-        }}
-        className={`absolute top-1/2 -translate-y-1/2 z-[1003] flex items-center justify-center
-          w-6 h-12 bg-background/95 backdrop-blur-sm border border-l-0 rounded-r-lg shadow-sm
-          hover:bg-muted transition-colors
-          ${isPanelOpen ? 'left-80' : 'left-0'}`}
-        style={{ transition: 'left 0.3s' }}
-        title={isPanelOpen ? 'Collapse panel' : 'Expand panel'}
-      >
-        {isPanelOpen ? (
-          <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        )}
-      </button>
+      {/* Desktop: Collapse/Expand Toggle */}
+      {!isMobile && (
+        <button
+          onClick={() => {
+            setIsPanelOpen(!isPanelOpen);
+            setTimeout(() => {
+              mapRef.current?.invalidateSize();
+            }, 350);
+          }}
+          className={`absolute top-1/2 -translate-y-1/2 z-[1003] flex items-center justify-center
+            w-6 h-12 bg-background/95 backdrop-blur-sm border border-l-0 rounded-r-lg shadow-sm
+            hover:bg-muted transition-colors
+            ${isPanelOpen ? 'left-80' : 'left-0'}`}
+          style={{ transition: 'left 0.3s' }}
+          title={isPanelOpen ? 'Collapse panel' : 'Expand panel'}
+        >
+          {isPanelOpen ? (
+            <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
+      )}
 
       {/* Map Area */}
       <div className="flex-1 relative">
@@ -285,11 +301,20 @@ export default function Home() {
         {/* Top Right Controls - Language Switcher and App Info */}
         <div className="absolute top-4 right-4 z-[1000] flex items-center gap-2">
           <LanguageSwitcher />
-          <AppInfo />
+          <AppInfo isMobile={isMobile} />
         </div>
 
         {/* Refresh/Abort Button - Bottom Center */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000]">
+        <div className={`absolute left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center gap-2 ${
+          isMobile ? 'bottom-[68px]' : 'bottom-4'
+        }`}>
+          {/* Zoom warning message */}
+          {showZoomWarning && (
+            <div className="bg-amber-500/90 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <ZoomIn className="h-3.5 w-3.5" />
+              <span>{tControls('zoomIn')}</span>
+            </div>
+          )}
           {isLoading ? (
             <Button
               variant="destructive"
@@ -304,11 +329,17 @@ export default function Home() {
             <Button
               variant="secondary"
               size="sm"
-              className="shadow-lg rounded-full px-4 bg-background/95 backdrop-blur-sm"
+              className={`shadow-lg rounded-full px-4 bg-background/95 backdrop-blur-sm ${
+                isZoomedOutTooMuch ? 'opacity-50' : ''
+              }`}
               onClick={handleRefresh}
               disabled={!bounds || mode !== 'realtime'}
             >
-              <RefreshCw className="h-4 w-4" />
+              {isZoomedOutTooMuch ? (
+                <ZoomIn className="h-4 w-4" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
               <span className="ml-2">{tControls('refresh')}</span>
             </Button>
           )}
@@ -320,6 +351,7 @@ export default function Home() {
           metadata={metadata}
           totalPOICount={totalPOICount}
           error={error}
+          isMobile={isMobile}
         />
 
         {/* Map Settings - Bottom Right */}
@@ -330,6 +362,7 @@ export default function Home() {
           onShowPOIsChange={setShowPOIs}
           mode={mode}
           onModeChange={setMode}
+          isMobile={isMobile}
         />
 
         {/* Loading Overlay */}
@@ -342,6 +375,17 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Mobile: Bottom Sheet */}
+      {isMobile && (
+        <BottomSheet
+          factors={factors}
+          selectedProfile={selectedProfile}
+          onFactorChange={handleFactorChange}
+          onProfileSelect={handleProfileSelect}
+          onResetFactors={handleResetFactors}
+        />
+      )}
     </main>
   );
 }

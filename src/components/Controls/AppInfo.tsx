@@ -6,7 +6,11 @@ import { Info, X } from 'lucide-react';
 
 const STORAGE_KEY = 'location-finder-info-seen';
 
-export default function AppInfo() {
+interface AppInfoProps {
+  isMobile?: boolean;
+}
+
+export default function AppInfo({ isMobile = false }: AppInfoProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [hasCheckedStorage, setHasCheckedStorage] = useState(false);
   const t = useTranslations('help');
@@ -44,7 +48,9 @@ export default function AppInfo() {
     <div className="relative">
       {/* Expanded Panel */}
       {isOpen && (
-        <div className="absolute top-10 right-0 z-[1000] bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-64 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className={`absolute top-10 right-0 z-[1000] bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 animate-in fade-in slide-in-from-top-2 duration-200 ${
+          isMobile ? 'w-[calc(100vw-2rem)] max-w-72' : 'w-64'
+        }`}>
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-semibold">{t('title')}</span>

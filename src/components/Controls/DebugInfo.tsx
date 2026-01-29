@@ -12,6 +12,7 @@ interface DebugInfoProps {
   } | null;
   totalPOICount: number;
   error: string | null;
+  isMobile?: boolean;
 }
 
 export default function DebugInfo({
@@ -19,12 +20,15 @@ export default function DebugInfo({
   metadata,
   totalPOICount,
   error,
+  isMobile = false,
 }: DebugInfoProps) {
   const [isOpen, setIsOpen] = useState(false);
   const t = useTranslations('debug');
 
   return (
-    <div className="absolute bottom-4 left-4 z-[1000]">
+    <div className={`absolute z-[1000] ${
+      isMobile ? 'bottom-[64px] left-4' : 'bottom-4 left-4'
+    }`}>
       {/* Expanded Panel */}
       {isOpen && (
         <div className="mb-2 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-48 animate-in fade-in slide-in-from-bottom-2 duration-200">

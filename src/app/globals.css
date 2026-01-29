@@ -154,3 +154,15 @@
   margin: 0;
   padding: 12px;
 }
+
+/* Bottom sheet transitions */
+.bottom-sheet {
+  transition: height 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Safe area padding for mobile devices with notches */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

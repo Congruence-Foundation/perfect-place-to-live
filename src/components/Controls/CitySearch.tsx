@@ -18,9 +18,10 @@ interface SearchResult {
 
 interface CitySearchProps {
   onCitySelect: (lat: number, lng: number, bounds?: { north: number; south: number; east: number; west: number }) => void;
+  isMobile?: boolean;
 }
 
-export default function CitySearch({ onCitySelect }: CitySearchProps) {
+export default function CitySearch({ onCitySelect, isMobile = false }: CitySearchProps) {
   const t = useTranslations('search');
   const locale = useLocale();
   
@@ -140,7 +141,11 @@ export default function CitySearch({ onCitySelect }: CitySearchProps) {
   return (
     <div 
       ref={containerRef} 
-      className={`relative transition-all duration-300 ease-out ${isFocused ? 'w-72' : 'w-40'}`}
+      className={`relative transition-all duration-300 ${
+        isMobile 
+          ? 'w-full' 
+          : isFocused ? 'w-72' : 'w-40'
+      }`}
     >
       <div className="relative shadow-lg rounded-full">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />

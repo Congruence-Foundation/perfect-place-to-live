@@ -10,7 +10,8 @@
     "reset": "Reset",
     "refresh": "Refresh",
     "stop": "Stop",
-    "calculating": "Calculating..."
+    "calculating": "Calculating...",
+    "zoomIn": "Zoom in to calculate"
   },
   "help": {
     "title": "How to Use",

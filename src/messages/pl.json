@@ -10,7 +10,8 @@
     "reset": "Resetuj",
     "refresh": "Odśwież",
     "stop": "Zatrzymaj",
-    "calculating": "Obliczanie..."
+    "calculating": "Obliczanie...",
+    "zoomIn": "Przybliż, aby obliczyć"
   },
   "help": {
     "title": "Jak używać",

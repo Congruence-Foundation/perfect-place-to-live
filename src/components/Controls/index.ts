@@ -8,4 +8,5 @@ export { default as MapSettings } from './MapSettings';
 export { default as DebugInfo } from './DebugInfo';
 export { default as AppInfo } from './AppInfo';
 export { default as LanguageSwitcher } from './LanguageSwitcher';
+export { default as BottomSheet } from './BottomSheet';
 export type { HeatmapSettings } from './AdvancedSettings';
