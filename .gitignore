@@ -44,3 +44,6 @@ next-env.d.ts
 /data/
 *.osm.pbf
 *.ndjson
+
+# Generated osmium filters (source of truth: src/config/poi-categories.ts)
+osmium-filters.txt

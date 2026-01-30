@@ -323,7 +323,7 @@ export const POI_CATEGORIES: POICategory[] = [
     category: 'environment',
     icon: 'factory',
     defaultWeight: -40,
-    defaultMaxDistance: 1000,
+    defaultMaxDistance: 1500,
     defaultEnabled: true,
   },
   {
@@ -337,7 +337,7 @@ export const POI_CATEGORIES: POICategory[] = [
     category: 'environment',
     icon: 'road',
     defaultWeight: -30,
-    defaultMaxDistance: 500,
+    defaultMaxDistance: 300,
     defaultEnabled: true,
   },
   {
@@ -351,7 +351,7 @@ export const POI_CATEGORIES: POICategory[] = [
     category: 'environment',
     icon: 'plane',
     defaultWeight: -40,
-    defaultMaxDistance: 3000,
+    defaultMaxDistance: 5000,
     defaultEnabled: false,
   },
   {
@@ -364,7 +364,7 @@ export const POI_CATEGORIES: POICategory[] = [
     category: 'environment',
     icon: 'train-track',
     defaultWeight: -30,
-    defaultMaxDistance: 500,
+    defaultMaxDistance: 300,
     defaultEnabled: false,
   },
   {
@@ -391,6 +391,35 @@ export const POI_CATEGORIES: POICategory[] = [
     icon: 'hard-hat',
     defaultWeight: -30,
     defaultMaxDistance: 500,
+    defaultEnabled: false,
+  },
+
+  // ============================================
+  // CITY/TOWN PROXIMITY FACTORS
+  // ============================================
+  {
+    id: 'city_center',
+    name: 'City/Town Access',
+    osmFilters: [
+      'n/place=city',   // Large cities (>100k population)
+      'n/place=town',   // Medium towns (10k-100k population)
+    ],
+    category: 'lifestyle',
+    icon: 'building-2',
+    defaultWeight: 40,
+    defaultMaxDistance: 15000,  // 15km broad access
+    defaultEnabled: false,
+  },
+  {
+    id: 'city_downtown',
+    name: 'City Downtown',
+    osmFilters: [
+      'n/place=city',   // Only large cities - downtown noise/traffic/crowds
+    ],
+    category: 'environment',
+    icon: 'volume-2',
+    defaultWeight: -40,
+    defaultMaxDistance: 4000,   // 4km - large city downtown impact
     defaultEnabled: false,
   },
 ];

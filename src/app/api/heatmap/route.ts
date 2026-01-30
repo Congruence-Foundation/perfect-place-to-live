@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { encode } from '@msgpack/msgpack';
 import { generatePOICacheKey } from '@/lib/overpass';
 import { fetchPOIs, DataSource } from '@/lib/poi-service';
 import { calculateHeatmapParallel } from '@/lib/calculator-parallel';
@@ -32,6 +33,9 @@ export async function POST(request: NextRequest) {
       normalizeToViewport,
       dataSource: requestedDataSource,
     } = body;
+
+    // Check if client wants MessagePack format (~30% smaller than JSON)
+    const acceptsMsgpack = request.headers.get('Accept') === 'application/msgpack';
 
     // Determine data source (default to Neon for performance)
     const dataSource: DataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
@@ -87,6 +91,9 @@ export async function POST(request: NextRequest) {
     // Overpass has its own caching behavior
     const poiData = new Map<string, POI[]>();
     const uncachedFactors: { id: string; osmTags: string[] }[] = [];
+    
+    // Track actual data source used (may change if fallback occurs)
+    let actualDataSource: DataSource = dataSource;
 
     if (dataSource === 'neon') {
       // For Neon, check cache first
@@ -110,21 +117,75 @@ export async function POST(request: NextRequest) {
     // Fetch uncached POIs using the unified POI service
     if (uncachedFactors.length > 0) {
       try {
-        const fetchedPOIs = await fetchPOIs(uncachedFactors, poiBounds, dataSource);
+        const fetchedPOIs = await fetchPOIs(uncachedFactors, poiBounds, actualDataSource);
         
-        // Store in cache and add to poiData
-        for (const [factorId, pois] of Object.entries(fetchedPOIs)) {
-          poiData.set(factorId, pois);
-          // Cache the results (useful for both sources)
-          const cacheKey = generatePOICacheKey(factorId, poiBounds);
-          await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
+        // Check if Neon returned empty results - might need to fallback to Overpass
+        const totalPOIs = Object.values(fetchedPOIs).reduce((sum, pois) => sum + pois.length, 0);
+        
+        if (actualDataSource === 'neon' && totalPOIs === 0) {
+          // No data in Neon DB for this area - try Overpass as fallback
+          console.log('No POIs found in Neon DB, falling back to Overpass API...');
+          actualDataSource = 'overpass';
+          
+          try {
+            const overpassPOIs = await fetchPOIs(uncachedFactors, poiBounds, 'overpass');
+            
+            // Store Overpass results
+            for (const [factorId, pois] of Object.entries(overpassPOIs)) {
+              poiData.set(factorId, pois);
+              // Cache the results for future requests
+              const cacheKey = generatePOICacheKey(factorId, poiBounds);
+              await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
+            }
+          } catch (overpassError) {
+            console.error('Overpass fallback also failed:', overpassError);
+            // Initialize empty arrays for failed factors
+            for (const factor of uncachedFactors) {
+              if (!poiData.has(factor.id)) {
+                poiData.set(factor.id, []);
+              }
+            }
+          }
+        } else {
+          // Store in cache and add to poiData
+          for (const [factorId, pois] of Object.entries(fetchedPOIs)) {
+            poiData.set(factorId, pois);
+            // Cache the results (useful for both sources)
+            const cacheKey = generatePOICacheKey(factorId, poiBounds);
+            await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
+          }
         }
       } catch (error) {
-        console.error(`Error fetching POIs from ${dataSource}:`, error);
-        // Initialize empty arrays for failed factors
-        for (const factor of uncachedFactors) {
-          if (!poiData.has(factor.id)) {
-            poiData.set(factor.id, []);
+        console.error(`Error fetching POIs from ${actualDataSource}:`, error);
+        
+        // If Neon failed, try Overpass as fallback
+        if (actualDataSource === 'neon') {
+          console.log('Neon DB error, falling back to Overpass API...');
+          actualDataSource = 'overpass';
+          
+          try {
+            const overpassPOIs = await fetchPOIs(uncachedFactors, poiBounds, 'overpass');
+            
+            for (const [factorId, pois] of Object.entries(overpassPOIs)) {
+              poiData.set(factorId, pois);
+              const cacheKey = generatePOICacheKey(factorId, poiBounds);
+              await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
+            }
+          } catch (overpassError) {
+            console.error('Overpass fallback also failed:', overpassError);
+            // Initialize empty arrays for failed factors
+            for (const factor of uncachedFactors) {
+              if (!poiData.has(factor.id)) {
+                poiData.set(factor.id, []);
+              }
+            }
+          }
+        } else {
+          // Initialize empty arrays for failed factors
+          for (const factor of uncachedFactors) {
+            if (!poiData.has(factor.id)) {
+              poiData.set(factor.id, []);
+            }
           }
         }
       }
@@ -143,20 +204,21 @@ export async function POST(request: NextRequest) {
 
     const endTime = performance.now();
 
-    // Convert POI data to plain object for JSON response
-    // Only include POIs within the original bounds for the response (to reduce payload)
+    // Convert POI data to plain object for response
+    // Use expanded poiBounds (not viewport bounds) so POIs extend beyond visible area
+    // This prevents POIs from disappearing at edges when panning
     const poisByFactor: Record<string, POI[]> = {};
     poiData.forEach((pois, factorId) => {
       poisByFactor[factorId] = pois.filter(
         (poi) =>
-          poi.lat >= bounds.south &&
-          poi.lat <= bounds.north &&
-          poi.lng >= bounds.west &&
-          poi.lng <= bounds.east
+          poi.lat >= poiBounds.south &&
+          poi.lat <= poiBounds.north &&
+          poi.lng >= poiBounds.west &&
+          poi.lng <= poiBounds.east
       );
     });
 
-    return NextResponse.json({
+    const responseData = {
       points: heatmapPoints,
       pois: poisByFactor,
       metadata: {
@@ -164,12 +226,25 @@ export async function POST(request: NextRequest) {
         pointCount: heatmapPoints.length,
         computeTimeMs: Math.round(endTime - startTime),
         factorCount: enabledFactors.length,
-        dataSource,
+        dataSource: actualDataSource,
         poiCounts: Object.fromEntries(
           Array.from(poiData.entries()).map(([id, pois]) => [id, pois.length])
         ),
       },
-    });
+    };
+
+    // Return MessagePack format if requested (~30% smaller than JSON)
+    if (acceptsMsgpack) {
+      const encoded = encode(responseData);
+      return new Response(encoded, {
+        headers: {
+          'Content-Type': 'application/msgpack',
+        },
+      });
+    }
+
+    // Default to JSON response
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error('Heatmap API error:', error);
     return NextResponse.json(

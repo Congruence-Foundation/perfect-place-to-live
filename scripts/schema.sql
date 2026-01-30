@@ -4,15 +4,18 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 -- ============================================================================
 -- Main POI table
 -- ============================================================================
+-- Note: Primary key is (id, factor_id) to allow the same OSM feature
+-- to be used by multiple factors (e.g., place=city for both city_center and city_downtown)
 CREATE TABLE IF NOT EXISTS osm_pois (
-    id BIGINT PRIMARY KEY,
+    id BIGINT NOT NULL,
     factor_id VARCHAR(50) NOT NULL,
     lat DOUBLE PRECISION NOT NULL,
     lng DOUBLE PRECISION NOT NULL,
     geom GEOMETRY(Point, 4326) NOT NULL,
     name VARCHAR(255),
     tags JSONB,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT NOW(),
+    PRIMARY KEY (id, factor_id)
 );
 
 -- Spatial index for fast bounding box queries

@@ -333,6 +333,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   const poiLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const canvasOverlayRef = useRef<L.ImageOverlay | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const blobUrlRef = useRef<string | null>(null); // Track blob URL for cleanup
   const [mapReady, setMapReady] = useState(false);
   const initializingRef = useRef(false);
   
@@ -548,6 +549,11 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         canvasOverlayRef.current = null;
         offscreenCanvasRef.current = null;
       }
+      // Revoke blob URL to prevent memory leak
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
       initializingRef.current = false;
       setMapReady(false);
     };
@@ -647,39 +653,49 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
             opacity: heatmapOpacity,
           });
 
-          // Convert to data URL
-          const dataUrl = canvas.toDataURL('image/png');
-          console.log(`Canvas rendered: ${canvas.width}x${canvas.height} for ${uniqueLngs}x${uniqueLats} grid`);
-
           // Create or update image overlay using the DATA bounds (not viewport)
           const overlayBounds: L.LatLngBoundsExpression = [
             [bounds.south, bounds.west],
             [bounds.north, bounds.east],
           ];
 
-          if (canvasOverlayRef.current) {
-            canvasOverlayRef.current.setUrl(dataUrl);
-            canvasOverlayRef.current.setBounds(L.latLngBounds(overlayBounds));
-          } else {
-            // Check if heatmapPane exists, create if not
-            let pane = mapInstanceRef.current.getPane('heatmapPane');
-            if (!pane) {
-              mapInstanceRef.current.createPane('heatmapPane');
-              pane = mapInstanceRef.current.getPane('heatmapPane');
-              if (pane) {
-                pane.style.zIndex = '450';
-              }
+          // Use toBlob instead of toDataURL for better performance
+          // toBlob is async and doesn't block the main thread
+          canvas.toBlob((blob) => {
+            if (!blob || !mapInstanceRef.current) return;
+            
+            // Revoke previous blob URL to prevent memory leak
+            if (blobUrlRef.current) {
+              URL.revokeObjectURL(blobUrlRef.current);
             }
             
-            canvasOverlayRef.current = L.imageOverlay(dataUrl, overlayBounds, {
-              opacity: 1, // Opacity is baked into the canvas
-              interactive: false,
-              pane: 'heatmapPane', // Use custom pane for proper z-ordering
-            }).addTo(mapInstanceRef.current);
-          }
+            const url = URL.createObjectURL(blob);
+            blobUrlRef.current = url;
 
-          const endTime = performance.now();
-          console.log(`Canvas render time: ${(endTime - startTime).toFixed(1)}ms`);
+            if (canvasOverlayRef.current) {
+              canvasOverlayRef.current.setUrl(url);
+              canvasOverlayRef.current.setBounds(L.latLngBounds(overlayBounds));
+            } else {
+              // Check if heatmapPane exists, create if not
+              let pane = mapInstanceRef.current!.getPane('heatmapPane');
+              if (!pane) {
+                mapInstanceRef.current!.createPane('heatmapPane');
+                pane = mapInstanceRef.current!.getPane('heatmapPane');
+                if (pane) {
+                  pane.style.zIndex = '450';
+                }
+              }
+              
+              canvasOverlayRef.current = L.imageOverlay(url, overlayBounds, {
+                opacity: 1, // Opacity is baked into the canvas
+                interactive: false,
+                pane: 'heatmapPane', // Use custom pane for proper z-ordering
+              }).addTo(mapInstanceRef.current!);
+            }
+
+            const endTime = performance.now();
+            console.log(`Canvas rendered: ${canvas.width}x${canvas.height} for ${uniqueLngs}x${uniqueLats} grid in ${(endTime - startTime).toFixed(1)}ms`);
+          }, 'image/png');
 
         } else {
           // Rectangle-based rendering (original method)

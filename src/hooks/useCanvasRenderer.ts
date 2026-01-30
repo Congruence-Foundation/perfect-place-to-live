@@ -138,8 +138,8 @@ export function renderHeatmapToCanvas(
 
     // Draw rectangle centered on the point
     ctx.fillRect(
-      Math.round(x - cellWidthPx / 2),
-      Math.round(y - cellHeightPx / 2),
+      x - cellWidthPx / 2,
+      y - cellHeightPx / 2,
       cellWidthPx,
       cellHeightPx
     );
@@ -157,7 +157,7 @@ export function renderHeatmapToCanvas(
       tempCtx.drawImage(ctx.canvas, 0, 0);
       // Clear and redraw with blur
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-      ctx.filter = 'blur(1px)';
+      ctx.filter = 'blur(2px)';
       ctx.drawImage(tempCanvas, 0, 0);
       ctx.filter = 'none';
     }

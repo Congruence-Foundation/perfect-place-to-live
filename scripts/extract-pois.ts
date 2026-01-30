@@ -55,6 +55,7 @@ export function getOsmiumVersion(): string | null {
 
 /**
  * Determine factor_id from OSM tags
+ * Returns the first matching factor_id
  */
 export function getFactorIdFromTags(tags: Record<string, string>): string | null {
   for (const [factorId, tagPatterns] of Object.entries(FACTOR_TAG_MAPPING)) {
@@ -66,6 +67,26 @@ export function getFactorIdFromTags(tags: Record<string, string>): string | null
     }
   }
   return null;
+}
+
+/**
+ * Determine ALL matching factor_ids from OSM tags
+ * A single POI can match multiple factors (e.g., place=city matches both city_center and city_downtown)
+ */
+export function getAllFactorIdsFromTags(tags: Record<string, string>): string[] {
+  const matchingFactors: string[] = [];
+  
+  for (const [factorId, tagPatterns] of Object.entries(FACTOR_TAG_MAPPING)) {
+    for (const pattern of tagPatterns) {
+      const [key, value] = pattern.split('=');
+      if (tags[key] === value) {
+        matchingFactors.push(factorId);
+        break; // Found a match for this factor, move to next factor
+      }
+    }
+  }
+  
+  return matchingFactors;
 }
 
 /**
@@ -175,26 +196,31 @@ export async function parsePOIsFromNdjson(
       }
 
       const tags = feature.properties || {};
-      const factorId = getFactorIdFromTags(tags);
+      const factorIds = getAllFactorIdsFromTags(tags);
       
-      if (!factorId) continue;
+      if (factorIds.length === 0) continue;
 
       // Extract OSM ID
       const osmId = feature.properties?.['@id'] || 
                     (feature.id ? parseInt(String(feature.id).replace(/\D/g, '')) : 0);
 
-      const poi: ExtractedPOI = {
-        id: osmId,
-        factor_id: factorId,
-        lat,
-        lng,
-        name: tags.name || null,
-        tags,
-      };
+      // Create a POI for each matching factor
+      // This allows the same OSM feature to be used by multiple factors
+      // (e.g., place=city matches both city_center and city_downtown)
+      for (const factorId of factorIds) {
+        const poi: ExtractedPOI = {
+          id: osmId,
+          factor_id: factorId,
+          lat,
+          lng,
+          name: tags.name || null,
+          tags,
+        };
 
-      onPOI(poi);
-      stats.total++;
-      stats.byFactor[factorId] = (stats.byFactor[factorId] || 0) + 1;
+        onPOI(poi);
+        stats.total++;
+        stats.byFactor[factorId] = (stats.byFactor[factorId] || 0) + 1;
+      }
       
       // Progress indicator
       if (stats.total % 100000 === 0) {

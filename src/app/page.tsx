@@ -7,10 +7,11 @@ import { WeightSliders, CitySearch, HeatmapSettings, ProfileSelector, MapSetting
 import { Button } from '@/components/ui/button';
 import { DEFAULT_FACTORS, applyProfile, FACTOR_PROFILES } from '@/config/factors';
 import { Bounds, Factor } from '@/types';
-import { useHeatmap, useIsMobile } from '@/hooks';
+import { useHeatmap, useIsMobile, useNotification } from '@/hooks';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Loader2, ChevronLeft, ChevronRight, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
 import { isViewportCovered, isBoundsTooLarge, expandBounds } from '@/lib/bounds';
+import { Toast } from '@/components/ui/toast';
 
 // Grid buffer used by the API (must match GRID_BUFFER_DEGREES in route.ts)
 const GRID_BUFFER_DEGREES = 0.05;
@@ -47,7 +48,8 @@ export default function Home() {
 
   const mapRef = useRef<MapContainerRef>(null);
 
-  const { heatmapPoints, pois, isLoading, error, metadata, fetchHeatmap, clearHeatmap, abortFetch } = useHeatmap();
+  const { heatmapPoints, pois, isLoading, error, metadata, usedFallback, fetchHeatmap, clearHeatmap, abortFetch, clearFallbackNotification } = useHeatmap();
+  const { notification, showNotification } = useNotification();
 
   // Debounce bounds and factors to avoid too many API calls
   const debouncedBounds = useDebounce(bounds, 500);
@@ -61,8 +63,22 @@ export default function Home() {
   const coveredBoundsRef = useRef<Bounds | null>(null);
   // Track the factors/settings hash to detect changes that require refetch
   const lastFetchParamsRef = useRef<string>('');
+  // Track previous bounds to detect zoom changes
+  const prevBoundsRef = useRef<Bounds | null>(null);
 
   const handleBoundsChange = useCallback((newBounds: Bounds) => {
+    // Detect if user zoomed in (viewport got smaller) - treat as interaction
+    if (prevBoundsRef.current && !hasInteracted.current) {
+      const prevArea = (prevBoundsRef.current.east - prevBoundsRef.current.west) * 
+                       (prevBoundsRef.current.north - prevBoundsRef.current.south);
+      const newArea = (newBounds.east - newBounds.west) * 
+                      (newBounds.north - newBounds.south);
+      // If viewport area decreased by more than 10%, user zoomed in
+      if (newArea < prevArea * 0.9) {
+        hasInteracted.current = true;
+      }
+    }
+    prevBoundsRef.current = newBounds;
     setBounds(newBounds);
   }, []);
 
@@ -132,6 +148,14 @@ export default function Home() {
       mapRef.current?.flyTo(lat, lng, 13);
     }
   }, []);
+
+  // Show notification when fallback to Overpass occurs
+  useEffect(() => {
+    if (usedFallback && !useOverpassAPI) {
+      showNotification(tControls('fallbackNotice'), 3000);
+      clearFallbackNotification();
+    }
+  }, [usedFallback, useOverpassAPI, showNotification, clearFallbackNotification, tControls]);
 
   // Fetch heatmap when bounds or factors change (debounced)
   useEffect(() => {
@@ -399,6 +423,9 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {/* Toast Notification */}
+        <Toast notification={notification} />
       </div>
 
       {/* Mobile: Bottom Sheet */}

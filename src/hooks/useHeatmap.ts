@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { decode } from '@msgpack/msgpack';
 import { Bounds, Factor, HeatmapPoint, HeatmapResponse, POI, DistanceCurve, DataSource } from '@/types';
 
 interface UseHeatmapReturn {
@@ -7,6 +8,8 @@ interface UseHeatmapReturn {
   isLoading: boolean;
   error: string | null;
   metadata: HeatmapResponse['metadata'] | null;
+  /** True when system fell back to Overpass because Neon had no data */
+  usedFallback: boolean;
   fetchHeatmap: (
     bounds: Bounds,
     factors: Factor[],
@@ -18,6 +21,8 @@ interface UseHeatmapReturn {
   ) => Promise<void>;
   clearHeatmap: () => void;
   abortFetch: () => void;
+  /** Clear the fallback notification */
+  clearFallbackNotification: () => void;
 }
 
 export function useHeatmap(): UseHeatmapReturn {
@@ -26,9 +31,12 @@ export function useHeatmap(): UseHeatmapReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<HeatmapResponse['metadata'] | null>(null);
+  const [usedFallback, setUsedFallback] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
+  // Track what data source was requested to detect fallback
+  const requestedDataSourceRef = useRef<DataSource>('neon');
 
   const fetchHeatmap = useCallback(
     async (
@@ -48,15 +56,21 @@ export function useHeatmap(): UseHeatmapReturn {
       // Create new abort controller and increment request ID
       abortControllerRef.current = new AbortController();
       const currentRequestId = ++requestIdRef.current;
+      
+      // Track what was requested
+      requestedDataSourceRef.current = dataSource || 'neon';
 
       setIsLoading(true);
       setError(null);
+      setUsedFallback(false);
 
       try {
+        // Request MessagePack format for smaller payload (~30% reduction)
         const response = await fetch('/api/heatmap', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/msgpack',
           },
           body: JSON.stringify({
             bounds,
@@ -83,13 +97,31 @@ export function useHeatmap(): UseHeatmapReturn {
           throw new Error(errorData.message || `HTTP error: ${response.status}`);
         }
 
-        const data: HeatmapResponse = await response.json();
+        // Check if response is MessagePack or JSON
+        const contentType = response.headers.get('Content-Type');
+        
+        let data: HeatmapResponse;
+        if (contentType === 'application/msgpack') {
+          // Decode MessagePack format
+          const buffer = await response.arrayBuffer();
+          data = decode(new Uint8Array(buffer)) as HeatmapResponse;
+        } else {
+          // Fallback to JSON format
+          data = await response.json();
+        }
         
         // Double-check this is still the latest request before updating state
         if (currentRequestId === requestIdRef.current) {
           setHeatmapPoints(data.points);
           setPois(data.pois || {});
           setMetadata(data.metadata);
+          
+          // Check if fallback occurred: requested neon but got overpass
+          const requestedNeon = requestedDataSourceRef.current === 'neon';
+          const gotOverpass = data.metadata?.dataSource === 'overpass';
+          if (requestedNeon && gotOverpass) {
+            setUsedFallback(true);
+          }
         }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
@@ -122,6 +154,7 @@ export function useHeatmap(): UseHeatmapReturn {
     setMetadata(null);
     setError(null);
     setIsLoading(false);
+    setUsedFallback(false);
   }, []);
 
   const abortFetch = useCallback(() => {
@@ -130,6 +163,10 @@ export function useHeatmap(): UseHeatmapReturn {
       requestIdRef.current++;
       setIsLoading(false);
     }
+  }, []);
+
+  const clearFallbackNotification = useCallback(() => {
+    setUsedFallback(false);
   }, []);
 
   // Cleanup on unmount
@@ -147,8 +184,10 @@ export function useHeatmap(): UseHeatmapReturn {
     isLoading,
     error,
     metadata,
+    usedFallback,
     fetchHeatmap,
     clearHeatmap,
     abortFetch,
+    clearFallbackNotification,
   };
 }

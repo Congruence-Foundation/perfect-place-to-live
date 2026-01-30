@@ -5,9 +5,15 @@
  * 1. Download Poland PBF from Geofabrik (optional, can skip if cached)
  * 2. Optionally extract a region/city using osmium extract
  * 3. Extract POIs using osmium-tool
- * 4. Bulk import to staging table
+ * 4. Bulk import to staging table (parallel, UNLOGGED, no tags)
  * 5. Atomic sync: add new, update changed, delete removed POIs
  * 6. Record sync metadata
+ * 
+ * Performance optimizations:
+ * - WebSocket connection pooling for faster queries
+ * - Parallel batch inserts with concurrency control
+ * - UNLOGGED staging table (no WAL overhead)
+ * - Tags preserved from main table (not in staging)
  * 
  * Usage:
  *   npx tsx scripts/sync-pois.ts                    # Full Poland sync
@@ -18,16 +24,20 @@
  *   npx tsx scripts/sync-pois.ts --dry-run         # Preview changes only
  */
 
-import { neon, NeonQueryFunction } from '@neondatabase/serverless';
+import { neon, neonConfig, NeonQueryFunction } from '@neondatabase/serverless';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
+import ws from 'ws';
 import { extractPOIs, checkOsmiumInstalled, getOsmiumVersion } from './extract-pois';
 import { bulkImport, getStagingStats } from './bulk-import';
 
 // Load environment variables
 dotenv.config({ path: '.env.local' });
+
+// Enable WebSocket for better connection performance
+neonConfig.webSocketConstructor = ws;
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -176,26 +186,31 @@ async function atomicSync(
   try {
     if (regionBbox) {
       const [west, south, east, north] = regionBbox;
+      // Use LEFT JOIN instead of NOT IN for better performance
       const toDelete = await sql`
         SELECT COUNT(*) as count 
-        FROM osm_pois 
-        WHERE id NOT IN (SELECT id FROM osm_pois_staging)
-        AND lng >= ${west} AND lng <= ${east} AND lat >= ${south} AND lat <= ${north}
+        FROM osm_pois o
+        LEFT JOIN osm_pois_staging s ON o.id = s.id
+        WHERE s.id IS NULL
+        AND o.lng >= ${west} AND o.lng <= ${east} AND o.lat >= ${south} AND o.lat <= ${north}
       `;
       deleteCount = parseInt(toDelete[0]?.count as string) || 0;
     } else {
       const toDelete = await sql`
         SELECT COUNT(*) as count 
-        FROM osm_pois 
-        WHERE id NOT IN (SELECT id FROM osm_pois_staging)
+        FROM osm_pois o
+        LEFT JOIN osm_pois_staging s ON o.id = s.id
+        WHERE s.id IS NULL
       `;
       deleteCount = parseInt(toDelete[0]?.count as string) || 0;
     }
 
+    // Use LEFT JOIN for better performance
     const toAdd = await sql`
       SELECT COUNT(*) as count 
-      FROM osm_pois_staging 
-      WHERE id NOT IN (SELECT id FROM osm_pois)
+      FROM osm_pois_staging s
+      LEFT JOIN osm_pois o ON s.id = o.id
+      WHERE o.id IS NULL
     `;
     addCount = parseInt(toAdd[0]?.count as string) || 0;
 
@@ -235,41 +250,54 @@ async function atomicSync(
     console.log('  Deleting removed POIs...');
     if (regionBbox) {
       const [west, south, east, north] = regionBbox;
-      await sql.unsafe(`
-        DELETE FROM osm_pois 
-        WHERE id NOT IN (SELECT id FROM osm_pois_staging)
-        AND lng >= ${west} AND lng <= ${east} AND lat >= ${south} AND lat <= ${north}
-      `);
+      // Use LEFT JOIN for better performance
+      await sql`
+        DELETE FROM osm_pois o
+        USING (
+          SELECT o2.id 
+          FROM osm_pois o2
+          LEFT JOIN osm_pois_staging s ON o2.id = s.id
+          WHERE s.id IS NULL
+          AND o2.lng >= ${west} AND o2.lng <= ${east} AND o2.lat >= ${south} AND o2.lat <= ${north}
+        ) AS to_delete
+        WHERE o.id = to_delete.id
+      `;
     } else {
       await sql`
-        DELETE FROM osm_pois 
-        WHERE id NOT IN (SELECT id FROM osm_pois_staging)
+        DELETE FROM osm_pois o
+        USING (
+          SELECT o2.id 
+          FROM osm_pois o2
+          LEFT JOIN osm_pois_staging s ON o2.id = s.id
+          WHERE s.id IS NULL
+        ) AS to_delete
+        WHERE o.id = to_delete.id
       `;
     }
     console.log(`  ✓ Deleted ${deleteCount.toLocaleString()} POIs`);
   }
 
   // Step 2: Upsert all POIs from staging (handles both add and update)
+  // Note: Staging table has no tags column - preserve existing tags or use empty JSONB
   console.log('  Upserting POIs...');
   await sql`
     INSERT INTO osm_pois (id, factor_id, lat, lng, geom, name, tags, created_at)
     SELECT 
-      id, 
-      factor_id, 
-      lat, 
-      lng, 
-      ST_SetSRID(ST_MakePoint(lng, lat), 4326),
-      name, 
-      tags,
+      s.id, 
+      s.factor_id, 
+      s.lat, 
+      s.lng, 
+      ST_SetSRID(ST_MakePoint(s.lng, s.lat), 4326),
+      s.name, 
+      COALESCE(o.tags, '{}'::jsonb),
       NOW()
-    FROM osm_pois_staging
-    ON CONFLICT (id) DO UPDATE SET
-      factor_id = EXCLUDED.factor_id,
+    FROM osm_pois_staging s
+    LEFT JOIN osm_pois o ON s.id = o.id AND s.factor_id = o.factor_id
+    ON CONFLICT (id, factor_id) DO UPDATE SET
       lat = EXCLUDED.lat,
       lng = EXCLUDED.lng,
       geom = EXCLUDED.geom,
-      name = EXCLUDED.name,
-      tags = EXCLUDED.tags
+      name = EXCLUDED.name
   `;
   console.log(`  ✓ Upserted ${(addCount + updateCount).toLocaleString()} POIs`);
 

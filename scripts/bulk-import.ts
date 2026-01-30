@@ -1,12 +1,18 @@
 /**
- * Bulk import POIs to Neon PostgreSQL using fast COPY-like operations
+ * Bulk import POIs to Neon PostgreSQL using fast parallel operations
  * 
  * This script:
- * 1. Creates a staging table
- * 2. Bulk inserts POIs using batched INSERT statements (Neon doesn't support COPY)
+ * 1. Creates an UNLOGGED staging table (faster, no WAL overhead)
+ * 2. Bulk inserts POIs using parallel batched INSERT statements
  * 3. Provides progress tracking and error handling
  * 
- * Usage: npx tsx scripts/bulk-import.ts [--input <path>] [--batch-size <n>]
+ * Performance optimizations:
+ * - Parallel batch inserts with concurrency control
+ * - Larger batch sizes (3000 vs 1000)
+ * - UNLOGGED staging table
+ * - No tags in staging (preserved from main table during upsert)
+ * 
+ * Usage: npx tsx scripts/bulk-import.ts [--input <path>] [--batch-size <n>] [--concurrency <n>]
  */
 
 import { neon, NeonQueryFunction } from '@neondatabase/serverless';
@@ -25,11 +31,27 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
-// Batch size for bulk inserts (Neon has query size limits)
-const DEFAULT_BATCH_SIZE = 1000;
+// Batch size for bulk inserts (larger batches = fewer round trips)
+const DEFAULT_BATCH_SIZE = 3000;
+
+// Number of parallel batch inserts
+const DEFAULT_CONCURRENCY = 4;
 
 /**
- * Create staging table for bulk import
+ * Split array into chunks of specified size
+ */
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * Create UNLOGGED staging table for bulk import
+ * UNLOGGED tables are faster because they don't write to WAL
+ * Note: No tags column - tags are preserved from main table during upsert
  */
 export async function createStagingTable(sql: NeonQueryFunction<false, false>): Promise<void> {
   console.log('Creating staging table...');
@@ -39,13 +61,13 @@ export async function createStagingTable(sql: NeonQueryFunction<false, false>): 
   `;
   
   await sql`
-    CREATE TABLE osm_pois_staging (
-      id BIGINT PRIMARY KEY,
+    CREATE UNLOGGED TABLE osm_pois_staging (
+      id BIGINT NOT NULL,
       factor_id VARCHAR(50) NOT NULL,
       lat DOUBLE PRECISION NOT NULL,
       lng DOUBLE PRECISION NOT NULL,
       name VARCHAR(255),
-      tags JSONB
+      PRIMARY KEY (id, factor_id)
     );
   `;
   
@@ -53,7 +75,7 @@ export async function createStagingTable(sql: NeonQueryFunction<false, false>): 
 }
 
 /**
- * Bulk insert POIs into staging table
+ * Bulk insert POIs into staging table (without tags for performance)
  */
 export async function bulkInsertToStaging(
   sql: NeonQueryFunction<false, false>,
@@ -61,22 +83,19 @@ export async function bulkInsertToStaging(
 ): Promise<number> {
   if (pois.length === 0) return 0;
 
-  // Build VALUES clause for bulk insert
+  // Build VALUES clause for bulk insert (no tags - much smaller payload)
   const values = pois.map(poi => {
-    const tagsJson = JSON.stringify(poi.tags).replace(/'/g, "''");
     const name = poi.name ? poi.name.replace(/'/g, "''").substring(0, 255) : null;
-    return `(${poi.id}, '${poi.factor_id}', ${poi.lat}, ${poi.lng}, ${name ? `'${name}'` : 'NULL'}, '${tagsJson}'::jsonb)`;
+    return `(${poi.id}, '${poi.factor_id}', ${poi.lat}, ${poi.lng}, ${name ? `'${name}'` : 'NULL'})`;
   }).join(',\n');
 
   const query = `
-    INSERT INTO osm_pois_staging (id, factor_id, lat, lng, name, tags)
+    INSERT INTO osm_pois_staging (id, factor_id, lat, lng, name)
     VALUES ${values}
-    ON CONFLICT (id) DO UPDATE SET
-      factor_id = EXCLUDED.factor_id,
+    ON CONFLICT (id, factor_id) DO UPDATE SET
       lat = EXCLUDED.lat,
       lng = EXCLUDED.lng,
-      name = EXCLUDED.name,
-      tags = EXCLUDED.tags
+      name = EXCLUDED.name
   `;
 
   try {
@@ -85,20 +104,18 @@ export async function bulkInsertToStaging(
     return pois.length;
   } catch (error) {
     // If batch fails, try inserting one by one to identify problematic records
-    console.warn(`Batch insert failed, falling back to individual inserts...`);
+    console.warn(`\nBatch insert failed, falling back to individual inserts...`);
     console.warn(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     let inserted = 0;
     for (const poi of pois) {
       try {
         await sql`
-          INSERT INTO osm_pois_staging (id, factor_id, lat, lng, name, tags)
-          VALUES (${poi.id}, ${poi.factor_id}, ${poi.lat}, ${poi.lng}, ${poi.name}, ${JSON.stringify(poi.tags)})
-          ON CONFLICT (id) DO UPDATE SET
-            factor_id = EXCLUDED.factor_id,
+          INSERT INTO osm_pois_staging (id, factor_id, lat, lng, name)
+          VALUES (${poi.id}, ${poi.factor_id}, ${poi.lat}, ${poi.lng}, ${poi.name})
+          ON CONFLICT (id, factor_id) DO UPDATE SET
             lat = EXCLUDED.lat,
             lng = EXCLUDED.lng,
-            name = EXCLUDED.name,
-            tags = EXCLUDED.tags
+            name = EXCLUDED.name
         `;
         inserted++;
       } catch (e) {
@@ -110,12 +127,13 @@ export async function bulkInsertToStaging(
 }
 
 /**
- * Stream POIs from NDJSON file and bulk insert to staging
+ * Stream POIs from NDJSON file and bulk insert to staging with parallel processing
  */
 export async function importFromNdjson(
   sql: NeonQueryFunction<false, false>,
   inputPath: string,
-  batchSize: number = DEFAULT_BATCH_SIZE
+  batchSize: number = DEFAULT_BATCH_SIZE,
+  concurrency: number = DEFAULT_CONCURRENCY
 ): Promise<{ total: number; inserted: number; errors: number }> {
   const stats = { total: 0, inserted: 0, errors: 0 };
   
@@ -125,7 +143,8 @@ export async function importFromNdjson(
     crlfDelay: Infinity,
   });
 
-  let batch: ExtractedPOI[] = [];
+  let currentBatch: ExtractedPOI[] = [];
+  const pendingBatches: ExtractedPOI[][] = [];
   const startTime = Date.now();
 
   for await (const line of rl) {
@@ -133,31 +152,52 @@ export async function importFromNdjson(
     
     try {
       const poi: ExtractedPOI = JSON.parse(line);
-      batch.push(poi);
+      currentBatch.push(poi);
       stats.total++;
 
-      // Insert batch when full
-      if (batch.length >= batchSize) {
-        const inserted = await bulkInsertToStaging(sql, batch);
-        stats.inserted += inserted;
-        stats.errors += batch.length - inserted;
-        batch = [];
+      // When current batch is full, add to pending batches
+      if (currentBatch.length >= batchSize) {
+        pendingBatches.push(currentBatch);
+        currentBatch = [];
 
-        // Progress update
-        const elapsed = (Date.now() - startTime) / 1000;
-        const rate = Math.round(stats.total / elapsed);
-        process.stdout.write(`\r  Imported ${stats.inserted.toLocaleString()} POIs (${rate}/s)...`);
+        // When we have enough pending batches, process them in parallel
+        if (pendingBatches.length >= concurrency) {
+          const results = await Promise.all(
+            pendingBatches.map(batch => bulkInsertToStaging(sql, batch))
+          );
+          
+          for (let i = 0; i < results.length; i++) {
+            stats.inserted += results[i];
+            stats.errors += pendingBatches[i].length - results[i];
+          }
+          pendingBatches.length = 0; // Clear pending batches
+
+          // Progress update
+          const elapsed = (Date.now() - startTime) / 1000;
+          const rate = Math.round(stats.inserted / elapsed);
+          process.stdout.write(`\r  Imported ${stats.inserted.toLocaleString()} POIs (${rate}/s)...`);
+        }
       }
     } catch (e) {
       stats.errors++;
     }
   }
 
-  // Insert remaining batch
-  if (batch.length > 0) {
-    const inserted = await bulkInsertToStaging(sql, batch);
-    stats.inserted += inserted;
-    stats.errors += batch.length - inserted;
+  // Add remaining current batch to pending
+  if (currentBatch.length > 0) {
+    pendingBatches.push(currentBatch);
+  }
+
+  // Process any remaining pending batches in parallel
+  if (pendingBatches.length > 0) {
+    const results = await Promise.all(
+      pendingBatches.map(batch => bulkInsertToStaging(sql, batch))
+    );
+    
+    for (let i = 0; i < results.length; i++) {
+      stats.inserted += results[i];
+      stats.errors += pendingBatches[i].length - results[i];
+    }
   }
 
   console.log(''); // New line after progress
@@ -208,9 +248,11 @@ export async function getStagingStats(sql: NeonQueryFunction<false, false>): Pro
 export async function bulkImport(options: {
   inputPath?: string;
   batchSize?: number;
+  concurrency?: number;
 }): Promise<{ total: number; inserted: number; errors: number }> {
   const inputPath = options.inputPath || './data/pois-extracted.ndjson';
   const batchSize = options.batchSize || DEFAULT_BATCH_SIZE;
+  const concurrency = options.concurrency || DEFAULT_CONCURRENCY;
 
   // Check input file exists
   if (!fs.existsSync(inputPath)) {
@@ -224,6 +266,7 @@ export async function bulkImport(options: {
   console.log('=== Bulk POI Import ===');
   console.log(`Input: ${inputPath}`);
   console.log(`Batch size: ${batchSize}`);
+  console.log(`Concurrency: ${concurrency}`);
   console.log('');
 
   // Create staging table
@@ -232,7 +275,7 @@ export async function bulkImport(options: {
   // Import POIs
   console.log('Importing POIs to staging table...');
   const startTime = Date.now();
-  const stats = await importFromNdjson(sql, inputPath, batchSize);
+  const stats = await importFromNdjson(sql, inputPath, batchSize, concurrency);
   const elapsed = (Date.now() - startTime) / 1000;
 
   console.log(`\n✓ Import completed in ${elapsed.toFixed(1)}s`);
@@ -260,13 +303,15 @@ export async function bulkImport(options: {
 // CLI entry point
 if (require.main === module) {
   const args = process.argv.slice(2);
-  const options: { inputPath?: string; batchSize?: number } = {};
+  const options: { inputPath?: string; batchSize?: number; concurrency?: number } = {};
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--input' && args[i + 1]) {
       options.inputPath = args[++i];
     } else if (args[i] === '--batch-size' && args[i + 1]) {
       options.batchSize = parseInt(args[++i]);
+    } else if (args[i] === '--concurrency' && args[i + 1]) {
+      options.concurrency = parseInt(args[++i]);
     }
   }
 
