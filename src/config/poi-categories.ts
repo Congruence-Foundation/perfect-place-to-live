@@ -127,6 +127,19 @@ export const POI_CATEGORIES: POICategory[] = [
     defaultMaxDistance: 2000,
     defaultEnabled: true,
   },
+  {
+    id: 'train_stations',
+    name: 'Train Stations',
+    osmFilters: [
+      'nw/railway=station',       // Main railway stations
+      'n/railway=halt',           // Smaller stops/halts
+    ],
+    category: 'essential',
+    icon: 'train-front',
+    defaultWeight: 50,
+    defaultMaxDistance: 3000,
+    defaultEnabled: false,
+  },
 
   // ============================================
   // LIFESTYLE FACTORS

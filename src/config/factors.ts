@@ -26,6 +26,7 @@ export const FACTOR_PROFILES: FactorProfile[] = [
       parks: { weight: 65, maxDistance: 1000, enabled: true },
       schools: { weight: 45, enabled: false }, // Enable if you have kids
       post: { weight: 50, maxDistance: 1200, enabled: true },
+      train_stations: { weight: 40, maxDistance: 3000, enabled: false },
       // Lifestyle - disabled by default for speed
       restaurants: { weight: 40, enabled: false },
       banks: { weight: 35, enabled: false },
@@ -63,6 +64,7 @@ export const FACTOR_PROFILES: FactorProfile[] = [
       parks: { weight: 95, maxDistance: 800, enabled: true },
       schools: { weight: 100, maxDistance: 1500, enabled: true }, // Walking distance for kids
       post: { weight: 35, enabled: true },
+      train_stations: { weight: 30, maxDistance: 4000, enabled: false },
       restaurants: { weight: 25, enabled: false },
       banks: { weight: 30, enabled: false },
       gyms: { weight: 35, enabled: false },
@@ -98,6 +100,7 @@ export const FACTOR_PROFILES: FactorProfile[] = [
       parks: { weight: 50, maxDistance: 800, enabled: true },
       schools: { weight: 0, enabled: false },
       post: { weight: 55, maxDistance: 1200, enabled: true },
+      train_stations: { weight: 70, maxDistance: 2000, enabled: true }, // Quick access to intercity travel
       restaurants: { weight: 85, maxDistance: 600, enabled: true },
       banks: { weight: 55, maxDistance: 1200, enabled: true },
       gyms: { weight: 80, maxDistance: 1000, enabled: true }, // Quick gym access
@@ -133,6 +136,7 @@ export const FACTOR_PROFILES: FactorProfile[] = [
       parks: { weight: 90, maxDistance: 1000, enabled: true }, // Breaks, walks
       schools: { weight: -25, maxDistance: 400, enabled: true }, // Daytime noise
       post: { weight: 75, maxDistance: 1200, enabled: true }, // Package deliveries
+      train_stations: { weight: 25, maxDistance: 5000, enabled: false }, // Occasional travel
       restaurants: { weight: 55, maxDistance: 1200, enabled: true }, // Lunch breaks
       banks: { weight: 40, enabled: true },
       gyms: { weight: 50, maxDistance: 1500, enabled: true },
@@ -168,6 +172,7 @@ export const FACTOR_PROFILES: FactorProfile[] = [
       parks: { weight: 100, maxDistance: 1000, enabled: true }, // Running, cycling
       schools: { weight: 0, enabled: false },
       post: { weight: 30, enabled: true },
+      train_stations: { weight: 35, maxDistance: 4000, enabled: false },
       restaurants: { weight: 50, maxDistance: 1000, enabled: true },
       banks: { weight: 25, enabled: false },
       gyms: { weight: 100, maxDistance: 1500, enabled: true }, // Specialty gyms less common
@@ -203,6 +208,7 @@ export const FACTOR_PROFILES: FactorProfile[] = [
       parks: { weight: 50, maxDistance: 800, enabled: true },
       schools: { weight: 0, enabled: false },
       post: { weight: 45, maxDistance: 1000, enabled: true },
+      train_stations: { weight: 60, maxDistance: 2500, enabled: true }, // Travel to other cities
       restaurants: { weight: 60, maxDistance: 800, enabled: true }, // Affordable food
       banks: { weight: 50, maxDistance: 1200, enabled: true },
       gyms: { weight: 60, maxDistance: 1500, enabled: true },
@@ -238,6 +244,7 @@ export const FACTOR_PROFILES: FactorProfile[] = [
       parks: { weight: 85, maxDistance: 1200, enabled: true }, // Quality of life
       schools: { weight: 0, enabled: false },
       post: { weight: 50, maxDistance: 1500, enabled: true },
+      train_stations: { weight: 55, maxDistance: 3000, enabled: true }, // Weekend trips, travel
       restaurants: { weight: 85, maxDistance: 1500, enabled: true }, // Quality dining
       banks: { weight: 50, maxDistance: 1500, enabled: true },
       gyms: { weight: 60, maxDistance: 2000, enabled: true },
@@ -273,6 +280,7 @@ export const FACTOR_PROFILES: FactorProfile[] = [
       parks: { weight: 85, maxDistance: 600, enabled: true }, // Daily walks
       schools: { weight: 0, enabled: false },
       post: { weight: 75, maxDistance: 800, enabled: true }, // In-person services
+      train_stations: { weight: 45, maxDistance: 2000, enabled: true }, // Family visits, medical trips
       restaurants: { weight: 45, maxDistance: 1000, enabled: true },
       banks: { weight: 65, maxDistance: 1000, enabled: true }, // In-person banking
       gyms: { weight: 30, enabled: false },
