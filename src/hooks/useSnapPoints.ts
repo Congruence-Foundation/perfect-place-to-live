@@ -5,7 +5,7 @@ import { useState, useCallback, useEffect } from 'react';
 /**
  * Snap point configuration
  */
-export interface SnapPointConfig {
+interface SnapPointConfig {
   collapsedPercent: number;
   halfPercent: number;
   expandedPercent: number;
@@ -14,12 +14,12 @@ export interface SnapPointConfig {
 /**
  * Snap point names
  */
-export type SnapPointName = 'collapsed' | 'half' | 'expanded';
+type SnapPointName = 'collapsed' | 'half' | 'expanded';
 
 /**
  * Snap heights in pixels
  */
-export interface SnapHeights {
+interface SnapHeights {
   collapsed: number;
   half: number;
   expanded: number;

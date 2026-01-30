@@ -76,7 +76,8 @@ export async function POST(request: NextRequest) {
                   const pois = await fetchPOIs(factor.osmTags, tileBounds);
                   poiData.set(factor.id, pois);
                   await cacheSet(cacheKey, pois, 86400); // 24 hour TTL for POIs
-                } catch {
+                } catch (poiError) {
+                  console.error(`Error fetching POIs for factor ${factor.id}:`, poiError);
                   poiData.set(factor.id, []);
                 }
               }

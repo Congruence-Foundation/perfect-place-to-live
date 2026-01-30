@@ -28,6 +28,8 @@ export const POI_COLORS: Record<string, string> = {
   railways: '#78716c',     // stone
   cemeteries: '#57534e',   // stone
   construction: '#fbbf24', // amber
+  city_center: '#6366f1',  // indigo
+  city_downtown: '#a855f7', // purple
 };
 
 /**

@@ -68,6 +68,7 @@ const PREDEFINED_REGIONS: Record<string, { name: string; bbox: [number, number, 
   dolnoslaskie: { name: 'Dolnośląskie', bbox: [14.80, 50.30, 17.80, 51.80] },
   pomorskie: { name: 'Pomorskie', bbox: [16.70, 53.45, 19.65, 54.85] },
   slaskie: { name: 'Śląskie', bbox: [18.00, 49.45, 19.90, 50.80] },
+  'kujawsko-pomorskie': { name: 'Kujawsko-Pomorskie', bbox: [17.40, 52.35, 19.85, 53.60] },
   
   // Test regions (very small for quick testing)
   'poznan-center': { name: 'Poznań Center', bbox: [16.88, 52.38, 16.98, 52.44] },
@@ -361,7 +362,7 @@ function listRegions(): void {
   }
   
   console.log('\nVoivodeships:');
-  const voivodeships = ['wielkopolskie', 'mazowieckie', 'malopolskie', 'dolnoslaskie', 'pomorskie', 'slaskie'];
+  const voivodeships = ['wielkopolskie', 'mazowieckie', 'malopolskie', 'dolnoslaskie', 'pomorskie', 'slaskie', 'kujawsko-pomorskie'];
   for (const key of voivodeships) {
     const region = PREDEFINED_REGIONS[key];
     console.log(`  ${key.padEnd(20)} ${region.name}`);

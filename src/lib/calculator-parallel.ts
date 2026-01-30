@@ -13,6 +13,9 @@ import * as os from 'os';
 import { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/types';
 import { generateGrid, calculateAdaptiveGridSize } from './grid';
 import { normalizeKValues, logKStats } from './calculator';
+import { PERFORMANCE_CONFIG } from '@/constants';
+
+const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
 
 // Use available CPU cores, but cap at 8 to avoid diminishing returns
 const MAX_WORKERS = Math.min(os.cpus().length, 8);
@@ -277,7 +280,7 @@ export async function calculateHeatmapParallel(
 
   // Calculate adaptive grid size if not provided
   const effectiveGridSize =
-    gridSize || calculateAdaptiveGridSize(bounds, 5000, 100, 500);
+    gridSize || calculateAdaptiveGridSize(bounds, TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE);
 
   // Generate grid points
   const gridPoints = generateGrid(bounds, effectiveGridSize);

@@ -34,7 +34,7 @@ export default function ProfileSelector({
             }`}
             title={t(`${profile.id}.description`)}
           >
-            <IconComponent className={`h-5 w-5 ${isSelected ? '' : ''}`} />
+            <IconComponent className="h-5 w-5" />
             <span className="text-[10px] font-medium leading-tight text-center">
               {profileName}
             </span>

@@ -425,29 +425,6 @@ export const POI_CATEGORIES: POICategory[] = [
 ];
 
 /**
- * Get a category by ID
- */
-export function getCategoryById(id: string): POICategory | undefined {
-  return POI_CATEGORIES.find((cat) => cat.id === id);
-}
-
-/**
- * Get categories by group
- */
-export function getCategoriesByGroup(
-  category: 'essential' | 'lifestyle' | 'environment'
-): POICategory[] {
-  return POI_CATEGORIES.filter((cat) => cat.category === category);
-}
-
-/**
- * Get all category IDs
- */
-export function getAllCategoryIds(): string[] {
-  return POI_CATEGORIES.map((cat) => cat.id);
-}
-
-/**
  * Extract OSM tags (without type prefix) from a category
  */
 export function getOsmTags(category: POICategory): string[] {

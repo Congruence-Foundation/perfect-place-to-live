@@ -67,29 +67,3 @@ export async function fetchPOIs(
     );
   }
 }
-
-/**
- * Check if a data source is available
- * 
- * @param source - The data source to check
- * @returns true if the source is available
- */
-export async function isDataSourceAvailable(source: DataSource): Promise<boolean> {
-  try {
-    switch (source) {
-      case 'neon':
-        // Try a simple query to check database connectivity
-        const { checkDatabaseConnection } = await import('./db');
-        return await checkDatabaseConnection();
-      
-      case 'overpass':
-        // Overpass is always "available" - it may be rate limited but that's handled by retry logic
-        return true;
-      
-      default:
-        return false;
-    }
-  } catch {
-    return false;
-  }
-}

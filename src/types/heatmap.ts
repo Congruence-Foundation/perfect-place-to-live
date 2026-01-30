@@ -1,10 +1,12 @@
 import { Bounds } from './poi';
 import { Factor } from './factors';
 import { POI } from './poi';
+import { DataSource } from '@/lib/errors';
 
 export type DistanceCurve = 'linear' | 'log' | 'exp' | 'power';
 
-export type DataSource = 'neon' | 'overpass';
+// Re-export DataSource for convenience
+export type { DataSource } from '@/lib/errors';
 
 export interface HeatmapPoint {
   lat: number;

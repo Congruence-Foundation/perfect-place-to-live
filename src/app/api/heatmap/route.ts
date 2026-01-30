@@ -19,6 +19,9 @@ const {
   MAX_GRID_POINTS,
   POI_CACHE_TTL_SECONDS,
   DEFAULT_DATA_SOURCE,
+  TARGET_GRID_POINTS,
+  MIN_CELL_SIZE,
+  MAX_CELL_SIZE,
 } = PERFORMANCE_CONFIG;
 
 export async function POST(request: NextRequest) {
@@ -59,7 +62,7 @@ export async function POST(request: NextRequest) {
     // Calculate effective grid size using expanded grid bounds
     // If user specified a grid size, check if it would generate too many points
     // If so, automatically increase the grid size to stay within limits
-    let effectiveGridSize = gridSize || calculateAdaptiveGridSize(gridBounds, 5000, 100, 500);
+    let effectiveGridSize = gridSize || calculateAdaptiveGridSize(gridBounds, TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE);
     let estimatedPoints = estimateGridSize(gridBounds, effectiveGridSize);
 
     // If too many points, increase grid size to stay within limits

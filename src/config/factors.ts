@@ -2,7 +2,7 @@ import { Factor } from '@/types/factors';
 import { POI_CATEGORIES, POICategory, getOsmTags } from './poi-categories';
 
 // Profile type definition
-export interface FactorProfile {
+interface FactorProfile {
   id: string;
   name: string;
   description: string;
@@ -351,7 +351,5 @@ export const POLAND_CENTER = {
   lat: 52.0,
   lng: 19.0,
 };
-
-export const DEFAULT_GRID_SIZE = 200; // meters
 
 export const OVERPASS_API_URL = 'https://overpass-api.de/api/interpreter';

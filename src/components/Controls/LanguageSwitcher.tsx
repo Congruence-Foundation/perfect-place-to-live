@@ -2,7 +2,8 @@
 
 import { useLocale } from 'next-intl';
 import { Globe } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
+import { useClickOutside } from '@/hooks';
 
 const LOCALES = [
   { code: 'en', label: 'English', flag: '🇬🇧' },
@@ -15,16 +16,7 @@ export default function LanguageSwitcher() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  useClickOutside(containerRef, () => setIsOpen(false));
 
   const switchLocale = (newLocale: string) => {
     document.cookie = `locale=${newLocale};path=/;max-age=31536000`;

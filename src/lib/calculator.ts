@@ -1,6 +1,9 @@
 import { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/types';
 import { haversineDistance, SpatialIndex } from './haversine';
 import { generateGrid, calculateAdaptiveGridSize } from './grid';
+import { PERFORMANCE_CONFIG } from '@/constants';
+
+const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
 
 // Density bonus configuration
 // Having multiple POIs nearby slightly improves the score
@@ -11,7 +14,7 @@ const DENSITY_BONUS_SCALE = 3;    // Number of POIs needed for full bonus
 /**
  * K value statistics for debugging and analysis
  */
-export interface KStats {
+interface KStats {
   min: number;
   max: number;
   avg: number;
@@ -22,7 +25,7 @@ export interface KStats {
  * Calculate statistics for K values in heatmap points
  * Used for debugging and understanding score distribution
  */
-export function calculateKStats(points: HeatmapPoint[]): KStats | null {
+function calculateKStats(points: HeatmapPoint[]): KStats | null {
   if (points.length === 0) return null;
   
   let minK = Infinity;
@@ -125,7 +128,7 @@ const DISTANCE_CURVE_STRATEGIES: Record<DistanceCurve, DistanceCurveStrategy> = 
  * @param sensitivity - Controls curve steepness (0.5-3, default 1)
  * @returns Normalized score (0-1)
  */
-export function applyDistanceCurve(
+function applyDistanceCurve(
   distance: number,
   maxDistance: number,
   curve: DistanceCurve,
@@ -305,7 +308,7 @@ export function calculateHeatmap(
 
   // Calculate adaptive grid size if not provided
   // Use smaller grid for better resolution, but cap the number of points
-  const effectiveGridSize = gridSize || calculateAdaptiveGridSize(bounds, 5000, 100, 500);
+  const effectiveGridSize = gridSize || calculateAdaptiveGridSize(bounds, TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE);
 
   // Generate grid points
   const gridPoints = generateGrid(bounds, effectiveGridSize);

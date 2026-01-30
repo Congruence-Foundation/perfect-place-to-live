@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search, Loader2, X } from 'lucide-react';
+import { useClickOutside } from '@/hooks';
 
 interface SearchResult {
   place_id: number;
@@ -35,17 +36,10 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setIsFocused(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  useClickOutside(containerRef, () => {
+    setIsOpen(false);
+    setIsFocused(false);
+  });
 
   const searchCity = useCallback(async (searchQuery: string) => {
     if (searchQuery.length < 2) {

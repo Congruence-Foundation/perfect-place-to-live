@@ -90,7 +90,7 @@ async function fetchWithRetry(
 /**
  * Build an Overpass QL query for fetching POIs within bounds
  */
-export function buildOverpassQuery(osmTags: string[], bounds: Bounds): string {
+function buildOverpassQuery(osmTags: string[], bounds: Bounds): string {
   const { south, west, north, east } = bounds;
   const bbox = `${south},${west},${north},${east}`;
 
@@ -119,7 +119,7 @@ export function buildOverpassQuery(osmTags: string[], bounds: Bounds): string {
  * Build a combined Overpass query for multiple factor types
  * This reduces the number of API calls
  */
-export function buildCombinedOverpassQuery(
+function buildCombinedOverpassQuery(
   factorTags: { id: string; osmTags: string[] }[],
   bounds: Bounds
 ): string {
@@ -151,7 +151,7 @@ export function buildCombinedOverpassQuery(
 /**
  * Parse Overpass API response into POI array
  */
-export function parseOverpassResponse(data: OverpassResponse): POI[] {
+function parseOverpassResponse(data: OverpassResponse): POI[] {
   return data.elements.map((element) => {
     // For ways, use the center coordinates
     const lat = element.center?.lat ?? element.lat ?? 0;
@@ -170,7 +170,7 @@ export function parseOverpassResponse(data: OverpassResponse): POI[] {
 /**
  * Categorize POIs by factor based on their tags
  */
-export function categorizePOIsByFactor(
+function categorizePOIsByFactor(
   pois: POI[],
   factorTags: { id: string; osmTags: string[] }[]
 ): Record<string, POI[]> {

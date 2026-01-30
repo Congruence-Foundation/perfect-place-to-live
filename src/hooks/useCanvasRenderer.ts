@@ -1,15 +1,14 @@
 /**
- * Hook for canvas-based heatmap rendering
+ * Canvas-based heatmap rendering utilities
  * 
  * Provides efficient rendering of heatmap points using HTML Canvas
  * instead of individual DOM elements.
  */
 
-import { useRef, useCallback, useEffect } from 'react';
 import { HeatmapPoint, Bounds } from '@/types';
 import { getColorForK } from '@/constants';
 
-export interface CanvasRenderOptions {
+interface CanvasRenderOptions {
   opacity: number;
 }
 
@@ -40,50 +39,6 @@ function colorToRgba(color: string, alpha: number): string {
   
   // Fallback - return as-is with alpha
   return color;
-}
-
-/**
- * Estimate cell size from point spacing
- * Uses the minimum spacing between sorted points to determine grid cell size
- */
-function estimateCellSizeFromPoints(points: HeatmapPoint[]): { lat: number; lng: number } {
-  if (points.length < 2) {
-    return { lat: 0.002, lng: 0.002 };
-  }
-
-  // Get unique lat and lng values
-  const uniqueLats = [...new Set(points.map(p => p.lat))].sort((a, b) => a - b);
-  const uniqueLngs = [...new Set(points.map(p => p.lng))].sort((a, b) => a - b);
-
-  // Find minimum spacing
-  let minLatDiff = Infinity;
-  let minLngDiff = Infinity;
-
-  for (let i = 1; i < uniqueLats.length; i++) {
-    const diff = uniqueLats[i] - uniqueLats[i - 1];
-    if (diff > 0.0001 && diff < minLatDiff) {
-      minLatDiff = diff;
-    }
-  }
-
-  for (let i = 1; i < uniqueLngs.length; i++) {
-    const diff = uniqueLngs[i] - uniqueLngs[i - 1];
-    if (diff > 0.0001 && diff < minLngDiff) {
-      minLngDiff = diff;
-    }
-  }
-
-  // Default to ~200m in degrees if no valid spacing found
-  const defaultSize = 0.002; // ~200m at mid-latitudes
-  
-  const result = {
-    lat: minLatDiff === Infinity ? defaultSize : minLatDiff,
-    lng: minLngDiff === Infinity ? defaultSize : minLngDiff,
-  };
-  
-  console.log(`Estimated cell size: lat=${result.lat.toFixed(6)}, lng=${result.lng.toFixed(6)} from ${uniqueLats.length} unique lats, ${uniqueLngs.length} unique lngs`);
-  
-  return result;
 }
 
 /**
@@ -123,8 +78,6 @@ export function renderHeatmapToCanvas(
   const cellWidthPx = Math.ceil(baseCellWidth * 2);
   const cellHeightPx = Math.ceil(baseCellHeight * 2);
 
-  console.log(`Canvas cell size: ${cellWidthPx}x${cellHeightPx}px for ${uniqueLngs.length}x${uniqueLats.length} grid, canvas: ${canvasWidth}x${canvasHeight}`);
-
   // Draw each point
   for (const point of points) {
     // Convert lat/lng to canvas coordinates
@@ -163,58 +116,3 @@ export function renderHeatmapToCanvas(
     }
   }
 }
-
-/**
- * Hook for managing canvas-based heatmap rendering
- */
-export function useCanvasRenderer(
-  points: HeatmapPoint[],
-  bounds: Bounds | null,
-  options: CanvasRenderOptions
-) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const dataUrlRef = useRef<string | null>(null);
-
-  // Initialize canvas
-  useEffect(() => {
-    if (!canvasRef.current) {
-      canvasRef.current = document.createElement('canvas');
-    }
-    return () => {
-      canvasRef.current = null;
-      dataUrlRef.current = null;
-    };
-  }, []);
-
-  // Render to canvas and return data URL
-  const render = useCallback((width: number, height: number): string | null => {
-    if (!canvasRef.current || !bounds || points.length === 0) {
-      return null;
-    }
-
-    const canvas = canvasRef.current;
-    canvas.width = width;
-    canvas.height = height;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    renderHeatmapToCanvas(ctx, points, bounds, width, height, options);
-
-    dataUrlRef.current = canvas.toDataURL('image/png');
-    return dataUrlRef.current;
-  }, [points, bounds, options]);
-
-  // Get current data URL without re-rendering
-  const getDataUrl = useCallback((): string | null => {
-    return dataUrlRef.current;
-  }, []);
-
-  return {
-    render,
-    getDataUrl,
-    canvasRef,
-  };
-}
-
-export default useCanvasRenderer;

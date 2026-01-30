@@ -28,9 +28,13 @@ export const PERFORMANCE_CONFIG = {
   
   /** Cache TTL for POI data (seconds) */
   POI_CACHE_TTL_SECONDS: 3600,
+  
+  /** Target number of grid points for adaptive sizing */
+  TARGET_GRID_POINTS: 5000,
+  
+  /** Minimum cell size in meters for grid calculations */
+  MIN_CELL_SIZE: 100,
+  
+  /** Maximum cell size in meters for grid calculations */
+  MAX_CELL_SIZE: 500,
 } as const;
-
-/**
- * Type for the performance config
- */
-export type PerformanceConfig = typeof PERFORMANCE_CONFIG;

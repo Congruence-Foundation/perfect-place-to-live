@@ -1,4 +1,4 @@
-import { Bounds, Point, HeatmapPoint } from '@/types';
+import { Bounds, Point } from '@/types';
 
 // Meters per degree of latitude (approximately constant)
 const METERS_PER_DEGREE_LAT = 111320;
@@ -89,7 +89,7 @@ export function tileToBounds(z: number, x: number, y: number): Bounds {
 /**
  * Convert geographic coordinates to tile coordinates
  */
-export function coordsToTile(lat: number, lng: number, z: number): { x: number; y: number } {
+function coordsToTile(lat: number, lng: number, z: number): { x: number; y: number } {
   const x = Math.floor(((lng + 180) / 360) * Math.pow(2, z));
   const y = Math.floor(
     ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) *
@@ -115,47 +115,4 @@ export function getTilesForBounds(bounds: Bounds, z: number): { x: number; y: nu
   }
 
   return tiles;
-}
-
-/**
- * Estimate cell size from heatmap points by analyzing point spacing
- * Useful for rendering grid cells when the original cell size is unknown
- * 
- * @param points - Array of heatmap points
- * @returns Estimated cell size in degrees { lat, lng }
- */
-export function estimateCellSizeFromPoints(points: HeatmapPoint[]): { lat: number; lng: number } {
-  const DEFAULT_CELL_SIZE = 0.001;
-  
-  if (points.length <= 1) {
-    return { lat: DEFAULT_CELL_SIZE, lng: DEFAULT_CELL_SIZE };
-  }
-  
-  // Sort points to find grid spacing
-  const sortedByLat = [...points].sort((a, b) => a.lat - b.lat);
-  const sortedByLng = [...points].sort((a, b) => a.lng - b.lng);
-  
-  let cellSizeLat = DEFAULT_CELL_SIZE;
-  let cellSizeLng = DEFAULT_CELL_SIZE;
-  
-  // Find minimum non-zero differences (grid spacing)
-  const MIN_DIFF_THRESHOLD = 0.0001;
-  
-  for (let i = 1; i < sortedByLat.length; i++) {
-    const diff = sortedByLat[i].lat - sortedByLat[i - 1].lat;
-    if (diff > MIN_DIFF_THRESHOLD) {
-      cellSizeLat = diff;
-      break;
-    }
-  }
-  
-  for (let i = 1; i < sortedByLng.length; i++) {
-    const diff = sortedByLng[i].lng - sortedByLng[i - 1].lng;
-    if (diff > MIN_DIFF_THRESHOLD) {
-      cellSizeLng = diff;
-      break;
-    }
-  }
-  
-  return { lat: cellSizeLat, lng: cellSizeLng };
 }

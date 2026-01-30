@@ -31,6 +31,8 @@ import {
   Activity,
   Heart,
   Gem,
+  Building2,
+  Volume2,
 } from 'lucide-react';
 
 /**
@@ -64,6 +66,8 @@ export const FACTOR_ICON_MAP: Record<string, React.ComponentType<{ className?: s
   cross: Cross,
   'hard-hat': HardHat,
   'map-pin': MapPin,
+  'building-2': Building2,
+  'volume-2': Volume2,
 };
 
 /**

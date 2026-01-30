@@ -4,9 +4,12 @@ import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS } from '@/config/factors';
 import { Bounds, POI } from '@/types';
 import { isValidBounds } from '@/lib/bounds';
+import { PERFORMANCE_CONFIG } from '@/constants';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const { POI_CACHE_TTL_SECONDS } = PERFORMANCE_CONFIG;
 
 interface POIRequestBody {
   bounds: Bounds;
@@ -56,7 +59,7 @@ async function fetchPOIsWithCache(
           results[factor.id] = pois;
 
           // Cache the results
-          await cacheSet(cacheKey, pois, 3600); // 1 hour TTL
+          await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
         } catch (error) {
           console.error(`Error fetching POIs for ${factor.id}:`, error);
           results[factor.id] = [];
