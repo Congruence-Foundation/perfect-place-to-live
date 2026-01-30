@@ -127,6 +127,10 @@ export const POI_CATEGORIES: POICategory[] = [
     defaultMaxDistance: 2000,
     defaultEnabled: true,
   },
+
+  // ============================================
+  // LIFESTYLE FACTORS
+  // ============================================
   {
     id: 'train_stations',
     name: 'Train Stations',
@@ -134,16 +138,12 @@ export const POI_CATEGORIES: POICategory[] = [
       'nw/railway=station',       // Main railway stations
       'n/railway=halt',           // Smaller stops/halts
     ],
-    category: 'essential',
+    category: 'lifestyle',
     icon: 'train-front',
     defaultWeight: 50,
     defaultMaxDistance: 3000,
     defaultEnabled: false,
   },
-
-  // ============================================
-  // LIFESTYLE FACTORS
-  // ============================================
   {
     id: 'restaurants',
     name: 'Restaurants & Cafes',

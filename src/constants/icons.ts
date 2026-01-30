@@ -1,6 +1,7 @@
 import {
   ShoppingCart,
   Train,
+  TrainFront,
   HeartPulse,
   Trees,
   GraduationCap,
@@ -42,6 +43,7 @@ import {
 export const FACTOR_ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
   'shopping-cart': ShoppingCart,
   train: Train,
+  'train-front': TrainFront,
   'heart-pulse': HeartPulse,
   trees: Trees,
   'graduation-cap': GraduationCap,
