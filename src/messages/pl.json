@@ -41,7 +41,11 @@
     "computationTooltip": "Czas rzeczywisty oblicza na żądanie z niestandardowymi wagami. Pamięć podręczna używa wstępnie obliczonych kafelków dla szybszego ładowania.",
     "realtime": "Na żywo",
     "cached": "Cache",
-    "cachedNotAvailable": "Kafelki z pamięci podręcznej nie są jeszcze dostępne"
+    "cachedNotAvailable": "Kafelki z pamięci podręcznej nie są jeszcze dostępne",
+    "dataSource": "Źródło danych",
+    "dataSourceTooltip": "Neon DB jest szybszy (dane w cache). Overpass API pobiera dane w czasie rzeczywistym z OpenStreetMap, ale jest wolniejszy.",
+    "useOverpass": "Użyj Overpass API",
+    "useOverpassTooltip": "Włącz, aby pobierać dane w czasie rzeczywistym z OpenStreetMap. Wolniejsze, ale zawsze aktualne. Domyślnie wyłączone dla lepszej wydajności."
   },
   "curves": {
     "log": {

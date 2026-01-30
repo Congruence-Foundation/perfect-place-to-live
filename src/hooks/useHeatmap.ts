@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Bounds, Factor, HeatmapPoint, HeatmapResponse, POI, DistanceCurve } from '@/types';
+import { Bounds, Factor, HeatmapPoint, HeatmapResponse, POI, DistanceCurve, DataSource } from '@/types';
 
 interface UseHeatmapReturn {
   heatmapPoints: HeatmapPoint[];
@@ -13,7 +13,8 @@ interface UseHeatmapReturn {
     gridSize?: number,
     distanceCurve?: DistanceCurve,
     sensitivity?: number,
-    normalizeToViewport?: boolean
+    normalizeToViewport?: boolean,
+    dataSource?: DataSource
   ) => Promise<void>;
   clearHeatmap: () => void;
   abortFetch: () => void;
@@ -36,7 +37,8 @@ export function useHeatmap(): UseHeatmapReturn {
       gridSize?: number,
       distanceCurve?: DistanceCurve,
       sensitivity?: number,
-      normalizeToViewport?: boolean
+      normalizeToViewport?: boolean,
+      dataSource?: DataSource
     ) => {
       // Cancel any pending request
       if (abortControllerRef.current) {
@@ -63,6 +65,7 @@ export function useHeatmap(): UseHeatmapReturn {
             distanceCurve,
             sensitivity,
             normalizeToViewport,
+            dataSource,
           }),
           signal: abortControllerRef.current.signal,
         });

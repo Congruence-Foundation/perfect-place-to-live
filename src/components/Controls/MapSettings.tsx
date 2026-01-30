@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Settings, X, Eye, EyeOff } from 'lucide-react';
+import { Settings, X, Eye, EyeOff, Database } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -26,6 +26,8 @@ interface MapSettingsProps {
   onShowPOIsChange: (show: boolean) => void;
   mode: 'realtime' | 'precomputed';
   onModeChange: (mode: 'realtime' | 'precomputed') => void;
+  useOverpassAPI?: boolean;
+  onUseOverpassAPIChange?: (use: boolean) => void;
   isMobile?: boolean;
 }
 
@@ -36,6 +38,8 @@ export default function MapSettings({
   onShowPOIsChange,
   mode,
   onModeChange,
+  useOverpassAPI = false,
+  onUseOverpassAPIChange,
   isMobile = false,
 }: MapSettingsProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -206,6 +210,32 @@ export default function MapSettings({
                 </p>
               )}
             </div>
+
+            {/* Data Source Toggle - Overpass API (disabled by default) */}
+            {onUseOverpassAPIChange && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs flex items-center gap-2">
+                      <Database className="h-3.5 w-3.5" />
+                      {t('useOverpass')}
+                    </Label>
+                    <InfoTooltip>
+                      <p className="text-xs">{t('useOverpassTooltip')}</p>
+                    </InfoTooltip>
+                  </div>
+                  <Switch
+                    checked={useOverpassAPI}
+                    onCheckedChange={onUseOverpassAPIChange}
+                  />
+                </div>
+                {useOverpassAPI && (
+                  <p className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg">
+                    Using Overpass API - slower but real-time data
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

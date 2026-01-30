@@ -1,30 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchAllPOIsCombined, generatePOICacheKey } from '@/lib/overpass';
+import { generatePOICacheKey } from '@/lib/overpass';
+import { fetchPOIs, DataSource } from '@/lib/poi-service';
 import { calculateHeatmapParallel } from '@/lib/calculator-parallel';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS } from '@/config/factors';
 import { Factor, POI, HeatmapRequest } from '@/types';
 import { estimateGridSize, calculateAdaptiveGridSize } from '@/lib/grid';
 import { expandBounds, isValidBounds } from '@/lib/bounds';
+import { PERFORMANCE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Buffer distance in degrees for POI fetching (approximately 10km at mid-latitudes)
-// This ensures POIs well outside the viewport are included for accurate edge calculations
-const POI_BUFFER_DEGREES = 0.1;
-
-// Buffer distance in degrees for grid/canvas (approximately 5km at mid-latitudes)
-// This extends the heatmap canvas beyond the viewport to prevent reloads on small scrolls
-const GRID_BUFFER_DEGREES = 0.05;
-
-// Maximum allowed grid points to prevent server overload
-const MAX_GRID_POINTS = 50000;
+const { 
+  POI_BUFFER_DEGREES, 
+  GRID_BUFFER_DEGREES, 
+  MAX_GRID_POINTS,
+  POI_CACHE_TTL_SECONDS,
+  DEFAULT_DATA_SOURCE,
+} = PERFORMANCE_CONFIG;
 
 export async function POST(request: NextRequest) {
   try {
     const body: HeatmapRequest = await request.json();
-    const { bounds, factors: requestFactors, gridSize, distanceCurve, sensitivity, normalizeToViewport } = body;
+    const { 
+      bounds, 
+      factors: requestFactors, 
+      gridSize, 
+      distanceCurve, 
+      sensitivity, 
+      normalizeToViewport,
+      dataSource: requestedDataSource,
+    } = body;
+
+    // Determine data source (default to Neon for performance)
+    const dataSource: DataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
 
     // Validate bounds
     if (!isValidBounds(bounds)) {
@@ -73,34 +83,44 @@ export async function POST(request: NextRequest) {
     // Expand bounds even more for POI fetching to avoid edge effects
     const poiBounds = expandBounds(bounds, POI_BUFFER_DEGREES);
 
-    // Check cache for all factors first (using POI bounds)
+    // Check cache for all factors first (using POI bounds) - only for Neon source
+    // Overpass has its own caching behavior
     const poiData = new Map<string, POI[]>();
     const uncachedFactors: { id: string; osmTags: string[] }[] = [];
 
-    for (const factor of enabledFactors) {
-      const cacheKey = generatePOICacheKey(factor.id, poiBounds);
-      const cached = await cacheGet<POI[]>(cacheKey);
-      
-      if (cached) {
-        poiData.set(factor.id, cached);
-      } else {
+    if (dataSource === 'neon') {
+      // For Neon, check cache first
+      for (const factor of enabledFactors) {
+        const cacheKey = generatePOICacheKey(factor.id, poiBounds);
+        const cached = await cacheGet<POI[]>(cacheKey);
+        
+        if (cached) {
+          poiData.set(factor.id, cached);
+        } else {
+          uncachedFactors.push({ id: factor.id, osmTags: factor.osmTags });
+        }
+      }
+    } else {
+      // For Overpass, always fetch fresh data
+      for (const factor of enabledFactors) {
         uncachedFactors.push({ id: factor.id, osmTags: factor.osmTags });
       }
     }
 
-    // Fetch uncached POIs in a single combined query (using POI bounds)
+    // Fetch uncached POIs using the unified POI service
     if (uncachedFactors.length > 0) {
       try {
-        const fetchedPOIs = await fetchAllPOIsCombined(uncachedFactors, poiBounds);
+        const fetchedPOIs = await fetchPOIs(uncachedFactors, poiBounds, dataSource);
         
         // Store in cache and add to poiData
         for (const [factorId, pois] of Object.entries(fetchedPOIs)) {
           poiData.set(factorId, pois);
+          // Cache the results (useful for both sources)
           const cacheKey = generatePOICacheKey(factorId, poiBounds);
-          await cacheSet(cacheKey, pois, 3600); // 1 hour TTL
+          await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
         }
       } catch (error) {
-        console.error('Error fetching POIs:', error);
+        console.error(`Error fetching POIs from ${dataSource}:`, error);
         // Initialize empty arrays for failed factors
         for (const factor of uncachedFactors) {
           if (!poiData.has(factor.id)) {
@@ -144,6 +164,7 @@ export async function POST(request: NextRequest) {
         pointCount: heatmapPoints.length,
         computeTimeMs: Math.round(endTime - startTime),
         factorCount: enabledFactors.length,
+        dataSource,
         poiCounts: Object.fromEntries(
           Array.from(poiData.entries()).map(([id, pois]) => [id, pois.length])
         ),

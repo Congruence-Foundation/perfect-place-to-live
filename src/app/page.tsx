@@ -30,6 +30,7 @@ export default function Home() {
   const [isFactorsExpanded, setIsFactorsExpanded] = useState(false);
   const [showPOIs, setShowPOIs] = useState(false);
   const [showZoomWarning, setShowZoomWarning] = useState(false);
+  const [useOverpassAPI, setUseOverpassAPI] = useState(false);
   const [heatmapSettings, setHeatmapSettings] = useState<HeatmapSettings>({
     gridCellSize: 200, // default 200m
     distanceCurve: 'exp', // exponential for sharp drop-off near POIs
@@ -113,10 +114,11 @@ export default function Home() {
         heatmapSettings.gridCellSize,
         heatmapSettings.distanceCurve,
         heatmapSettings.sensitivity,
-        heatmapSettings.normalizeToViewport
+        heatmapSettings.normalizeToViewport,
+        useOverpassAPI ? 'overpass' : 'neon'
       );
     }
-  }, [bounds, factors, heatmapSettings, mode, fetchHeatmap]);
+  }, [bounds, factors, heatmapSettings, mode, fetchHeatmap, useOverpassAPI]);
 
   const handleCitySelect = useCallback((lat: number, lng: number, cityBounds?: Bounds) => {
     // Mark that user has interacted
@@ -160,6 +162,7 @@ export default function Home() {
       distanceCurve: debouncedSettings.distanceCurve,
       sensitivity: debouncedSettings.sensitivity,
       normalizeToViewport: debouncedSettings.normalizeToViewport,
+      dataSource: useOverpassAPI ? 'overpass' : 'neon',
     });
 
     // Check if viewport is still covered by existing heatmap AND params haven't changed
@@ -184,9 +187,10 @@ export default function Home() {
       debouncedSettings.gridCellSize,
       debouncedSettings.distanceCurve,
       debouncedSettings.sensitivity,
-      debouncedSettings.normalizeToViewport
+      debouncedSettings.normalizeToViewport,
+      useOverpassAPI ? 'overpass' : 'neon'
     );
-  }, [debouncedBounds, debouncedFactors, debouncedSettings, mode, fetchHeatmap, clearHeatmap]);
+  }, [debouncedBounds, debouncedFactors, debouncedSettings, mode, fetchHeatmap, clearHeatmap, useOverpassAPI]);
 
   const enabledFactorCount = factors.filter((f) => f.enabled && f.weight !== 0).length;
   const totalPOICount = Object.values(pois).reduce((sum, arr) => sum + arr.length, 0);
@@ -328,7 +332,7 @@ export default function Home() {
           ref={mapRef}
           onBoundsChange={handleBoundsChange}
           heatmapPoints={heatmapPoints}
-          heatmapOpacity={0.5}
+          heatmapOpacity={0.15}
           pois={pois}
           showPOIs={showPOIs}
           factors={factors}
@@ -372,6 +376,8 @@ export default function Home() {
               onShowPOIsChange={setShowPOIs}
               mode={mode}
               onModeChange={setMode}
+              useOverpassAPI={useOverpassAPI}
+              onUseOverpassAPIChange={setUseOverpassAPI}
               isMobile={false}
             />
           </>
@@ -433,6 +439,8 @@ export default function Home() {
                 onShowPOIsChange={setShowPOIs}
                 mode={mode}
                 onModeChange={setMode}
+                useOverpassAPI={useOverpassAPI}
+                onUseOverpassAPIChange={setUseOverpassAPI}
                 isMobile={true}
               />
             </>

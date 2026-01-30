@@ -41,7 +41,11 @@
     "computationTooltip": "Real-time calculates on-demand with custom weights. Cached uses pre-computed tiles for faster loading.",
     "realtime": "Real-time",
     "cached": "Cached",
-    "cachedNotAvailable": "Cached tiles not available yet"
+    "cachedNotAvailable": "Cached tiles not available yet",
+    "dataSource": "Data Source",
+    "dataSourceTooltip": "Neon DB is faster (pre-cached data). Overpass API fetches real-time data from OpenStreetMap but is slower.",
+    "useOverpass": "Use Overpass API",
+    "useOverpassTooltip": "Enable to fetch real-time data from OpenStreetMap. Slower but always up-to-date. Disabled by default for better performance."
   },
   "curves": {
     "log": {

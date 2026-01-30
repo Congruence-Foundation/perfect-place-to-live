@@ -1,4 +1,5 @@
 import { Factor } from '@/types/factors';
+import { POI_CATEGORIES, POICategory, getOsmTags } from './poi-categories';
 
 // Profile type definition
 export interface FactorProfile {
@@ -278,12 +279,36 @@ export const FACTOR_PROFILES: FactorProfile[] = [
   },
 ];
 
-// Apply a profile to the default factors
+/**
+ * Convert a POICategory to a Factor
+ */
+function categoryToFactor(category: POICategory): Factor {
+  return {
+    id: category.id,
+    name: category.name,
+    osmTags: getOsmTags(category),
+    weight: category.defaultWeight,
+    defaultWeight: category.defaultWeight,
+    enabled: category.defaultEnabled,
+    maxDistance: category.defaultMaxDistance,
+    icon: category.icon,
+    category: category.category,
+  };
+}
+
+/**
+ * Default factors generated from POI_CATEGORIES
+ */
+export const DEFAULT_FACTORS: Factor[] = POI_CATEGORIES.map(categoryToFactor);
+
+/**
+ * Apply a profile to the default factors
+ */
 export function applyProfile(profileId: string): Factor[] {
-  const profile = FACTOR_PROFILES.find(p => p.id === profileId);
+  const profile = FACTOR_PROFILES.find((p) => p.id === profileId);
   if (!profile) return DEFAULT_FACTORS;
 
-  return DEFAULT_FACTORS.map(factor => {
+  return DEFAULT_FACTORS.map((factor) => {
     const override = profile.overrides[factor.id];
     if (!override) return factor;
 
@@ -295,296 +320,6 @@ export function applyProfile(profileId: string): Factor[] {
     };
   });
 }
-
-export const DEFAULT_FACTORS: Factor[] = [
-  // Essential factors
-  {
-    id: 'grocery',
-    name: 'Grocery Stores',
-    osmTags: ['shop=supermarket', 'shop=convenience', 'shop=grocery'],
-    weight: 80,
-    defaultWeight: 80,
-    enabled: true,
-    maxDistance: 2000,
-    icon: 'shopping-cart',
-    category: 'essential',
-  },
-  {
-    id: 'transit',
-    name: 'Public Transit',
-    osmTags: [
-      'railway=station',
-      'railway=halt',
-      'highway=bus_stop',
-      'railway=tram_stop',
-      'public_transport=platform',
-      'public_transport=station',
-    ],
-    weight: 70,
-    defaultWeight: 70,
-    enabled: true,
-    maxDistance: 1500,
-    icon: 'train',
-    category: 'essential',
-  },
-  {
-    id: 'healthcare',
-    name: 'Healthcare',
-    osmTags: ['amenity=pharmacy', 'amenity=hospital', 'amenity=clinic', 'amenity=doctors'],
-    weight: 65,
-    defaultWeight: 65,
-    enabled: true,
-    maxDistance: 3000,
-    icon: 'heart-pulse',
-    category: 'essential',
-  },
-  {
-    id: 'parks',
-    name: 'Parks & Green Areas',
-    osmTags: ['leisure=park', 'landuse=forest', 'natural=wood', 'leisure=garden'],
-    weight: 60,
-    defaultWeight: 60,
-    enabled: true,
-    maxDistance: 1500,
-    icon: 'trees',
-    category: 'essential',
-  },
-  {
-    id: 'schools',
-    name: 'Schools',
-    osmTags: ['amenity=school', 'amenity=kindergarten', 'amenity=college'],
-    weight: 50,
-    defaultWeight: 50,
-    enabled: true,
-    maxDistance: 2000,
-    icon: 'graduation-cap',
-    category: 'essential',
-  },
-  {
-    id: 'post',
-    name: 'Post & Delivery',
-    osmTags: ['amenity=post_office', 'amenity=parcel_locker', 'amenity=post_box'],
-    weight: 40,
-    defaultWeight: 40,
-    enabled: true,
-    maxDistance: 2000,
-    icon: 'package',
-    category: 'essential',
-  },
-
-  // Lifestyle factors
-  {
-    id: 'restaurants',
-    name: 'Restaurants & Cafes',
-    osmTags: ['amenity=restaurant', 'amenity=cafe', 'amenity=fast_food'],
-    weight: 35,
-    defaultWeight: 35,
-    enabled: false,
-    maxDistance: 1500,
-    icon: 'utensils',
-    category: 'lifestyle',
-  },
-  {
-    id: 'banks',
-    name: 'Banks & ATMs',
-    osmTags: ['amenity=bank', 'amenity=atm'],
-    weight: 30,
-    defaultWeight: 30,
-    enabled: false,
-    maxDistance: 2000,
-    icon: 'landmark',
-    category: 'lifestyle',
-  },
-  {
-    id: 'gyms',
-    name: 'Gyms & Sports',
-    osmTags: ['leisure=fitness_centre', 'leisure=sports_centre', 'leisure=swimming_pool'],
-    weight: 25,
-    defaultWeight: 25,
-    enabled: false,
-    maxDistance: 2000,
-    icon: 'dumbbell',
-    category: 'lifestyle',
-  },
-  {
-    id: 'playgrounds',
-    name: 'Playgrounds',
-    osmTags: ['leisure=playground'],
-    weight: 30,
-    defaultWeight: 30,
-    enabled: false,
-    maxDistance: 1000,
-    icon: 'baby',
-    category: 'lifestyle',
-  },
-  {
-    id: 'stadiums',
-    name: 'Stadiums & Arenas',
-    osmTags: ['leisure=stadium', 'leisure=sports_centre', 'building=stadium'],
-    weight: 0,
-    defaultWeight: 0,
-    enabled: false,
-    maxDistance: 2000,
-    icon: 'trophy',
-    category: 'lifestyle',
-  },
-  {
-    id: 'nightlife',
-    name: 'Nightlife & Bars',
-    osmTags: ['amenity=bar', 'amenity=pub', 'amenity=nightclub', 'amenity=biergarten'],
-    weight: 0,
-    defaultWeight: 0,
-    enabled: false,
-    maxDistance: 1500,
-    icon: 'wine',
-    category: 'lifestyle',
-  },
-  {
-    id: 'universities',
-    name: 'Universities',
-    osmTags: ['amenity=university', 'building=university'],
-    weight: 0,
-    defaultWeight: 0,
-    enabled: false,
-    maxDistance: 3000,
-    icon: 'book-open',
-    category: 'lifestyle',
-  },
-  {
-    id: 'religious',
-    name: 'Religious Sites',
-    osmTags: ['amenity=place_of_worship', 'building=church', 'building=mosque', 'building=synagogue'],
-    weight: 0,
-    defaultWeight: 0,
-    enabled: false,
-    maxDistance: 2000,
-    icon: 'church',
-    category: 'lifestyle',
-  },
-  {
-    id: 'dog_parks',
-    name: 'Dog Parks',
-    osmTags: ['leisure=dog_park'],
-    weight: 0,
-    defaultWeight: 0,
-    enabled: false,
-    maxDistance: 1500,
-    icon: 'dog',
-    category: 'lifestyle',
-  },
-  {
-    id: 'coworking',
-    name: 'Coworking & Libraries',
-    osmTags: ['amenity=coworking_space', 'amenity=library', 'office=coworking'],
-    weight: 0,
-    defaultWeight: 0,
-    enabled: false,
-    maxDistance: 2000,
-    icon: 'laptop',
-    category: 'lifestyle',
-  },
-  {
-    id: 'cinemas',
-    name: 'Cinemas & Theaters',
-    osmTags: ['amenity=cinema', 'amenity=theatre'],
-    weight: 0,
-    defaultWeight: 0,
-    enabled: false,
-    maxDistance: 3000,
-    icon: 'film',
-    category: 'lifestyle',
-  },
-  {
-    id: 'markets',
-    name: 'Markets & Bazaars',
-    osmTags: ['amenity=marketplace', 'shop=mall', 'landuse=retail'],
-    weight: 0,
-    defaultWeight: 0,
-    enabled: false,
-    maxDistance: 2000,
-    icon: 'store',
-    category: 'lifestyle',
-  },
-
-  // Environment factors (can be positive or negative depending on profile)
-  {
-    id: 'water',
-    name: 'Water Bodies',
-    osmTags: ['natural=water', 'water=lake', 'water=river', 'waterway=river', 'natural=coastline'],
-    weight: 40,
-    defaultWeight: 40,
-    enabled: false,
-    maxDistance: 2000,
-    icon: 'waves',
-    category: 'environment',
-  },
-  {
-    id: 'industrial',
-    name: 'Industrial Areas',
-    osmTags: ['landuse=industrial', 'landuse=quarry'],
-    weight: -40,
-    defaultWeight: -40,
-    enabled: true,
-    maxDistance: 1000,
-    icon: 'factory',
-    category: 'environment',
-  },
-  {
-    id: 'highways',
-    name: 'Major Roads',
-    osmTags: ['highway=motorway', 'highway=trunk', 'highway=primary'],
-    weight: -30,
-    defaultWeight: -30,
-    enabled: true,
-    maxDistance: 500,
-    icon: 'road',
-    category: 'environment',
-  },
-  {
-    id: 'airports',
-    name: 'Airports',
-    osmTags: ['aeroway=aerodrome', 'aeroway=helipad', 'aeroway=runway'],
-    weight: -40,
-    defaultWeight: -40,
-    enabled: false,
-    maxDistance: 3000,
-    icon: 'plane',
-    category: 'environment',
-  },
-  {
-    id: 'railways',
-    name: 'Railway Tracks',
-    osmTags: ['railway=rail', 'railway=light_rail'],
-    weight: -30,
-    defaultWeight: -30,
-    enabled: false,
-    maxDistance: 500,
-    icon: 'train-track',
-    category: 'environment',
-  },
-  {
-    id: 'cemeteries',
-    name: 'Cemeteries',
-    osmTags: ['landuse=cemetery', 'amenity=grave_yard'],
-    weight: -20,
-    defaultWeight: -20,
-    enabled: false,
-    maxDistance: 500,
-    icon: 'cross',
-    category: 'environment',
-  },
-  {
-    id: 'construction',
-    name: 'Construction Sites',
-    osmTags: ['landuse=construction', 'building=construction'],
-    weight: -30,
-    defaultWeight: -30,
-    enabled: false,
-    maxDistance: 500,
-    icon: 'hard-hat',
-    category: 'environment',
-  },
-];
 
 export const POLAND_BOUNDS = {
   north: 54.9,

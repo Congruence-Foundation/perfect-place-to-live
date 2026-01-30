@@ -6,6 +6,7 @@ import { POI_COLORS, getColorForK } from '@/constants';
 import { formatDistance } from '@/lib/utils';
 import { estimateCellSizeFromPoints } from '@/lib/grid';
 import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/calculator';
+import { renderHeatmapToCanvas } from '@/hooks/useCanvasRenderer';
 
 // Popup translations interface
 export interface PopupTranslations {
@@ -140,6 +141,7 @@ interface MapViewProps {
   factors?: Factor[];
   popupTranslations?: PopupTranslations;
   factorTranslations?: FactorTranslations;
+  useCanvasRendering?: boolean; // Enable canvas-based rendering for better performance
 }
 
 // Default translations (English)
@@ -193,11 +195,17 @@ function setupTouchLongPress(
     const touch = e.touches[0];
     state.startPos = { x: touch.clientX, y: touch.clientY };
     
-    const containerPoint = mapInstance.mouseEventToContainerPoint({
-      clientX: touch.clientX,
-      clientY: touch.clientY,
-    } as MouseEvent);
-    state.latLng = mapInstance.containerPointToLatLng(containerPoint);
+    // Safety check: ensure map container is ready
+    try {
+      const containerPoint = mapInstance.mouseEventToContainerPoint({
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+      } as MouseEvent);
+      state.latLng = mapInstance.containerPointToLatLng(containerPoint);
+    } catch {
+      // Map not ready yet, ignore
+      return;
+    }
     
     state.timer = setTimeout(() => {
       if (state.latLng) {
@@ -261,8 +269,14 @@ function setupMouseLongPress(
     clearState();
     state.startPos = { x: e.clientX, y: e.clientY };
     
-    const containerPoint = mapInstance.mouseEventToContainerPoint(e);
-    state.latLng = mapInstance.containerPointToLatLng(containerPoint);
+    // Safety check: ensure map container is ready
+    try {
+      const containerPoint = mapInstance.mouseEventToContainerPoint(e);
+      state.latLng = mapInstance.containerPointToLatLng(containerPoint);
+    } catch {
+      // Map not ready yet, ignore
+      return;
+    }
     
     state.timer = setTimeout(() => {
       if (state.latLng) {
@@ -311,13 +325,19 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   factors = [],
   popupTranslations = defaultPopupTranslations,
   factorTranslations = {},
+  useCanvasRendering = true, // Default to canvas rendering for better performance
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const gridLayerRef = useRef<L.LayerGroup | null>(null);
   const poiLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const canvasOverlayRef = useRef<L.ImageOverlay | null>(null);
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const initializingRef = useRef(false);
+  
+  // Store current bounds for canvas rendering
+  const currentBoundsRef = useRef<Bounds | null>(null);
   
   // Store current pois and factors in refs for click handler
   const poisRef = useRef(pois);
@@ -455,6 +475,13 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         // Create layer groups
         gridLayerRef.current = L.layerGroup().addTo(map);
         poiLayerGroupRef.current = L.layerGroup().addTo(map);
+        
+        // Create a custom pane for the heatmap overlay (between tiles and markers)
+        map.createPane('heatmapPane');
+        const heatmapPane = map.getPane('heatmapPane');
+        if (heatmapPane) {
+          heatmapPane.style.zIndex = '450'; // Above tiles (200), below overlays (400) and markers (600)
+        }
 
         // Store map reference
         mapInstanceRef.current = map;
@@ -518,6 +545,8 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         mapInstanceRef.current = null;
         gridLayerRef.current = null;
         poiLayerGroupRef.current = null;
+        canvasOverlayRef.current = null;
+        offscreenCanvasRef.current = null;
       }
       initializingRef.current = false;
       setMapReady(false);
@@ -526,18 +555,34 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
   // Update grid overlay when points change
   useEffect(() => {
-    if (!mapReady || !mapInstanceRef.current || !gridLayerRef.current) return;
+    if (!mapReady || !mapInstanceRef.current) return;
 
     const updateGrid = async () => {
       try {
         const L = (await import('leaflet')).default;
 
-        if (!mapInstanceRef.current || !gridLayerRef.current) return;
+        if (!mapInstanceRef.current) return;
 
-        // Clear existing grid
-        gridLayerRef.current.clearLayers();
+        // Clear existing layers based on rendering mode
+        if (useCanvasRendering) {
+          // Clear rectangle-based grid layer
+          if (gridLayerRef.current) {
+            gridLayerRef.current.clearLayers();
+          }
+        } else {
+          // Clear canvas overlay
+          if (canvasOverlayRef.current) {
+            canvasOverlayRef.current.remove();
+            canvasOverlayRef.current = null;
+          }
+        }
 
-        if (heatmapPoints.length === 0) return;
+        if (heatmapPoints.length === 0) {
+          console.log('No heatmap points, skipping render');
+          // Don't remove the overlay - just leave it as is
+          // This prevents flickering during data loading
+          return;
+        }
 
         // Find min/max K values for logging
         let minK = Infinity, maxK = -Infinity;
@@ -546,33 +591,129 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           if (point.value > maxK) maxK = point.value;
         }
         
-        console.log(`Grid K range: min=${minK.toFixed(3)}, max=${maxK.toFixed(3)}`);
+        console.log(`Grid K range: min=${minK.toFixed(3)}, max=${maxK.toFixed(3)}, points=${heatmapPoints.length}, mode=${useCanvasRendering ? 'canvas' : 'rectangles'}`);
 
-        // Estimate cell size from point spacing
-        const cellSize = estimateCellSizeFromPoints(heatmapPoints);
+        if (useCanvasRendering) {
+          // Canvas-based rendering (much faster for large datasets)
+          const startTime = performance.now();
 
-        // Create rectangles for each grid cell
-        const halfLat = cellSize.lat / 2;
-        const halfLng = cellSize.lng / 2;
-
-        for (const point of heatmapPoints) {
-          // Use absolute K value for color (not normalized)
-          const color = getColorForK(point.value);
+          // Calculate bounds from the heatmap points themselves (not viewport)
+          // This ensures the overlay covers all the data
+          let minLat = Infinity, maxLat = -Infinity;
+          let minLng = Infinity, maxLng = -Infinity;
           
-          const bounds: L.LatLngBoundsExpression = [
-            [point.lat - halfLat, point.lng - halfLng],
-            [point.lat + halfLat, point.lng + halfLng],
-          ];
+          for (const point of heatmapPoints) {
+            if (point.lat < minLat) minLat = point.lat;
+            if (point.lat > maxLat) maxLat = point.lat;
+            if (point.lng < minLng) minLng = point.lng;
+            if (point.lng > maxLng) maxLng = point.lng;
+          }
+          
+          // Get unique lat/lng counts to determine grid dimensions
+          const uniqueLats = new Set(heatmapPoints.map(p => p.lat)).size;
+          const uniqueLngs = new Set(heatmapPoints.map(p => p.lng)).size;
+          
+          // Add a small buffer for cell size
+          const latSpacing = uniqueLats > 1 ? (maxLat - minLat) / (uniqueLats - 1) : 0.002;
+          const lngSpacing = uniqueLngs > 1 ? (maxLng - minLng) / (uniqueLngs - 1) : 0.002;
+          
+          const bounds: Bounds = {
+            north: maxLat + latSpacing / 2,
+            south: minLat - latSpacing / 2,
+            east: maxLng + lngSpacing / 2,
+            west: minLng - lngSpacing / 2,
+          };
+          currentBoundsRef.current = bounds;
 
-          const rect = L.rectangle(bounds, {
-            color: color,
-            fillColor: color,
-            fillOpacity: heatmapOpacity,
-            weight: 0,
-            stroke: false,
+          // Create offscreen canvas if needed
+          if (!offscreenCanvasRef.current) {
+            offscreenCanvasRef.current = document.createElement('canvas');
+          }
+
+          // Size canvas based on grid dimensions - each cell gets ~4 pixels for quality
+          const pixelsPerCell = 4;
+          const canvasWidth = Math.min(4096, Math.max(256, uniqueLngs * pixelsPerCell));
+          const canvasHeight = Math.min(4096, Math.max(256, uniqueLats * pixelsPerCell));
+          
+          const canvas = offscreenCanvasRef.current;
+          canvas.width = canvasWidth;
+          canvas.height = canvasHeight;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+
+          // Render heatmap to canvas
+          renderHeatmapToCanvas(ctx, heatmapPoints, bounds, canvas.width, canvas.height, {
+            opacity: heatmapOpacity,
           });
 
-          rect.addTo(gridLayerRef.current!);
+          // Convert to data URL
+          const dataUrl = canvas.toDataURL('image/png');
+          console.log(`Canvas rendered: ${canvas.width}x${canvas.height} for ${uniqueLngs}x${uniqueLats} grid`);
+
+          // Create or update image overlay using the DATA bounds (not viewport)
+          const overlayBounds: L.LatLngBoundsExpression = [
+            [bounds.south, bounds.west],
+            [bounds.north, bounds.east],
+          ];
+
+          if (canvasOverlayRef.current) {
+            canvasOverlayRef.current.setUrl(dataUrl);
+            canvasOverlayRef.current.setBounds(L.latLngBounds(overlayBounds));
+          } else {
+            // Check if heatmapPane exists, create if not
+            let pane = mapInstanceRef.current.getPane('heatmapPane');
+            if (!pane) {
+              mapInstanceRef.current.createPane('heatmapPane');
+              pane = mapInstanceRef.current.getPane('heatmapPane');
+              if (pane) {
+                pane.style.zIndex = '450';
+              }
+            }
+            
+            canvasOverlayRef.current = L.imageOverlay(dataUrl, overlayBounds, {
+              opacity: 1, // Opacity is baked into the canvas
+              interactive: false,
+              pane: 'heatmapPane', // Use custom pane for proper z-ordering
+            }).addTo(mapInstanceRef.current);
+          }
+
+          const endTime = performance.now();
+          console.log(`Canvas render time: ${(endTime - startTime).toFixed(1)}ms`);
+
+        } else {
+          // Rectangle-based rendering (original method)
+          if (!gridLayerRef.current) return;
+
+          // Clear existing grid
+          gridLayerRef.current.clearLayers();
+
+          // Estimate cell size from point spacing
+          const cellSize = estimateCellSizeFromPoints(heatmapPoints);
+
+          // Create rectangles for each grid cell
+          const halfLat = cellSize.lat / 2;
+          const halfLng = cellSize.lng / 2;
+
+          for (const point of heatmapPoints) {
+            // Use absolute K value for color (not normalized)
+            const color = getColorForK(point.value);
+            
+            const rectBounds: L.LatLngBoundsExpression = [
+              [point.lat - halfLat, point.lng - halfLng],
+              [point.lat + halfLat, point.lng + halfLng],
+            ];
+
+            const rect = L.rectangle(rectBounds, {
+              color: color,
+              fillColor: color,
+              fillOpacity: heatmapOpacity,
+              weight: 0,
+              stroke: false,
+            });
+
+            rect.addTo(gridLayerRef.current!);
+          }
         }
       } catch (error) {
         console.error('Error updating grid:', error);
@@ -580,7 +721,38 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     };
 
     updateGrid();
-  }, [mapReady, heatmapPoints, heatmapOpacity]);
+  }, [mapReady, heatmapPoints, heatmapOpacity, useCanvasRendering]);
+
+  // Ensure canvas overlay stays in sync with map view
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current || !useCanvasRendering) return;
+    
+    const map = mapInstanceRef.current;
+    
+    // Force overlay to update its position after zoom/move
+    const handleViewChange = () => {
+      if (canvasOverlayRef.current && map) {
+        // Leaflet's ImageOverlay should auto-update, but we can force a redraw
+        // by triggering a bounds update
+        try {
+          const currentBounds = canvasOverlayRef.current.getBounds();
+          if (currentBounds) {
+            canvasOverlayRef.current.setBounds(currentBounds);
+          }
+        } catch {
+          // Ignore errors
+        }
+      }
+    };
+    
+    map.on('zoomend', handleViewChange);
+    map.on('moveend', handleViewChange);
+    
+    return () => {
+      map.off('zoomend', handleViewChange);
+      map.off('moveend', handleViewChange);
+    };
+  }, [mapReady, useCanvasRendering]);
 
   // Update POI markers when pois or showPOIs changes
   useEffect(() => {

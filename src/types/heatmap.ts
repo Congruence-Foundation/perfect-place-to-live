@@ -4,6 +4,8 @@ import { POI } from './poi';
 
 export type DistanceCurve = 'linear' | 'log' | 'exp' | 'power';
 
+export type DataSource = 'neon' | 'overpass';
+
 export interface HeatmapPoint {
   lat: number;
   lng: number;
@@ -27,6 +29,7 @@ export interface HeatmapRequest {
   distanceCurve?: DistanceCurve;
   sensitivity?: number;
   normalizeToViewport?: boolean;
+  dataSource?: DataSource;
 }
 
 export interface HeatmapResponse {
@@ -37,6 +40,7 @@ export interface HeatmapResponse {
     pointCount: number;
     computeTimeMs: number;
     factorCount: number;
+    dataSource?: DataSource;
     poiCounts: Record<string, number>;
   };
 }

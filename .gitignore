@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# POI sync data files
+/data/
+*.osm.pbf
+*.ndjson
