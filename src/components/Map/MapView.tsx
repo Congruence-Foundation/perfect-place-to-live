@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
+import { OtodomProperty, PropertyCluster } from '@/types/property';
 import { POI_COLORS, getColorForK } from '@/constants';
 import { formatDistance } from '@/lib/utils';
+import { formatPrice } from '@/lib/format';
 import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/calculator';
 import { renderHeatmapToCanvas } from '@/hooks/useCanvasRenderer';
 
@@ -140,6 +142,9 @@ interface MapViewProps {
   factors?: Factor[];
   popupTranslations?: PopupTranslations;
   factorTranslations?: FactorTranslations;
+  properties?: OtodomProperty[];
+  propertyClusters?: PropertyCluster[];
+  showProperties?: boolean;
 }
 
 // Default translations (English)
@@ -323,11 +328,17 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   factors = [],
   popupTranslations = defaultPopupTranslations,
   factorTranslations = {},
+  properties = [],
+  propertyClusters = [],
+  showProperties = false,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const gridLayerRef = useRef<L.LayerGroup | null>(null);
   const poiLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const propertyLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const propertyMarkersRef = useRef<Map<number, L.Marker>>(new Map());
+  const clusterMarkersRef = useRef<L.Marker[]>([]);
   const canvasOverlayRef = useRef<L.ImageOverlay | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const blobUrlRef = useRef<string | null>(null); // Track blob URL for cleanup
@@ -473,6 +484,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         // Create layer groups
         gridLayerRef.current = L.layerGroup().addTo(map);
         poiLayerGroupRef.current = L.layerGroup().addTo(map);
+        propertyLayerGroupRef.current = L.layerGroup().addTo(map);
         
         // Create a custom pane for the heatmap overlay (between tiles and markers)
         map.createPane('heatmapPane');
@@ -543,6 +555,9 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         mapInstanceRef.current = null;
         gridLayerRef.current = null;
         poiLayerGroupRef.current = null;
+        propertyLayerGroupRef.current = null;
+        propertyMarkersRef.current.clear();
+        clusterMarkersRef.current = [];
         canvasOverlayRef.current = null;
         offscreenCanvasRef.current = null;
       }
@@ -771,6 +786,214 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
     updatePOIs();
   }, [mapReady, pois, showPOIs, factors]);
+
+  // Update property markers when properties or showProperties changes
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current || !propertyLayerGroupRef.current) return;
+
+    const updateProperties = async () => {
+      try {
+        const L = (await import('leaflet')).default;
+
+        if (!propertyLayerGroupRef.current) return;
+
+        // Hide layer if showProperties is false
+        if (!showProperties) {
+          propertyLayerGroupRef.current.clearLayers();
+          propertyMarkersRef.current.clear();
+          clusterMarkersRef.current = [];
+          return;
+        }
+
+        // Clear old cluster markers
+        for (const marker of clusterMarkersRef.current) {
+          propertyLayerGroupRef.current.removeLayer(marker);
+        }
+        clusterMarkersRef.current = [];
+
+        // Track which property IDs we've seen
+        const currentIds = new Set<number>();
+
+        // Create custom icon for properties
+        const propertyIcon = L.divIcon({
+          className: 'property-marker',
+          html: `
+            <div style="
+              width: 28px;
+              height: 28px;
+              background: #3b82f6;
+              border: 2px solid white;
+              border-radius: 50%;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            ">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+              </svg>
+            </div>
+          `,
+          iconSize: [28, 28],
+          iconAnchor: [14, 28],
+          popupAnchor: [0, -28],
+        });
+
+        // Add or update property markers
+        for (const property of properties) {
+          currentIds.add(property.id);
+
+          // Check if marker already exists
+          const existingMarker = propertyMarkersRef.current.get(property.id);
+          if (existingMarker) {
+            continue;
+          }
+
+          const pricePerMeter = property.areaInSquareMeters > 0
+            ? Math.round(property.totalPrice.value / property.areaInSquareMeters)
+            : null;
+
+          // Create image gallery HTML if multiple images
+          const imageCount = property.images.length;
+          const galleryId = `gallery-${property.id}`;
+          let imageHtml = '';
+          
+          if (imageCount > 0) {
+            const imagesJson = JSON.stringify(property.images.map(img => img.medium)).replace(/"/g, '&quot;');
+            imageHtml = `
+              <div style="position: relative; margin: -8px -8px 6px -8px; background: #f3f4f6; border-radius: 6px 6px 0 0;">
+                <img 
+                  id="${galleryId}-img" 
+                  src="${property.images[0].medium}" 
+                  alt="" 
+                  style="width: 100%; height: auto; max-height: 180px; object-fit: contain; border-radius: 6px 6px 0 0; display: block;" 
+                  onerror="this.style.display='none'" 
+                />
+                ${imageCount > 1 ? `
+                  <div style="position: absolute; bottom: 6px; right: 6px; background: rgba(0,0,0,0.6); color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px;">
+                    <span id="${galleryId}-counter">1</span>/${imageCount}
+                  </div>
+                  <button 
+                    onclick="(function(){
+                      var imgs = ${imagesJson};
+                      var img = document.getElementById('${galleryId}-img');
+                      var counter = document.getElementById('${galleryId}-counter');
+                      var idx = parseInt(counter.textContent) - 1;
+                      idx = (idx - 1 + imgs.length) % imgs.length;
+                      img.src = imgs[idx];
+                      counter.textContent = idx + 1;
+                    })()"
+                    style="position: absolute; left: 4px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center;"
+                  >‹</button>
+                  <button 
+                    onclick="(function(){
+                      var imgs = ${imagesJson};
+                      var img = document.getElementById('${galleryId}-img');
+                      var counter = document.getElementById('${galleryId}-counter');
+                      var idx = parseInt(counter.textContent) - 1;
+                      idx = (idx + 1) % imgs.length;
+                      img.src = imgs[idx];
+                      counter.textContent = idx + 1;
+                    })()"
+                    style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center;"
+                  >›</button>
+                ` : ''}
+              </div>
+            `;
+          }
+
+          const popupContent = `
+            <div style="min-width: 200px; max-width: 260px; font-family: system-ui, -apple-system, sans-serif; font-size: 11px;">
+              ${imageHtml}
+              <div style="font-weight: 600; font-size: 12px; margin-bottom: 4px; line-height: 1.3; max-height: 2.6em; overflow: hidden;">
+                ${property.title}
+              </div>
+              <div style="font-size: 14px; font-weight: 700; color: #16a34a; margin-bottom: 6px;">
+                ${property.hidePrice ? 'Cena do negocjacji' : formatPrice(property.totalPrice.value, property.totalPrice.currency)}
+              </div>
+              <div style="display: flex; gap: 8px; color: #6b7280; margin-bottom: 6px; flex-wrap: wrap;">
+                <span>📐 ${property.areaInSquareMeters} m²</span>
+                ${property.roomsNumber ? `<span>🚪 ${property.roomsNumber}</span>` : ''}
+              </div>
+              ${pricePerMeter ? `<div style="color: #9ca3af; font-size: 10px; margin-bottom: 6px;">${formatPrice(pricePerMeter)}/m²</div>` : ''}
+              <a 
+                href="${property.url}" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style="display: inline-block; background: #3b82f6; color: white; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 10px; font-weight: 500;"
+              >
+                Otodom →
+              </a>
+            </div>
+          `;
+
+          // Create new marker
+          const marker = L.marker([property.lat, property.lng], {
+            icon: propertyIcon,
+          });
+
+          marker.bindPopup(popupContent, {
+            maxWidth: 280,
+            className: 'property-popup',
+          });
+
+          marker.addTo(propertyLayerGroupRef.current);
+          propertyMarkersRef.current.set(property.id, marker);
+        }
+
+        // Remove property markers that are no longer in the list
+        for (const [id, marker] of propertyMarkersRef.current) {
+          if (!currentIds.has(id)) {
+            propertyLayerGroupRef.current.removeLayer(marker);
+            propertyMarkersRef.current.delete(id);
+          }
+        }
+
+        // Add cluster markers (when zoomed out)
+        for (const cluster of propertyClusters) {
+          // Create cluster icon with count
+          const clusterIcon = L.divIcon({
+            className: 'property-cluster-marker',
+            html: `
+              <div style="
+                min-width: 36px;
+                height: 36px;
+                background: #3b82f6;
+                border: 3px solid white;
+                border-radius: 18px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0 8px;
+              ">
+                <span style="color: white; font-weight: 700; font-size: 12px;">${cluster.count}</span>
+              </div>
+            `,
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
+          });
+
+          const clusterMarker = L.marker([cluster.lat, cluster.lng], {
+            icon: clusterIcon,
+          });
+
+          clusterMarker.bindTooltip(`${cluster.count} properties`, {
+            direction: 'top',
+            offset: [0, -18],
+          });
+
+          clusterMarker.addTo(propertyLayerGroupRef.current);
+          clusterMarkersRef.current.push(clusterMarker);
+        }
+      } catch (error) {
+        console.error('Error updating property markers:', error);
+      }
+    };
+
+    updateProperties();
+  }, [mapReady, properties, propertyClusters, showProperties]);
 
   return (
     <div 

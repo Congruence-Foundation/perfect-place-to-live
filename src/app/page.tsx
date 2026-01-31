@@ -1,16 +1,19 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import MapContainer, { MapContainerRef } from '@/components/Map/MapContainer';
-import { WeightSliders, CitySearch, HeatmapSettings, ProfileSelector, MapSettings, DebugInfo, AppInfo, LanguageSwitcher, BottomSheet, RefreshButton } from '@/components/Controls';
+import { WeightSliders, CitySearch, HeatmapSettings, ProfileSelector, MapSettings, DebugInfo, AppInfo, LanguageSwitcher, BottomSheet, RefreshButton, RealEstateSidebar, ScoreRangeSlider, DataSourcesPanel, DataSource } from '@/components/Controls';
 import { Button } from '@/components/ui/button';
+import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { DEFAULT_FACTORS, applyProfile, FACTOR_PROFILES } from '@/config/factors';
 import { Bounds, Factor } from '@/types';
-import { useHeatmap, useIsMobile, useNotification } from '@/hooks';
+import { PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/types/property';
+import { useHeatmap, useIsMobile, useNotification, useOtodomProperties } from '@/hooks';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Loader2, ChevronLeft, ChevronRight, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
 import { isViewportCovered, isBoundsTooLarge, expandBounds } from '@/lib/bounds';
+import { filterPropertiesByScore, filterClustersByScore } from '@/lib/score-lookup';
 import { Toast } from '@/components/ui/toast';
 
 // Grid buffer used by the API (must match GRID_BUFFER_DEGREES in route.ts)
@@ -20,6 +23,7 @@ export default function Home() {
   const tApp = useTranslations('app');
   const tControls = useTranslations('controls');
   const tProfiles = useTranslations('profiles');
+  const tRealEstate = useTranslations('realEstate');
 
   const isMobile = useIsMobile();
 
@@ -39,6 +43,12 @@ export default function Home() {
     normalizeToViewport: false, // absolute scoring by default
   });
 
+  // Real estate state
+  const [realEstateEnabled, setRealEstateEnabled] = useState(false);
+  const [propertyFilters, setPropertyFilters] = useState<PropertyFilters>(DEFAULT_PROPERTY_FILTERS);
+  const [scoreRange, setScoreRange] = useState<[number, number]>([50, 100]);
+  const [dataSources, setDataSources] = useState<DataSource[]>(['otodom']);
+
   // Track bottom sheet height for mobile loading overlay positioning
   // Default to ~7% of viewport height (will be updated by BottomSheet)
   const [bottomSheetHeight, setBottomSheetHeight] = useState(() => {
@@ -50,11 +60,21 @@ export default function Home() {
 
   const { heatmapPoints, pois, isLoading, error, metadata, usedFallback, fetchHeatmap, clearHeatmap, abortFetch, clearFallbackNotification } = useHeatmap();
   const { notification, showNotification } = useNotification();
+  const { 
+    properties, 
+    clusters: propertyClusters,
+    isLoading: isLoadingProperties, 
+    error: propertiesError, 
+    totalCount: propertyCount,
+    fetchProperties, 
+    clearProperties 
+  } = useOtodomProperties();
 
   // Debounce bounds and factors to avoid too many API calls
   const debouncedBounds = useDebounce(bounds, 500);
   const debouncedFactors = useDebounce(factors, 300);
   const debouncedSettings = useDebounce(heatmapSettings, 300);
+  const debouncedPropertyFilters = useDebounce(propertyFilters, 500);
 
   // Track if user has interacted (searched for a city)
   const hasInteracted = useRef(false);
@@ -108,6 +128,10 @@ export default function Home() {
     setHeatmapSettings((prev) => ({ ...prev, ...updates }));
     // Mark as interacted so the heatmap updates
     hasInteracted.current = true;
+  }, []);
+
+  const handlePropertyFiltersChange = useCallback((updates: Partial<PropertyFilters>) => {
+    setPropertyFilters((prev) => ({ ...prev, ...updates }));
   }, []);
 
   const handleRefresh = useCallback(() => {
@@ -216,8 +240,49 @@ export default function Home() {
     );
   }, [debouncedBounds, debouncedFactors, debouncedSettings, mode, fetchHeatmap, clearHeatmap, useOverpassAPI]);
 
+  // Fetch properties when bounds or filters change (only when real estate is enabled)
+  useEffect(() => {
+    if (!realEstateEnabled || !debouncedBounds) {
+      clearProperties();
+      return;
+    }
+
+    // Don't fetch if viewport is too large
+    if (isBoundsTooLarge(debouncedBounds)) {
+      return;
+    }
+
+    fetchProperties(debouncedBounds, debouncedPropertyFilters);
+  }, [realEstateEnabled, debouncedBounds, debouncedPropertyFilters, fetchProperties, clearProperties]);
+
   const enabledFactorCount = factors.filter((f) => f.enabled && f.weight !== 0).length;
   const totalPOICount = Object.values(pois).reduce((sum, arr) => sum + arr.length, 0);
+
+  // Filter properties by heatmap score
+  const filteredProperties = useMemo(() => {
+    if (!realEstateEnabled || (scoreRange[0] === 0 && scoreRange[1] === 100)) {
+      return properties;
+    }
+    return filterPropertiesByScore(
+      properties,
+      heatmapPoints,
+      scoreRange,
+      heatmapSettings.gridCellSize
+    );
+  }, [properties, heatmapPoints, scoreRange, realEstateEnabled, heatmapSettings.gridCellSize]);
+
+  // Filter clusters by heatmap score
+  const filteredClusters = useMemo(() => {
+    if (!realEstateEnabled || (scoreRange[0] === 0 && scoreRange[1] === 100)) {
+      return propertyClusters;
+    }
+    return filterClustersByScore(
+      propertyClusters,
+      heatmapPoints,
+      scoreRange,
+      heatmapSettings.gridCellSize
+    );
+  }, [propertyClusters, heatmapPoints, scoreRange, realEstateEnabled, heatmapSettings.gridCellSize]);
 
   // Check if viewport is too large (zoomed out too much) - matches the fetch threshold
   const isZoomedOutTooMuch = bounds ? isBoundsTooLarge(bounds) : false;
@@ -254,13 +319,15 @@ export default function Home() {
         >
           <div className="w-80 h-full overflow-y-auto scrollbar-hidden">
             {/* Header */}
-            <div className="px-5 pt-5 pb-4">
+            <div className="px-5 pt-5 pb-4 flex items-center gap-2">
               <h1 className="text-xl font-semibold tracking-tight">{tApp('title')}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">{tApp('subtitle')}</p>
+              <InfoTooltip>
+                <p className="text-xs">{tApp('description')}</p>
+              </InfoTooltip>
             </div>
 
             {/* Profiles Section */}
-            <div className="px-5 pb-4">
+            <div className="px-5 pb-3">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{tControls('profile')}</span>
               </div>
@@ -275,11 +342,8 @@ export default function Home() {
               )}
             </div>
 
-            {/* Divider */}
-            <div className="mx-5 border-t" />
-
             {/* Factors Section - Collapsible */}
-            <div className="px-5 py-4">
+            <div className="px-5 pb-4">
               <div className={`rounded-xl bg-muted/50 transition-colors ${isFactorsExpanded ? '' : 'hover:bg-muted'}`}>
                 {/* Header - always visible */}
                 <div className="flex items-center justify-between p-3">
@@ -322,6 +386,110 @@ export default function Home() {
                 )}
               </div>
             </div>
+
+            {/* Divider */}
+            <div className="mx-5 border-t" />
+
+            {/* Real Estate Section */}
+            <div className="px-5 py-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{tControls('extensions')}</span>
+                <InfoTooltip>
+                  <p className="text-xs">{tControls('extensionsTooltip')}</p>
+                </InfoTooltip>
+              </div>
+              
+              {/* Transaction Type Buttons */}
+              <div className="flex gap-1 mb-3">
+                <button
+                  onClick={() => {
+                    setRealEstateEnabled(false);
+                  }}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                    !realEstateEnabled
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                  }`}
+                >
+                  {tRealEstate('none')}
+                </button>
+                <button
+                  onClick={() => {
+                    setRealEstateEnabled(true);
+                    handlePropertyFiltersChange({ 
+                      transaction: 'RENT',
+                      priceMin: 1000,
+                      priceMax: 10000
+                    });
+                  }}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                    realEstateEnabled && propertyFilters.transaction === 'RENT'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                  }`}
+                >
+                  {tRealEstate('rent')}
+                </button>
+                <button
+                  onClick={() => {
+                    setRealEstateEnabled(true);
+                    handlePropertyFiltersChange({ 
+                      transaction: 'SELL',
+                      priceMin: 100000,
+                      priceMax: 2000000
+                    });
+                  }}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                    realEstateEnabled && propertyFilters.transaction === 'SELL'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                  }`}
+                >
+                  {tRealEstate('sell')}
+                </button>
+              </div>
+
+              {/* Score Range Slider (only when real estate is enabled) */}
+              {realEstateEnabled && (
+                <div className="mb-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs text-muted-foreground">{tRealEstate('scoreFilter')}</span>
+                    <InfoTooltip>
+                      <p className="text-xs">{tRealEstate('scoreFilterTooltip')}</p>
+                    </InfoTooltip>
+                  </div>
+                  <ScoreRangeSlider
+                    value={scoreRange}
+                    onChange={setScoreRange}
+                  />
+                  <div className="flex justify-between mt-1">
+                    <span className="text-[10px] text-muted-foreground">{scoreRange[0]}%</span>
+                    <span className="text-[10px] text-muted-foreground">{scoreRange[1]}%</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Real Estate Filters (only when enabled) */}
+              {realEstateEnabled && (
+                <>
+                  <RealEstateSidebar
+                    filters={propertyFilters}
+                    onFiltersChange={handlePropertyFiltersChange}
+                    propertyCount={propertyCount}
+                    isLoading={isLoadingProperties}
+                    error={propertiesError}
+                  />
+                  
+                  {/* Data Sources */}
+                  <div className="mt-3">
+                    <DataSourcesPanel
+                      enabledSources={dataSources}
+                      onSourcesChange={setDataSources}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -360,6 +528,9 @@ export default function Home() {
           pois={pois}
           showPOIs={showPOIs}
           factors={factors}
+          properties={filteredProperties}
+          propertyClusters={filteredClusters}
+          showProperties={realEstateEnabled}
         />
 
         {/* Top Right Controls - Language Switcher and App Info */}
@@ -437,6 +608,16 @@ export default function Home() {
           onProfileSelect={handleProfileSelect}
           onResetFactors={handleResetFactors}
           onHeightChange={setBottomSheetHeight}
+          // Real estate props
+          realEstateEnabled={realEstateEnabled}
+          onRealEstateEnabledChange={setRealEstateEnabled}
+          propertyFilters={propertyFilters}
+          onPropertyFiltersChange={handlePropertyFiltersChange}
+          propertyCount={propertyCount}
+          isLoadingProperties={isLoadingProperties}
+          propertiesError={propertiesError}
+          scoreRange={scoreRange}
+          onScoreRangeChange={setScoreRange}
           floatingControls={
             <>
               {/* Debug Info - Left */}

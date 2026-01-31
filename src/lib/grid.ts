@@ -1,14 +1,5 @@
 import { Bounds, Point } from '@/types';
-
-// Meters per degree of latitude (approximately constant)
-const METERS_PER_DEGREE_LAT = 111320;
-
-/**
- * Calculate meters per degree of longitude at a given latitude
- */
-function metersPerDegreeLng(lat: number): number {
-  return METERS_PER_DEGREE_LAT * Math.cos(lat * (Math.PI / 180));
-}
+import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from './geo';
 
 /**
  * Generate a grid of sample points within the given bounds

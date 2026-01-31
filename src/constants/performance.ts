@@ -38,3 +38,41 @@ export const PERFORMANCE_CONFIG = {
   /** Maximum cell size in meters for grid calculations */
   MAX_CELL_SIZE: 500,
 } as const;
+
+/**
+ * Overpass API retry and timeout configuration
+ */
+export const OVERPASS_CONFIG = {
+  /** Timeout for single-factor queries (seconds) */
+  TIMEOUT_SINGLE: 30,
+  
+  /** Timeout for combined multi-factor queries (seconds) */
+  TIMEOUT_COMBINED: 60,
+  
+  /** Number of retry attempts */
+  RETRY_COUNT: 3,
+  
+  /** Base delay between retries (ms) */
+  BASE_DELAY_MS: 1000,
+  
+  /** Maximum delay between retries (ms) */
+  MAX_DELAY_MS: 10000,
+  
+  /** HTTP status codes that trigger a retry */
+  RETRYABLE_STATUSES: [429, 503, 504] as const,
+} as const;
+
+/**
+ * Density bonus configuration for heatmap calculations
+ * Rewards areas with multiple nearby POIs of the same type
+ */
+export const DENSITY_BONUS = {
+  /** Consider POIs within this fraction of maxDistance for density (0.5 = 50%) */
+  RADIUS_RATIO: 0.5,
+  
+  /** Maximum bonus as a fraction (0.15 = 15% improvement) */
+  MAX: 0.15,
+  
+  /** Number of additional POIs needed for full bonus */
+  SCALE: 3,
+} as const;

@@ -5,6 +5,7 @@ import { DEFAULT_FACTORS } from '@/config/factors';
 import { Bounds, POI } from '@/types';
 import { isValidBounds } from '@/lib/bounds';
 import { PERFORMANCE_CONFIG } from '@/constants';
+import { errorResponse } from '@/lib/api-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -98,9 +99,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('POI API error:', error);
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    const status = message === 'No valid factors found' ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const status = error instanceof Error && error.message === 'No valid factors found' ? 400 : 500;
+    return errorResponse(error, status);
   }
 }
 
@@ -127,8 +127,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('POI API error:', error);
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    const status = message === 'No valid factors found' ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const status = error instanceof Error && error.message === 'No valid factors found' ? 400 : 500;
+    return errorResponse(error, status);
   }
 }

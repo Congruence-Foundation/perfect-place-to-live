@@ -8,6 +8,7 @@ import { DEFAULT_FACTORS } from '@/config/factors';
 import { Factor, POI, HeatmapRequest } from '@/types';
 import { estimateGridSize, calculateAdaptiveGridSize } from '@/lib/grid';
 import { expandBounds, isValidBounds } from '@/lib/bounds';
+import { errorResponse } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
@@ -250,9 +251,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(responseData);
   } catch (error) {
     console.error('Heatmap API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return errorResponse(error);
   }
 }

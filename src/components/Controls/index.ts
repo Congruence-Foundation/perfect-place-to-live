@@ -7,4 +7,11 @@ export { default as AppInfo } from './AppInfo';
 export { default as LanguageSwitcher } from './LanguageSwitcher';
 export { default as BottomSheet } from './BottomSheet';
 export { RefreshButton } from './RefreshButton';
+export { default as RealEstateSidebar } from './RealEstateSidebar';
+export { default as ScoreRangeSlider } from './ScoreRangeSlider';
+export { default as DataSourcesPanel } from './DataSourcesPanel';
+export type { DataSource } from './DataSourcesPanel';
 export type { HeatmapSettings } from '@/types';
+
+// Reusable filter components
+export { RangeInput, ToggleButtonGroup, FilterSelect } from './filters';

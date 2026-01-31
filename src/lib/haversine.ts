@@ -1,13 +1,5 @@
 import { Point, POI } from '@/types';
-
-const EARTH_RADIUS_METERS = 6371000;
-
-/**
- * Convert degrees to radians
- */
-function toRad(degrees: number): number {
-  return degrees * (Math.PI / 180);
-}
+import { EARTH_RADIUS_METERS, toRad } from './geo';
 
 /**
  * Calculate the Haversine distance between two points in meters

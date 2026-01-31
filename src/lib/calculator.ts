@@ -1,15 +1,9 @@
 import { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/types';
 import { haversineDistance, SpatialIndex } from './haversine';
 import { generateGrid, calculateAdaptiveGridSize } from './grid';
-import { PERFORMANCE_CONFIG } from '@/constants';
+import { PERFORMANCE_CONFIG, DENSITY_BONUS } from '@/constants';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
-
-// Density bonus configuration
-// Having multiple POIs nearby slightly improves the score
-const DENSITY_BONUS_RADIUS = 0.5; // Consider POIs within 50% of maxDistance for density
-const DENSITY_BONUS_MAX = 0.15;   // Maximum bonus (15% improvement)
-const DENSITY_BONUS_SCALE = 3;    // Number of POIs needed for full bonus
 
 /**
  * K value statistics for debugging and analysis
@@ -164,7 +158,7 @@ export function normalizeKValues(points: HeatmapPoint[]): HeatmapPoint[] {
 
 /**
  * Calculate density bonus based on number of nearby POIs
- * Returns a value between 0 and DENSITY_BONUS_MAX
+ * Returns a value between 0 and DENSITY_BONUS.MAX
  * More POIs = higher bonus (diminishing returns)
  */
 function calculateDensityBonus(
@@ -175,7 +169,7 @@ function calculateDensityBonus(
 ): number {
   if (pois.length <= 1) return 0;
   
-  const searchRadius = maxDistance * DENSITY_BONUS_RADIUS;
+  const searchRadius = maxDistance * DENSITY_BONUS.RADIUS_RATIO;
   let nearbyCount = 0;
   
   if (spatialIndex) {
@@ -195,8 +189,8 @@ function calculateDensityBonus(
   // At count=0: bonus=0, at count=scale: bonus=max/2, approaches max asymptotically
   if (nearbyCount <= 1) return 0;
   
-  const normalizedCount = (nearbyCount - 1) / DENSITY_BONUS_SCALE;
-  const bonus = DENSITY_BONUS_MAX * (1 - 1 / (normalizedCount + 1));
+  const normalizedCount = (nearbyCount - 1) / DENSITY_BONUS.SCALE;
+  const bonus = DENSITY_BONUS.MAX * (1 - 1 / (normalizedCount + 1));
   
   return bonus;
 }

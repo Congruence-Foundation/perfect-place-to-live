@@ -43,12 +43,18 @@ function chunkArray<T>(array: T[], numChunks: number): T[][] {
  * We inline it to avoid TypeScript compilation issues
  * 
  * OPTIMIZED: Receives pre-built spatial index data to avoid rebuilding
+ * 
+ * NOTE: Constants (EARTH_RADIUS_METERS, DENSITY_BONUS_*) are duplicated here
+ * because worker threads cannot import from other modules. Keep in sync with:
+ * - src/lib/geo.ts (EARTH_RADIUS_METERS)
+ * - src/constants/performance.ts (DENSITY_BONUS)
  */
 const WORKER_CODE = `
 const { parentPort, workerData } = require('worker_threads');
 
+// These constants must match src/constants/performance.ts DENSITY_BONUS
 const EARTH_RADIUS_METERS = 6371000;
-const DENSITY_BONUS_RADIUS = 0.5;
+const DENSITY_BONUS_RADIUS_RATIO = 0.5;
 const DENSITY_BONUS_MAX = 0.15;
 const DENSITY_BONUS_SCALE = 3;
 
@@ -163,7 +169,7 @@ function calculateK(point, poiData, factors, spatialIndexes, distanceCurve, sens
     let value = isNegative ? 1 - normalizedDistance : normalizedDistance;
 
     if (!isNegative && pois.length > 1 && spatialIndex) {
-      const searchRadius = factor.maxDistance * DENSITY_BONUS_RADIUS;
+      const searchRadius = factor.maxDistance * DENSITY_BONUS_RADIUS_RATIO;
       const nearbyCount = spatialIndex.countWithinRadius(point, searchRadius);
       if (nearbyCount > 1) {
         const normalizedCount = (nearbyCount - 1) / DENSITY_BONUS_SCALE;
