@@ -143,8 +143,7 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
         setQuery('');
         setIsLocating(false);
       },
-      (err) => {
-        console.log('Geolocation error:', err.message);
+      () => {
         setError(t('locationFailed'));
         setIsLocating(false);
       },

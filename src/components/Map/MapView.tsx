@@ -1,247 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
-import { HeatmapPoint, POI, Factor, Bounds, ClusterPriceAnalysisMode } from '@/types';
-import { OtodomProperty, PropertyCluster, PropertyFilters, ClusterPropertiesResponse, EstateType, EnrichedProperty, PriceCategory, ClusterPriceDisplay } from '@/types/property';
-import { POI_COLORS, getColorForK } from '@/constants';
+import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
+import { POI_COLORS, getColorForK, Z_INDEX } from '@/constants';
 import { formatDistance } from '@/lib/utils';
-import { formatPrice, roomCountToNumber, formatCompactPrice } from '@/lib/format';
-import { generatePropertyMarkerHtml, getPropertyMarkerClassName } from '@/lib/property-markers';
 import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/calculator';
 import { renderHeatmapToCanvas } from '@/hooks/useCanvasRenderer';
-import { ClusterAnalysisMap, getClusterId, PRICE_CATEGORY_COLORS, enrichPropertiesSimplified } from '@/lib/price-analysis';
-
-// Constants for cluster operations
-const DEFAULT_GRID_CELL_SIZE = 200;
-const BACKGROUND_FETCH_LIMIT = 100;
-const CLICK_FETCH_LIMIT = 500;
-const DEFAULT_CLUSTER_RADIUS = 1000;
-const CLUSTER_ICON_SIZE = 36;
-const CLUSTER_ICON_WITH_LABEL_HEIGHT = 54;
-
-// Price analysis badge configuration
-const PRICE_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
-  great_deal: { bg: '#f0fdf4', text: '#16a34a' },
-  good_deal: { bg: '#f0fdf4', text: '#059669' },
-  fair: { bg: '#f8fafc', text: '#64748b' },
-  above_avg: { bg: '#fff7ed', text: '#ea580c' },
-  overpriced: { bg: '#fef2f2', text: '#dc2626' },
-};
-
-const PRICE_BADGE_LABELS: Record<string, string> = {
-  great_deal: 'Great Deal',
-  good_deal: 'Good Deal',
-  fair: 'Fair Price',
-  above_avg: 'Above Avg',
-  overpriced: 'Overpriced',
-};
-
-// Generate cluster price label based on display mode
-function generateClusterPriceLabel(
-  prices: number[],
-  displayMode: ClusterPriceDisplay
-): string {
-  if (displayMode === 'none' || prices.length === 0) {
-    return '';
-  }
-
-  const sortedPrices = [...prices].sort((a, b) => a - b);
-  const minPrice = sortedPrices[0];
-  const maxPrice = sortedPrices[sortedPrices.length - 1];
-  const medianPrice = sortedPrices[Math.floor(sortedPrices.length / 2)];
-
-  switch (displayMode) {
-    case 'range':
-      return `${formatCompactPrice(minPrice)} - ${formatCompactPrice(maxPrice)}`;
-    
-    case 'median':
-      return `~${formatCompactPrice(medianPrice)}`;
-    
-    case 'median_spread': {
-      // Calculate spread as percentage from median
-      const spread = Math.round(((maxPrice - minPrice) / medianPrice) * 50); // ±spread%
-      return `${formatCompactPrice(medianPrice)} ±${spread}%`;
-    }
-    
-    default:
-      return '';
-  }
-}
-
-// Get min/max price categories from enriched properties
-function getClusterPriceCategories(
-  properties: EnrichedProperty[]
-): { minCategory: PriceCategory | null; maxCategory: PriceCategory | null } {
-  const withAnalysis = properties.filter(p => p.priceAnalysis && p.priceAnalysis.priceCategory !== 'no_data');
-  
-  if (withAnalysis.length === 0) {
-    return { minCategory: null, maxCategory: null };
-  }
-
-  // Sort by price score (lower = better deal)
-  const sorted = [...withAnalysis].sort((a, b) => 
-    (a.priceAnalysis?.priceScore || 0) - (b.priceAnalysis?.priceScore || 0)
-  );
-
-  return {
-    minCategory: sorted[0].priceAnalysis?.priceCategory || null,
-    maxCategory: sorted[sorted.length - 1].priceAnalysis?.priceCategory || null,
-  };
-}
-
-// Create cluster icon HTML with optional price label and glow
-function createClusterIconHtml(
-  count: number,
-  priceLabel: string,
-  minCategory: PriceCategory | null,
-  maxCategory: PriceCategory | null
-): { html: string; hasLabel: boolean } {
-  const leftGlowColor = minCategory ? PRICE_CATEGORY_COLORS[minCategory] : null;
-  const rightGlowColor = maxCategory ? PRICE_CATEGORY_COLORS[maxCategory] : null;
-  const hasGlow = leftGlowColor || rightGlowColor;
-  
-  // Build box-shadow for left/right glow
-  let boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-  if (hasGlow) {
-    const shadows = ['0 2px 8px rgba(0,0,0,0.3)'];
-    if (leftGlowColor) {
-      shadows.push(`-6px 0 12px -2px ${leftGlowColor}`);
-    }
-    if (rightGlowColor) {
-      shadows.push(`6px 0 12px -2px ${rightGlowColor}`);
-    }
-    boxShadow = shadows.join(', ');
-  }
-  
-  // Build the label below cluster (price only)
-  const hasLabel = !!priceLabel;
-  let bottomLabelHtml = '';
-  if (hasLabel) {
-    bottomLabelHtml = `
-      <div style="
-        position: absolute;
-        top: 38px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(255,255,255,0.95);
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 9px;
-        font-weight: 500;
-        color: #374151;
-        white-space: nowrap;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-        pointer-events: none;
-      ">${priceLabel}</div>
-    `;
-  }
-  
-  const html = `
-    <div style="position: relative;">
-      <div style="
-        min-width: 36px;
-        height: 36px;
-        background: #3b82f6;
-        border: 3px solid white;
-        border-radius: 18px;
-        box-shadow: ${boxShadow};
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0 8px;
-        cursor: pointer;
-      ">
-        <span style="color: white; font-weight: 700; font-size: 12px;">${count}</span>
-      </div>
-      ${bottomLabelHtml}
-    </div>
-  `;
-  
-  return { html, hasLabel };
-}
-
-/**
- * Enrich fetched cluster properties with price analysis data
- * First tries to find existing enriched versions, then falls back to simplified enrichment
- */
-function enrichClusterProperties(
-  fetchedProperties: OtodomProperty[],
-  existingEnrichedProperties: EnrichedProperty[],
-  heatmapPoints: HeatmapPoint[]
-): EnrichedProperty[] {
-  // Create a map of already-enriched properties by ID for quick lookup
-  const enrichedPropsMap = new Map<number, EnrichedProperty>();
-  for (const p of existingEnrichedProperties) {
-    enrichedPropsMap.set(p.id, p);
-  }
-  
-  // Map fetched properties to enriched versions
-  let enrichedProps = fetchedProperties.map(p => {
-    const existingEnriched = enrichedPropsMap.get(p.id);
-    if (existingEnriched && existingEnriched.priceAnalysis) {
-      return existingEnriched;
-    }
-    return { ...p } as EnrichedProperty;
-  });
-  
-  // If we didn't find any enriched properties and have heatmap data, try to enrich
-  const hasAnyEnriched = enrichedProps.some(p => p.priceAnalysis);
-  if (!hasAnyEnriched && heatmapPoints.length > 0) {
-    enrichedProps = enrichPropertiesSimplified(fetchedProperties, heatmapPoints, DEFAULT_GRID_CELL_SIZE);
-  }
-  
-  return enrichedProps;
-}
-
-/**
- * Extract valid prices from properties (excluding hidden/zero prices)
- */
-function getValidPrices(properties: Array<OtodomProperty | EnrichedProperty>): number[] {
-  return properties
-    .filter(p => !p.hidePrice && p.totalPrice.value > 0)
-    .map(p => p.totalPrice.value);
-}
-
-/**
- * Create a Leaflet divIcon for a cluster marker
- */
-function createClusterDivIcon(
-  L: typeof import('leaflet'),
-  count: number,
-  priceLabel: string,
-  minCategory: PriceCategory | null,
-  maxCategory: PriceCategory | null
-): L.DivIcon {
-  const { html, hasLabel } = createClusterIconHtml(count, priceLabel, minCategory, maxCategory);
-  return L.divIcon({
-    className: 'property-cluster-marker',
-    html,
-    iconSize: [CLUSTER_ICON_SIZE, hasLabel ? CLUSTER_ICON_WITH_LABEL_HEIGHT : CLUSTER_ICON_SIZE],
-    iconAnchor: [CLUSTER_ICON_SIZE / 2, CLUSTER_ICON_SIZE / 2],
-  });
-}
-
-/**
- * Generate price analysis badge HTML for property popups
- */
-function generatePriceAnalysisBadgeHtml(priceAnalysis: EnrichedProperty['priceAnalysis']): string {
-  if (!priceAnalysis || priceAnalysis.priceCategory === 'no_data') {
-    return '';
-  }
-  
-  const colors = PRICE_BADGE_COLORS[priceAnalysis.priceCategory] || PRICE_BADGE_COLORS.fair;
-  const label = PRICE_BADGE_LABELS[priceAnalysis.priceCategory] || 'Fair';
-  const percentSign = priceAnalysis.percentFromMedian >= 0 ? '+' : '';
-  
-  return `
-    <div style="margin-bottom: 6px; padding: 6px 8px; background: ${colors.bg}; border-radius: 4px;">
-      <div style="display: flex; align-items: center; justify-content: space-between;">
-        <span style="font-size: 10px; color: ${colors.text};">${label} · vs ${priceAnalysis.groupSize} similar</span>
-        <span style="font-weight: 600; color: ${colors.text}; font-size: 11px;">${percentSign}${priceAnalysis.percentFromMedian}%</span>
-      </div>
-    </div>
-  `;
-}
 
 // Popup translations interface
 export interface PopupTranslations {
@@ -277,11 +41,9 @@ function generatePopupContent(
   translations: PopupTranslations,
   factorTranslations: FactorTranslations
 ): string {
-  // Check if all factors have no POI data
   const allNoPOIs = breakdown.length > 0 && breakdown.every(item => item.noPOIs);
   
   if (allNoPOIs) {
-    // Show "no data" message when no POIs are loaded
     return `
       <div style="min-width: 180px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px; text-align: center; padding: 8px;">
         <div style="font-size: 24px; margin-bottom: 8px;">📍</div>
@@ -316,15 +78,9 @@ function generatePopupContent(
       ? (item.score > 0.5 ? '⚠' : '✓') 
       : (item.score < 0.5 ? '✓' : '⚠');
     const iconColor = icon === '✓' ? '#22c55e' : '#ef4444';
-    
-    // Show weight with sign
     const weightDisplay = item.weight > 0 ? `+${item.weight}` : `${item.weight}`;
     const weightColor = item.weight > 0 ? '#22c55e' : item.weight < 0 ? '#ef4444' : '#6b7280';
-    
-    // Show nearby count if more than 1
     const nearbyText = item.nearbyCount > 1 ? `(${item.nearbyCount})` : '';
-    
-    // Get translated factor name
     const factorName = factorTranslations[item.factorId] || item.factorName;
 
     html += `
@@ -363,6 +119,9 @@ export interface MapViewRef {
   flyTo: (lat: number, lng: number, zoom?: number) => void;
   fitBounds: (bounds: Bounds) => void;
   invalidateSize: () => void;
+  getMap: () => L.Map | null;
+  getExtensionLayerGroup: () => L.LayerGroup | null;
+  getLeaflet: () => typeof import('leaflet') | null;
 }
 
 interface MapViewProps {
@@ -376,16 +135,8 @@ interface MapViewProps {
   factors?: Factor[];
   popupTranslations?: PopupTranslations;
   factorTranslations?: FactorTranslations;
-  properties?: EnrichedProperty[];
-  propertyClusters?: PropertyCluster[];
-  showProperties?: boolean;
-  propertyFilters?: PropertyFilters;
-  clusterPriceDisplay?: ClusterPriceDisplay;
-  clusterPriceAnalysis?: ClusterPriceAnalysisMode;
-  detailedModeThreshold?: number;
-  clusterAnalysisData?: ClusterAnalysisMap;
-  clusterPropertiesCache?: Map<string, OtodomProperty[]>;
-  onClusterPropertiesFetched?: (clusterId: string, properties: OtodomProperty[]) => void;
+  /** Callback when map is ready with Leaflet instance */
+  onMapReady?: (map: L.Map, L: typeof import('leaflet'), extensionLayer: L.LayerGroup) => void;
 }
 
 // Default translations (English)
@@ -406,19 +157,27 @@ const LONG_PRESS_DURATION_MS = 500;
 const TOUCH_MOVE_THRESHOLD_PX = 10;
 const MOUSE_MOVE_THRESHOLD_PX = 5;
 
-/**
- * Long press state for tracking touch/mouse interactions
- */
+// Map initialization
+const MAP_INIT_DELAY_MS = 100;
+
+// Canvas rendering configuration
+const CANVAS_PIXELS_PER_CELL = 4;
+const CANVAS_MAX_DIMENSION = 4096;
+const CANVAS_MIN_DIMENSION = 256;
+const DEFAULT_GRID_SPACING = 0.002;
+
+// POI marker styling
+const POI_MARKER_RADIUS = 6;
+const POI_MARKER_BORDER_WIDTH = 2;
+const POI_MARKER_FILL_OPACITY = 0.8;
+const POI_TOOLTIP_OFFSET_Y = -8;
+
 interface LongPressState {
   timer: ReturnType<typeof setTimeout> | null;
   startPos: { x: number; y: number } | null;
   latLng: L.LatLng | null;
 }
 
-/**
- * Setup touch-based long press handler for mobile devices
- * Returns cleanup function to remove event listeners
- */
 function setupTouchLongPress(
   container: HTMLElement,
   mapInstance: L.Map,
@@ -435,11 +194,8 @@ function setupTouchLongPress(
 
   const handleTouchStart = (e: TouchEvent) => {
     clearState();
-    
     const touch = e.touches[0];
     state.startPos = { x: touch.clientX, y: touch.clientY };
-    
-    // Safety check: ensure map container is ready
     try {
       const containerPoint = mapInstance.mouseEventToContainerPoint({
         clientX: touch.clientX,
@@ -447,10 +203,8 @@ function setupTouchLongPress(
       } as MouseEvent);
       state.latLng = mapInstance.containerPointToLatLng(containerPoint);
     } catch {
-      // Map not ready yet, ignore
       return;
     }
-    
     state.timer = setTimeout(() => {
       if (state.latLng) {
         e.preventDefault();
@@ -462,13 +216,10 @@ function setupTouchLongPress(
 
   const handleTouchMove = (e: TouchEvent) => {
     if (!state.timer || !state.startPos) return;
-    
     const touch = e.touches[0];
     const dx = touch.clientX - state.startPos.x;
     const dy = touch.clientY - state.startPos.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    if (distance > TOUCH_MOVE_THRESHOLD_PX) {
+    if (Math.sqrt(dx * dx + dy * dy) > TOUCH_MOVE_THRESHOLD_PX) {
       clearState();
     }
   };
@@ -489,10 +240,6 @@ function setupTouchLongPress(
   };
 }
 
-/**
- * Setup mouse-based long press handler for desktop
- * Returns cleanup function to remove event listeners
- */
 function setupMouseLongPress(
   container: HTMLElement,
   mapInstance: L.Map,
@@ -508,20 +255,15 @@ function setupMouseLongPress(
   };
 
   const handleMouseDown = (e: MouseEvent) => {
-    if (e.button !== 0) return; // Only left click
-    
+    if (e.button !== 0) return;
     clearState();
     state.startPos = { x: e.clientX, y: e.clientY };
-    
-    // Safety check: ensure map container is ready
     try {
       const containerPoint = mapInstance.mouseEventToContainerPoint(e);
       state.latLng = mapInstance.containerPointToLatLng(containerPoint);
     } catch {
-      // Map not ready yet, ignore
       return;
     }
-    
     state.timer = setTimeout(() => {
       if (state.latLng) {
         onLongPress(state.latLng);
@@ -532,12 +274,9 @@ function setupMouseLongPress(
 
   const handleMouseMove = (e: MouseEvent) => {
     if (!state.timer || !state.startPos) return;
-    
     const dx = e.clientX - state.startPos.x;
     const dy = e.clientY - state.startPos.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    if (distance > MOUSE_MOVE_THRESHOLD_PX) {
+    if (Math.sqrt(dx * dx + dy * dy) > MOUSE_MOVE_THRESHOLD_PX) {
       clearState();
     }
   };
@@ -569,127 +308,81 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   factors = [],
   popupTranslations = defaultPopupTranslations,
   factorTranslations = {},
-  properties = [],
-  propertyClusters = [],
-  showProperties = false,
-  propertyFilters,
-  clusterPriceDisplay = 'median',
-  clusterPriceAnalysis = 'simplified',
-  detailedModeThreshold = 100,
-  clusterAnalysisData,
-  clusterPropertiesCache,
-  onClusterPropertiesFetched,
+  onMapReady,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
+  const leafletRef = useRef<typeof import('leaflet') | null>(null);
   const gridLayerRef = useRef<L.LayerGroup | null>(null);
   const poiLayerGroupRef = useRef<L.LayerGroup | null>(null);
-  const propertyLayerGroupRef = useRef<L.LayerGroup | null>(null);
-  const propertyMarkersRef = useRef<Map<number, L.Marker>>(new Map());
-  const clusterMarkersRef = useRef<Map<string, L.Marker>>(new Map());
+  const extensionLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const canvasOverlayRef = useRef<L.ImageOverlay | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const blobUrlRef = useRef<string | null>(null); // Track blob URL for cleanup
+  const blobUrlRef = useRef<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const initializingRef = useRef(false);
   
-  // Store current bounds for canvas rendering
-  const currentBoundsRef = useRef<Bounds | null>(null);
+  // Track previous heatmap data to avoid unnecessary re-renders
+  const prevHeatmapHashRef = useRef<string>('');
   
-  // Store current pois and factors in refs for click handler
+  const currentBoundsRef = useRef<Bounds | null>(null);
   const poisRef = useRef(pois);
   const factorsRef = useRef(factors);
   const popupTranslationsRef = useRef(popupTranslations);
   const factorTranslationsRef = useRef(factorTranslations);
   const onBoundsChangeRef = useRef(onBoundsChange);
+  const onMapReadyRef = useRef(onMapReady);
+  // Store initial center/zoom in refs to avoid re-initialization
+  const initialCenterRef = useRef(center);
+  const initialZoomRef = useRef(zoom);
   
-  // Update refs when props change
-  useEffect(() => {
-    poisRef.current = pois;
-  }, [pois]);
-  
-  useEffect(() => {
-    factorsRef.current = factors;
-  }, [factors]);
+  useEffect(() => { poisRef.current = pois; }, [pois]);
+  useEffect(() => { factorsRef.current = factors; }, [factors]);
+  useEffect(() => { popupTranslationsRef.current = popupTranslations; }, [popupTranslations]);
+  useEffect(() => { factorTranslationsRef.current = factorTranslations; }, [factorTranslations]);
+  useEffect(() => { onBoundsChangeRef.current = onBoundsChange; }, [onBoundsChange]);
+  useEffect(() => { onMapReadyRef.current = onMapReady; }, [onMapReady]);
 
-  useEffect(() => {
-    popupTranslationsRef.current = popupTranslations;
-  }, [popupTranslations]);
-
-  useEffect(() => {
-    factorTranslationsRef.current = factorTranslations;
-  }, [factorTranslations]);
-
-  useEffect(() => {
-    onBoundsChangeRef.current = onBoundsChange;
-  }, [onBoundsChange]);
-
-  // Handle map click to show location details
   const handleMapClick = useCallback(async (e: L.LeafletMouseEvent) => {
     const L = (await import('leaflet')).default;
     const { lat, lng } = e.latlng;
     
-    // Calculate factor breakdown for clicked location
     const { k, breakdown } = calculateFactorBreakdown(
-      lat, 
-      lng, 
-      factorsRef.current, 
-      poisRef.current
+      lat, lng, factorsRef.current, poisRef.current
     );
     
-    // Generate and show popup with translations
     const popupContent = generatePopupContent(
-      lat, 
-      lng, 
-      k, 
-      breakdown,
+      lat, lng, k, breakdown,
       popupTranslationsRef.current,
       factorTranslationsRef.current
     );
     
-    const popupOptions: L.PopupOptions = {
-      maxWidth: 300,
-      className: 'location-rating-popup',
-      autoPan: false, // Disable auto-pan to prevent map movement
-    };
-    
-    L.popup(popupOptions)
+    L.popup({ maxWidth: 300, className: 'location-rating-popup', autoPan: false })
       .setLatLng([lat, lng])
       .setContent(popupContent)
       .openOn(mapInstanceRef.current!);
   }, []);
 
-  // Expose flyTo, fitBounds, and invalidateSize methods via ref
   useImperativeHandle(ref, () => ({
     flyTo: (lat: number, lng: number, zoomLevel?: number) => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.flyTo([lat, lng], zoomLevel ?? 13, {
-          duration: 1.5,
-        });
-      }
+      mapInstanceRef.current?.flyTo([lat, lng], zoomLevel ?? 13, { duration: 1.5 });
     },
     fitBounds: (bounds: Bounds) => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.flyToBounds(
-          [[bounds.south, bounds.west], [bounds.north, bounds.east]],
-          {
-            padding: [50, 50],
-            duration: 1.5,
-            maxZoom: 14,
-          }
-        );
-      }
+      mapInstanceRef.current?.flyToBounds(
+        [[bounds.south, bounds.west], [bounds.north, bounds.east]],
+        { padding: [50, 50], duration: 1.5, maxZoom: 14 }
+      );
     },
     invalidateSize: () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
-      }
+      mapInstanceRef.current?.invalidateSize();
     },
+    getMap: () => mapInstanceRef.current,
+    getExtensionLayerGroup: () => extensionLayerGroupRef.current,
+    getLeaflet: () => leafletRef.current,
   }));
 
   // Initialize map
   useEffect(() => {
-    // Prevent double initialization
     if (initializingRef.current || mapInstanceRef.current) return;
     if (!containerRef.current) return;
 
@@ -697,23 +390,20 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
     const initMap = async () => {
       try {
-        // Dynamic imports
         const L = (await import('leaflet')).default;
         await import('leaflet/dist/leaflet.css');
+        leafletRef.current = L;
 
-        // Check if container still exists and is empty
         if (!containerRef.current) {
           initializingRef.current = false;
           return;
         }
 
-        // Check if map already exists on this container
         if ((containerRef.current as HTMLElement & { _leaflet_id?: number })._leaflet_id) {
           initializingRef.current = false;
           return;
         }
 
-        // Fix default marker icons
         delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
         L.Icon.Default.mergeOptions({
           iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
@@ -721,35 +411,29 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
         });
 
-        // Create map
         const map = L.map(containerRef.current, {
-          center: center,
-          zoom: zoom,
+          center: initialCenterRef.current,
+          zoom: initialZoomRef.current,
           zoomControl: true,
           scrollWheelZoom: true,
         });
 
-        // Add tile layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         }).addTo(map);
 
-        // Create layer groups
         gridLayerRef.current = L.layerGroup().addTo(map);
         poiLayerGroupRef.current = L.layerGroup().addTo(map);
-        propertyLayerGroupRef.current = L.layerGroup().addTo(map);
+        extensionLayerGroupRef.current = L.layerGroup().addTo(map);
         
-        // Create a custom pane for the heatmap overlay (between tiles and markers)
         map.createPane('heatmapPane');
         const heatmapPane = map.getPane('heatmapPane');
         if (heatmapPane) {
-          heatmapPane.style.zIndex = '450'; // Above tiles (200), below overlays (400) and markers (600)
+          heatmapPane.style.zIndex = String(Z_INDEX.MAP_HEATMAP_PANE);
         }
 
-        // Store map reference
         mapInstanceRef.current = map;
 
-        // Handle bounds change
         const handleBoundsChange = () => {
           if (!onBoundsChangeRef.current || !mapInstanceRef.current) return;
           try {
@@ -768,27 +452,27 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
         map.on('moveend', handleBoundsChange);
         map.on('zoomend', handleBoundsChange);
-        
-        // Add right-click (context menu) handler for location details popup (works on desktop)
         map.on('contextmenu', handleMapClick);
 
-        // Long press callback for showing popup
         const onLongPress = (latlng: L.LatLng) => {
           handleMapClick({ latlng } as L.LeafletMouseEvent);
         };
 
-        // Setup long-press handlers for touch and mouse
         const mapContainer = containerRef.current;
         if (mapContainer) {
           setupTouchLongPress(mapContainer, map, onLongPress);
           setupMouseLongPress(mapContainer, map, onLongPress);
         }
 
-        // Trigger initial bounds after a short delay to ensure map is ready
         setTimeout(() => {
           handleBoundsChange();
           setMapReady(true);
-        }, 100);
+          
+          // Notify parent that map is ready
+          if (onMapReadyRef.current && extensionLayerGroupRef.current) {
+            onMapReadyRef.current(map, L, extensionLayerGroupRef.current);
+          }
+        }, MAP_INIT_DELAY_MS);
 
       } catch (error) {
         console.error('Error initializing map:', error);
@@ -798,7 +482,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
     initMap();
 
-    // Cleanup
     return () => {
       if (mapInstanceRef.current) {
         try {
@@ -807,15 +490,13 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           // Ignore cleanup errors
         }
         mapInstanceRef.current = null;
+        leafletRef.current = null;
         gridLayerRef.current = null;
         poiLayerGroupRef.current = null;
-        propertyLayerGroupRef.current = null;
-        propertyMarkersRef.current.clear();
-        clusterMarkersRef.current.clear();
+        extensionLayerGroupRef.current = null;
         canvasOverlayRef.current = null;
         offscreenCanvasRef.current = null;
       }
-      // Revoke blob URL to prevent memory leak
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = null;
@@ -823,34 +504,37 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
       initializingRef.current = false;
       setMapReady(false);
     };
-  }, [handleMapClick]); // Include handleMapClick in deps
+  }, [handleMapClick]);
 
-  // Update grid overlay when points change
+  // Update heatmap overlay
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
+
+    // Create a hash of the heatmap data to detect actual changes
+    // Using length + sample of points for efficiency
+    const createHash = () => {
+      if (heatmapPoints.length === 0) return 'empty';
+      const sample = heatmapPoints.slice(0, 10).map(p => `${p.lat.toFixed(5)},${p.lng.toFixed(5)},${p.value.toFixed(3)}`).join('|');
+      return `${heatmapPoints.length}:${heatmapOpacity}:${sample}`;
+    };
+    
+    const currentHash = createHash();
+    if (currentHash === prevHeatmapHashRef.current) {
+      return; // Data hasn't changed, skip re-render
+    }
+    prevHeatmapHashRef.current = currentHash;
 
     const updateGrid = async () => {
       try {
         const L = (await import('leaflet')).default;
-
         if (!mapInstanceRef.current) return;
 
-        // Clear rectangle-based grid layer (legacy, kept for cleanup)
         if (gridLayerRef.current) {
           gridLayerRef.current.clearLayers();
         }
 
-        if (heatmapPoints.length === 0) {
-          // Don't remove the overlay - just leave it as is
-          // This prevents flickering during data loading
-          return;
-        }
+        if (heatmapPoints.length === 0) return;
 
-        // Canvas-based rendering
-        const startTime = performance.now();
-
-        // Calculate bounds from the heatmap points themselves (not viewport)
-        // This ensures the overlay covers all the data
         let minLat = Infinity, maxLat = -Infinity;
         let minLng = Infinity, maxLng = -Infinity;
         
@@ -861,13 +545,11 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           if (point.lng > maxLng) maxLng = point.lng;
         }
         
-        // Get unique lat/lng counts to determine grid dimensions
         const uniqueLats = new Set(heatmapPoints.map(p => p.lat)).size;
         const uniqueLngs = new Set(heatmapPoints.map(p => p.lng)).size;
         
-        // Add a small buffer for cell size
-        const latSpacing = uniqueLats > 1 ? (maxLat - minLat) / (uniqueLats - 1) : 0.002;
-        const lngSpacing = uniqueLngs > 1 ? (maxLng - minLng) / (uniqueLngs - 1) : 0.002;
+        const latSpacing = uniqueLats > 1 ? (maxLat - minLat) / (uniqueLats - 1) : DEFAULT_GRID_SPACING;
+        const lngSpacing = uniqueLngs > 1 ? (maxLng - minLng) / (uniqueLngs - 1) : DEFAULT_GRID_SPACING;
         
         const bounds: Bounds = {
           north: maxLat + latSpacing / 2,
@@ -877,15 +559,13 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         };
         currentBoundsRef.current = bounds;
 
-        // Create offscreen canvas if needed
         if (!offscreenCanvasRef.current) {
           offscreenCanvasRef.current = document.createElement('canvas');
         }
 
-        // Size canvas based on grid dimensions - each cell gets ~4 pixels for quality
-        const pixelsPerCell = 4;
-        const canvasWidth = Math.min(4096, Math.max(256, uniqueLngs * pixelsPerCell));
-        const canvasHeight = Math.min(4096, Math.max(256, uniqueLats * pixelsPerCell));
+        const pixelsPerCell = CANVAS_PIXELS_PER_CELL;
+        const canvasWidth = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, uniqueLngs * pixelsPerCell));
+        const canvasHeight = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, uniqueLats * pixelsPerCell));
         
         const canvas = offscreenCanvasRef.current;
         canvas.width = canvasWidth;
@@ -894,23 +574,18 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Render heatmap to canvas
         renderHeatmapToCanvas(ctx, heatmapPoints, bounds, canvas.width, canvas.height, {
           opacity: heatmapOpacity,
         });
 
-        // Create or update image overlay using the DATA bounds (not viewport)
         const overlayBounds: L.LatLngBoundsExpression = [
           [bounds.south, bounds.west],
           [bounds.north, bounds.east],
         ];
 
-        // Use toBlob instead of toDataURL for better performance
-        // toBlob is async and doesn't block the main thread
         canvas.toBlob((blob) => {
           if (!blob || !mapInstanceRef.current) return;
           
-          // Revoke previous blob URL to prevent memory leak
           if (blobUrlRef.current) {
             URL.revokeObjectURL(blobUrlRef.current);
           }
@@ -922,25 +597,19 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
             canvasOverlayRef.current.setUrl(url);
             canvasOverlayRef.current.setBounds(L.latLngBounds(overlayBounds));
           } else {
-            // Check if heatmapPane exists, create if not
             let pane = mapInstanceRef.current!.getPane('heatmapPane');
             if (!pane) {
               mapInstanceRef.current!.createPane('heatmapPane');
               pane = mapInstanceRef.current!.getPane('heatmapPane');
-              if (pane) {
-                pane.style.zIndex = '450';
-              }
+              if (pane) pane.style.zIndex = String(Z_INDEX.MAP_HEATMAP_PANE);
             }
             
             canvasOverlayRef.current = L.imageOverlay(url, overlayBounds, {
-              opacity: 1, // Opacity is baked into the canvas
+              opacity: 1,
               interactive: false,
-              pane: 'heatmapPane', // Use custom pane for proper z-ordering
+              pane: 'heatmapPane',
             }).addTo(mapInstanceRef.current!);
           }
-
-          const endTime = performance.now();
-          console.log(`Canvas rendered: ${canvas.width}x${canvas.height} for ${uniqueLngs}x${uniqueLats} grid in ${(endTime - startTime).toFixed(1)}ms`);
         }, 'image/png');
 
       } catch (error) {
@@ -951,17 +620,14 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     updateGrid();
   }, [mapReady, heatmapPoints, heatmapOpacity]);
 
-  // Ensure canvas overlay stays in sync with map view
+  // Sync canvas overlay with map view
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
     
     const map = mapInstanceRef.current;
     
-    // Force overlay to update its position after zoom/move
     const handleViewChange = () => {
       if (canvasOverlayRef.current && map) {
-        // Leaflet's ImageOverlay should auto-update, but we can force a redraw
-        // by triggering a bounds update
         try {
           const currentBounds = canvasOverlayRef.current.getBounds();
           if (currentBounds) {
@@ -982,54 +648,40 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     };
   }, [mapReady]);
 
-  // Update POI markers when pois or showPOIs changes
+  // Update POI markers
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current || !poiLayerGroupRef.current) return;
 
     const updatePOIs = async () => {
       try {
         const L = (await import('leaflet')).default;
-
         if (!poiLayerGroupRef.current) return;
 
-        // Clear existing markers
         poiLayerGroupRef.current.clearLayers();
-
-        // Don't add markers if showPOIs is false
         if (!showPOIs) return;
 
-        // Create a map of factor names for tooltips
         const factorNames: Record<string, string> = {};
-        factors.forEach((f) => {
-          factorNames[f.id] = f.name;
-        });
+        factors.forEach((f) => { factorNames[f.id] = f.name; });
 
-        // Add markers for each POI
         Object.entries(pois).forEach(([factorId, poiList]) => {
           const color = POI_COLORS[factorId] || '#6b7280';
           const factorName = factorNames[factorId] || factorId;
 
           poiList.forEach((poi) => {
-            // Create a circle marker with the factor's color
             const marker = L.circleMarker([poi.lat, poi.lng], {
-              radius: 6,
+              radius: POI_MARKER_RADIUS,
               fillColor: color,
               color: '#ffffff',
-              weight: 2,
+              weight: POI_MARKER_BORDER_WIDTH,
               opacity: 1,
-              fillOpacity: 0.8,
+              fillOpacity: POI_MARKER_FILL_OPACITY,
             });
 
-            // Add tooltip with POI info
             const tooltipContent = poi.name 
               ? `<strong>${poi.name}</strong><br/><span style="color: ${color}">${factorName}</span>`
               : `<span style="color: ${color}">${factorName}</span>`;
             
-            marker.bindTooltip(tooltipContent, {
-              direction: 'top',
-              offset: [0, -8],
-            });
-
+            marker.bindTooltip(tooltipContent, { direction: 'top', offset: [0, POI_TOOLTIP_OFFSET_Y] });
             marker.addTo(poiLayerGroupRef.current!);
           });
         });
@@ -1040,648 +692,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
     updatePOIs();
   }, [mapReady, pois, showPOIs, factors]);
-
-  // Update property markers when properties or showProperties changes
-  useEffect(() => {
-    if (!mapReady || !mapInstanceRef.current || !propertyLayerGroupRef.current) return;
-
-    const updateProperties = async () => {
-      try {
-        const L = (await import('leaflet')).default;
-
-        if (!propertyLayerGroupRef.current) return;
-
-        // Hide layer if showProperties is false
-        if (!showProperties) {
-          propertyLayerGroupRef.current.clearLayers();
-          propertyMarkersRef.current.clear();
-          clusterMarkersRef.current.clear();
-          return;
-        }
-
-        // Track which cluster IDs we've seen in this update
-        const currentClusterIds = new Set<string>();
-
-        // Track which property IDs we've seen
-        const currentIds = new Set<number>();
-
-        // Create custom icon for properties based on estate type, price category, and price
-        const createPropertyIcon = (estateType: EstateType, priceCategory?: PriceCategory, price?: number) => {
-          return L.divIcon({
-            className: getPropertyMarkerClassName(estateType, priceCategory),
-            html: generatePropertyMarkerHtml(estateType, 28, priceCategory, price),
-            iconSize: [28, 44], // Increased height to accommodate price label
-            iconAnchor: [14, 28],
-            popupAnchor: [0, -28],
-          });
-        };
-
-        // Add or update property markers
-        for (const property of properties) {
-          currentIds.add(property.id);
-
-          // Check if marker already exists
-          const existingMarker = propertyMarkersRef.current.get(property.id);
-          if (existingMarker) {
-            continue;
-          }
-
-          const pricePerMeter = property.areaInSquareMeters > 0
-            ? Math.round(property.totalPrice.value / property.areaInSquareMeters)
-            : null;
-
-          // Create image gallery HTML if multiple images
-          const imageCount = property.images.length;
-          const galleryId = `gallery-${property.id}`;
-          let imageHtml = '';
-
-          // Property type badge
-          const isHouse = property.estate === 'HOUSE';
-          const typeBadgeColor = isHouse ? '#16a34a' : '#3b82f6';
-          const typeBadgeText = isHouse ? 'Dom' : 'Mieszkanie';
-          
-          if (imageCount > 0) {
-            const imagesJson = JSON.stringify(property.images.map(img => img.medium)).replace(/"/g, '&quot;');
-            imageHtml = `
-              <div style="position: relative; background: #f3f4f6; border-radius: 8px 8px 0 0; overflow: hidden;">
-                <img 
-                  id="${galleryId}-img" 
-                  src="${property.images[0].medium}" 
-                  alt="" 
-                  style="width: 100%; height: auto; max-height: 180px; object-fit: contain; display: block;" 
-                  onerror="this.style.display='none'" 
-                />
-                <!-- Property type badge -->
-                <div style="position: absolute; top: 8px; left: 8px; background: ${typeBadgeColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
-                  ${typeBadgeText}
-                </div>
-                ${imageCount > 1 ? `
-                  <!-- Left button - centered between close button area and bottom -->
-                  <button 
-                    onclick="(function(){
-                      var imgs = ${imagesJson};
-                      var img = document.getElementById('${galleryId}-img');
-                      var counter = document.getElementById('${galleryId}-counter');
-                      var idx = parseInt(counter.textContent) - 1;
-                      idx = (idx - 1 + imgs.length) % imgs.length;
-                      img.src = imgs[idx];
-                      counter.textContent = idx + 1;
-                    })()"
-                    style="position: absolute; left: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
-                  >‹</button>
-                  <!-- Counter at bottom center -->
-                  <span id="${galleryId}-counter" style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px;">1/${imageCount}</span>
-                  <!-- Right button - centered between close button area and bottom -->
-                  <button 
-                    onclick="(function(){
-                      var imgs = ${imagesJson};
-                      var img = document.getElementById('${galleryId}-img');
-                      var counter = document.getElementById('${galleryId}-counter');
-                      var idx = parseInt(counter.textContent.split('/')[0]) - 1;
-                      idx = (idx + 1) % imgs.length;
-                      img.src = imgs[idx];
-                      counter.textContent = (idx + 1) + '/${imageCount}';
-                    })()"
-                    style="position: absolute; right: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
-                  >›</button>
-                ` : ''}
-              </div>
-            `;
-          }
-
-          // Format rooms display
-          const roomsDisplay = property.roomsNumber ? roomCountToNumber(property.roomsNumber) : null;
-
-          // Generate price analysis badge HTML
-          const priceAnalysis = property.priceAnalysis;
-          let priceAnalysisBadgeHtml = '';
-          if (priceAnalysis && priceAnalysis.priceCategory !== 'no_data') {
-            const badgeColors: Record<string, { bg: string; text: string }> = {
-              great_deal: { bg: '#f0fdf4', text: '#16a34a' },
-              good_deal: { bg: '#f0fdf4', text: '#059669' },
-              fair: { bg: '#f8fafc', text: '#64748b' },
-              above_avg: { bg: '#fff7ed', text: '#ea580c' },
-              overpriced: { bg: '#fef2f2', text: '#dc2626' },
-            };
-            const badgeLabels: Record<string, string> = {
-              great_deal: 'Great Deal',
-              good_deal: 'Good Deal',
-              fair: 'Fair Price',
-              above_avg: 'Above Avg',
-              overpriced: 'Overpriced',
-            };
-            const colors = badgeColors[priceAnalysis.priceCategory] || badgeColors.fair;
-            const label = badgeLabels[priceAnalysis.priceCategory] || 'Fair';
-            const percentSign = priceAnalysis.percentFromMedian >= 0 ? '+' : '';
-            
-            priceAnalysisBadgeHtml = `
-              <div style="margin-bottom: 6px; padding: 6px 8px; background: ${colors.bg}; border-radius: 4px;">
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                  <span style="font-size: 10px; color: ${colors.text};">${label} · vs ${priceAnalysis.groupSize} similar</span>
-                  <span style="font-weight: 600; color: ${colors.text}; font-size: 11px;">${percentSign}${priceAnalysis.percentFromMedian}%</span>
-                </div>
-              </div>
-            `;
-          }
-
-          const popupContent = `
-            <div style="min-width: 220px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
-              ${imageHtml}
-              <div style="padding: 12px;">
-                <!-- Title as link -->
-                <a 
-                  href="${property.url}" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  style="display: flex; align-items: flex-start; gap: 4px; font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; color: #1f2937; text-decoration: none;"
-                >
-                  <span style="flex: 1; max-height: 2.6em; overflow: hidden;">${property.title}</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                    <polyline points="15 3 21 3 21 9"></polyline>
-                    <line x1="10" y1="14" x2="21" y2="3"></line>
-                  </svg>
-                </a>
-                <!-- Price -->
-                <div style="font-size: 16px; font-weight: 700; color: #16a34a; margin-bottom: 8px;">
-                  ${property.hidePrice ? 'Cena do negocjacji' : formatPrice(property.totalPrice.value, property.totalPrice.currency)}
-                </div>
-                <!-- Price Analysis Badge -->
-                ${priceAnalysisBadgeHtml}
-                <!-- Property details -->
-                <div style="display: flex; align-items: center; gap: 4px; color: #4b5563; font-size: 12px;">
-                  <span style="font-weight: 500;">${property.areaInSquareMeters} m²</span>
-                  ${roomsDisplay ? `<span style="color: #9ca3af;">•</span><span style="font-weight: 500;">${roomsDisplay} pok.</span>` : ''}
-                  ${pricePerMeter ? `<span style="color: #9ca3af;">•</span><span style="color: #6b7280;">${pricePerMeter.toLocaleString('pl-PL')} PLN/m²</span>` : ''}
-                </div>
-              </div>
-            </div>
-          `;
-
-          // Create new marker with estate-type-specific icon, price category indicator, and price label
-          const marker = L.marker([property.lat, property.lng], {
-            icon: createPropertyIcon(
-              property.estate, 
-              property.priceAnalysis?.priceCategory,
-              property.hidePrice ? undefined : property.totalPrice.value
-            ),
-          });
-
-          marker.bindPopup(popupContent, {
-            maxWidth: 280,
-            className: 'property-popup',
-          });
-
-          // Close any existing popup (especially cluster popups with autoClose: false) and open this one
-          marker.on('click', (e) => {
-            // Prevent default popup behavior
-            e.originalEvent?.preventDefault();
-            // Close any existing popup first
-            mapInstanceRef.current?.closePopup();
-            // Also close any cluster marker popups (they have autoClose: false)
-            clusterMarkersRef.current.forEach(clusterMarker => {
-              clusterMarker.closePopup();
-            });
-            // Then open this marker's popup
-            marker.openPopup();
-          });
-
-          marker.addTo(propertyLayerGroupRef.current);
-          propertyMarkersRef.current.set(property.id, marker);
-        }
-
-        // Remove property markers that are no longer in the list
-        for (const [id, marker] of propertyMarkersRef.current) {
-          if (!currentIds.has(id)) {
-            propertyLayerGroupRef.current.removeLayer(marker);
-            propertyMarkersRef.current.delete(id);
-          }
-        }
-
-        // Add cluster markers (when zoomed out)
-        for (const cluster of propertyClusters) {
-          const clusterId = `cluster-${cluster.lat.toFixed(6)}-${cluster.lng.toFixed(6)}`;
-          currentClusterIds.add(clusterId);
-          
-          // Check if cluster marker already exists - skip if it does to preserve popup state
-          if (clusterMarkersRef.current.has(clusterId)) {
-            continue;
-          }
-          
-          // Determine initial price label and glow based on mode
-          let initialPriceLabel = '';
-          let initialMinCategory: PriceCategory | null = null;
-          let initialMaxCategory: PriceCategory | null = null;
-          
-          // Check if we have cached properties for this cluster
-          const cachedClusterProps = clusterPropertiesCache?.get(clusterId);
-          
-          // Use detailed mode only if cluster count is within threshold
-          const useDetailedMode = clusterPriceAnalysis === 'detailed' && cluster.count <= detailedModeThreshold;
-          
-          if (useDetailedMode && cachedClusterProps && cachedClusterProps.length > 0) {
-            // Detailed mode with cached data: use cached properties for price/glow
-            const validPrices = cachedClusterProps
-              .filter(p => !p.hidePrice && p.totalPrice.value > 0)
-              .map(p => p.totalPrice.value);
-            initialPriceLabel = generateClusterPriceLabel(validPrices, clusterPriceDisplay);
-            
-            // Find enriched versions of cached properties for glow calculation
-            const enrichedPropsMap = new Map<number, EnrichedProperty>();
-            for (const p of properties) {
-              enrichedPropsMap.set(p.id, p);
-            }
-            const enrichedCachedProps = cachedClusterProps
-              .map(p => enrichedPropsMap.get(p.id))
-              .filter((p): p is EnrichedProperty => !!p && !!p.priceAnalysis);
-            
-            if (enrichedCachedProps.length > 0) {
-              const result = getClusterPriceCategories(enrichedCachedProps);
-              initialMinCategory = result.minCategory;
-              initialMaxCategory = result.maxCategory;
-            }
-          }
-          // For simplified mode or detailed without cache: no initial price/glow
-          // Price and glow will be calculated after fetching properties on click
-          
-          // Create initial cluster icon
-          const clusterIcon = createClusterDivIcon(
-            L,
-            cluster.count,
-            initialPriceLabel,
-            initialMinCategory,
-            initialMaxCategory
-          );
-
-          const clusterMarker = L.marker([cluster.lat, cluster.lng], {
-            icon: clusterIcon,
-          });
-
-          // For detailed mode without cached data, fetch properties immediately to show price/glow
-          // Only if cluster count is within threshold
-          if (useDetailedMode && !cachedClusterProps) {
-            // Fetch in background (don't await) to update marker icon
-            (async () => {
-              try {
-                const response = await fetch('/api/properties/cluster', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    lat: cluster.lat,
-                    lng: cluster.lng,
-                    filters: propertyFilters,
-                    page: 1,
-                    limit: Math.min(cluster.count, BACKGROUND_FETCH_LIMIT),
-                    shape: cluster.shape,
-                    radius: cluster.radiusInMeters || DEFAULT_CLUSTER_RADIUS,
-                    estateType: cluster.estateType,
-                  }),
-                });
-
-                if (!response.ok) return;
-
-                const data: ClusterPropertiesResponse = await response.json();
-                if (data.properties.length === 0) return;
-
-                // Report to parent for caching
-                if (onClusterPropertiesFetched) {
-                  onClusterPropertiesFetched(clusterId, data.properties);
-                }
-
-                // Enrich and calculate price/glow
-                const enrichedFetchedProps = enrichClusterProperties(data.properties, properties, heatmapPoints);
-                const validPrices = getValidPrices(data.properties);
-                const newPriceLabel = generateClusterPriceLabel(validPrices, clusterPriceDisplay);
-                const { minCategory: newMin, maxCategory: newMax } = getClusterPriceCategories(enrichedFetchedProps);
-
-                // Update marker icon
-                const newIcon = createClusterDivIcon(L, cluster.count, newPriceLabel, newMin, newMax);
-
-                // Only update if marker still exists
-                if (clusterMarkersRef.current.has(clusterId)) {
-                  clusterMarker.setIcon(newIcon);
-                }
-              } catch {
-                // Silently fail background fetch
-              }
-            })();
-          }
-
-          // Generate popup HTML for a single property in the cluster with image gallery
-          const generateClusterPropertyHtml = (
-            property: OtodomProperty | EnrichedProperty,
-            currentIndex: number,
-            totalCount: number,
-            fetchedCount: number,
-            imageIndex: number = 0
-          ): string => {
-            const isHouse = property.estate === 'HOUSE';
-            const typeBadgeColor = isHouse ? '#16a34a' : '#3b82f6';
-            const typeBadgeText = isHouse ? 'Dom' : 'Mieszkanie';
-            const roomsDisplay = property.roomsNumber ? roomCountToNumber(property.roomsNumber) : null;
-            const pricePerMeter = property.areaInSquareMeters > 0
-              ? Math.round(property.totalPrice.value / property.areaInSquareMeters)
-              : null;
-            
-            const hasMultipleImages = property.images.length > 1;
-            const currentImage = property.images[imageIndex] || property.images[0];
-            
-            // Show "X / Y" where X is current position and Y is total
-            // If we have more properties than fetched, show "X / Y (Z loaded)"
-            const paginationText = fetchedCount < totalCount 
-              ? `${currentIndex + 1} / ${totalCount}`
-              : `${currentIndex + 1} / ${totalCount}`;
-            
-            // Disable next button when we've reached the end of fetched properties
-            const isAtEnd = currentIndex >= fetchedCount - 1;
-
-            // Generate price analysis badge HTML for cluster popup
-            const enrichedProp = property as EnrichedProperty;
-            const clusterPriceAnalysisBadgeHtml = generatePriceAnalysisBadgeHtml(enrichedProp.priceAnalysis);
-
-            const imageHtml = property.images.length > 0 ? `
-              <div style="position: relative; background: #f3f4f6; border-radius: 8px 8px 0 0; overflow: hidden;">
-                <img 
-                  id="${clusterId}-img"
-                  src="${currentImage.medium}" 
-                  alt="" 
-                  style="width: 100%; height: 160px; object-fit: cover; display: block;" 
-                  onerror="this.style.display='none'" 
-                />
-                <div style="position: absolute; top: 8px; left: 8px; background: ${typeBadgeColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
-                  ${typeBadgeText}
-                </div>
-                ${hasMultipleImages ? `
-                  <!-- Left button - centered between close button area and bottom -->
-                  <button 
-                    id="${clusterId}-img-prev"
-                    style="position: absolute; left: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; color: white; font-size: 16px; display: flex; align-items: center; justify-content: center; ${imageIndex === 0 ? 'opacity: 0.3;' : ''}"
-                  >‹</button>
-                  <!-- Counter at bottom center -->
-                  <span style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px;">${imageIndex + 1}/${property.images.length}</span>
-                  <!-- Right button - centered between close button area and bottom -->
-                  <button 
-                    id="${clusterId}-img-next"
-                    style="position: absolute; right: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; color: white; font-size: 16px; display: flex; align-items: center; justify-content: center; ${imageIndex >= property.images.length - 1 ? 'opacity: 0.3;' : ''}"
-                  >›</button>
-                ` : ''}
-              </div>
-            ` : `
-              <div style="background: #f3f4f6; border-radius: 8px 8px 0 0; padding: 20px; text-align: center;">
-                <div style="display: inline-block; background: ${typeBadgeColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
-                  ${typeBadgeText}
-                </div>
-              </div>
-            `;
-
-            return `
-              <div style="min-width: 240px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
-                ${imageHtml}
-                <div style="padding: 12px;">
-                  <!-- Title as link -->
-                  <a 
-                    href="${property.url}" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style="display: flex; align-items: flex-start; gap: 4px; font-weight: 600; font-size: 12px; margin-bottom: 6px; line-height: 1.3; color: #1f2937; text-decoration: none;"
-                  >
-                    <span style="flex: 1; max-height: 2.6em; overflow: hidden;">${property.title}</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                      <polyline points="15 3 21 3 21 9"></polyline>
-                      <line x1="10" y1="14" x2="21" y2="3"></line>
-                    </svg>
-                  </a>
-                  <div style="font-size: 15px; font-weight: 700; color: #16a34a; margin-bottom: 6px;">
-                    ${property.hidePrice ? 'Cena do negocjacji' : `${property.totalPrice.value.toLocaleString('pl-PL')} ${property.totalPrice.currency}`}
-                  </div>
-                  ${clusterPriceAnalysisBadgeHtml}
-                  <div style="display: flex; align-items: center; gap: 4px; color: #4b5563; margin-bottom: 8px; font-size: 11px;">
-                    <span style="font-weight: 500;">${property.areaInSquareMeters} m²</span>
-                    ${roomsDisplay ? `<span style="color: #9ca3af;">•</span><span style="font-weight: 500;">${roomsDisplay} pok.</span>` : ''}
-                    ${pricePerMeter ? `<span style="color: #9ca3af;">•</span><span style="color: #6b7280;">${pricePerMeter.toLocaleString('pl-PL')} PLN/m²</span>` : ''}
-                  </div>
-                  
-                  <!-- Subtle pagination at bottom -->
-                  <div style="display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 8px; border-top: 1px solid #f3f4f6;">
-                    <button 
-                      id="${clusterId}-prev"
-                      style="background: none; border: none; padding: 4px 8px; cursor: pointer; font-size: 18px; color: ${currentIndex === 0 ? '#d1d5db' : '#6b7280'}; ${currentIndex === 0 ? 'cursor: default;' : ''}"
-                    >‹</button>
-                    <span style="font-size: 11px; color: #9ca3af;">${paginationText}</span>
-                    <button 
-                      id="${clusterId}-next"
-                      style="background: none; border: none; padding: 4px 8px; cursor: pointer; font-size: 18px; color: ${isAtEnd ? '#d1d5db' : '#6b7280'}; ${isAtEnd ? 'cursor: default;' : ''}"
-                    >›</button>
-                  </div>
-                </div>
-              </div>
-            `;
-          };
-
-          // Loading popup HTML
-          const loadingPopupHtml = `
-            <div style="min-width: 200px; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
-              <div style="display: inline-block; width: 24px; height: 24px; border: 2px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-              <div style="margin-top: 12px; color: #6b7280; font-size: 12px;">Ładowanie ${cluster.count} ofert...</div>
-              <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
-            </div>
-          `;
-
-          // Error popup HTML
-          const errorPopupHtml = (message: string) => `
-            <div style="min-width: 200px; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
-              <div style="color: #ef4444; font-size: 12px; margin-bottom: 12px;">${message}</div>
-              <a 
-                href="https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie/poznan?viewType=listing" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                style="display: inline-block; background: #3b82f6; color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: 500;"
-              >
-                Zobacz na Otodom
-              </a>
-            </div>
-          `;
-
-          // Click handler for cluster
-          clusterMarker.on('click', async () => {
-            // Close any existing popup before opening new one
-            mapInstanceRef.current?.closePopup();
-            // Also close any other cluster marker popups (they have autoClose: false)
-            clusterMarkersRef.current.forEach(cm => {
-              if (cm !== clusterMarker) {
-                cm.closePopup();
-              }
-            });
-            // Close any standalone property marker popups
-            propertyMarkersRef.current.forEach(pm => {
-              pm.closePopup();
-            });
-            
-            // Show loading popup
-            clusterMarker.unbindPopup();
-            clusterMarker.bindPopup(loadingPopupHtml, { 
-              className: 'cluster-popup',
-              maxWidth: 300,
-              closeOnClick: false,
-              autoClose: false,
-            }).openPopup();
-
-            try {
-              // Fetch cluster properties using the cluster's actual shape polygon if available
-              // Also pass the estate type to get accurate counts matching the cluster
-              const response = await fetch('/api/properties/cluster', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  lat: cluster.lat,
-                  lng: cluster.lng,
-                  filters: propertyFilters,
-                  page: 1,
-                  limit: Math.min(cluster.count, CLICK_FETCH_LIMIT),
-                  shape: cluster.shape,
-                  radius: cluster.radiusInMeters || DEFAULT_CLUSTER_RADIUS,
-                  estateType: cluster.estateType,
-                }),
-              });
-
-              if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-                throw new Error(errorData.error || `Failed to fetch properties (${response.status})`);
-              }
-
-              const data: ClusterPropertiesResponse = await response.json();
-              
-              if (data.properties.length === 0) {
-                clusterMarker.setPopupContent(errorPopupHtml('Nie znaleziono ofert w tym obszarze'));
-                return;
-              }
-
-              // Report fetched properties to parent for caching and analytics
-              if (onClusterPropertiesFetched) {
-                onClusterPropertiesFetched(clusterId, data.properties);
-              }
-
-              // Enrich properties with price analysis
-              const enrichedClusterProps = enrichClusterProperties(data.properties, properties, heatmapPoints);
-
-              // Update cluster marker icon with accurate price/glow based on fetched properties
-              if (clusterPriceAnalysis !== 'off') {
-                const validPrices = getValidPrices(enrichedClusterProps);
-                const newPriceLabel = generateClusterPriceLabel(validPrices, clusterPriceDisplay);
-                const { minCategory: newMinCategory, maxCategory: newMaxCategory } = getClusterPriceCategories(enrichedClusterProps);
-                const newClusterIcon = createClusterDivIcon(L, cluster.count, newPriceLabel, newMinCategory, newMaxCategory);
-                clusterMarker.setIcon(newClusterIcon);
-              }
-
-              // Store enriched properties in window for navigation
-              const windowKey = `__cluster_${clusterId.replace(/[^a-zA-Z0-9]/g, '_')}`;
-              (window as unknown as Record<string, EnrichedProperty[]>)[windowKey] = enrichedClusterProps;
-              
-              // Use the actual total count from API, not just fetched properties length
-              const actualTotalCount = data.totalCount;
-              const fetchedCount = data.properties.length;
-
-              let currentPropertyIndex = 0;
-              let currentImageIndex = 0;
-
-              // Function to update popup content and attach event listeners
-              const updatePopup = () => {
-                const props = (window as unknown as Record<string, EnrichedProperty[]>)[windowKey];
-                if (!props || props.length === 0) return;
-                
-                // Show actual total count in pagination, but navigate only through fetched properties
-                const html = generateClusterPropertyHtml(props[currentPropertyIndex], currentPropertyIndex, actualTotalCount, fetchedCount, currentImageIndex);
-                clusterMarker.setPopupContent(html);
-
-                // Re-attach event listeners after DOM update
-                setTimeout(() => {
-                  // Property navigation buttons
-                  const prevBtn = document.getElementById(`${clusterId}-prev`);
-                  const nextBtn = document.getElementById(`${clusterId}-next`);
-                  
-                  if (prevBtn) {
-                    prevBtn.onclick = (e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (currentPropertyIndex > 0) {
-                        currentPropertyIndex--;
-                        currentImageIndex = 0; // Reset image index when changing property
-                        updatePopup();
-                      }
-                    };
-                  }
-                  
-                  if (nextBtn) {
-                    nextBtn.onclick = (e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      // Navigate only through fetched properties
-                      if (currentPropertyIndex < fetchedCount - 1) {
-                        currentPropertyIndex++;
-                        currentImageIndex = 0; // Reset image index when changing property
-                        updatePopup();
-                      }
-                    };
-                  }
-
-                  // Image gallery navigation buttons
-                  const imgPrevBtn = document.getElementById(`${clusterId}-img-prev`);
-                  const imgNextBtn = document.getElementById(`${clusterId}-img-next`);
-                  const currentProperty = props[currentPropertyIndex];
-                  
-                  if (imgPrevBtn && currentProperty) {
-                    imgPrevBtn.onclick = (e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (currentImageIndex > 0) {
-                        currentImageIndex--;
-                        updatePopup();
-                      }
-                    };
-                  }
-                  
-                  if (imgNextBtn && currentProperty) {
-                    imgNextBtn.onclick = (e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (currentImageIndex < currentProperty.images.length - 1) {
-                        currentImageIndex++;
-                        updatePopup();
-                      }
-                    };
-                  }
-                }, 50);
-              };
-
-              // Show first property
-              updatePopup();
-
-            } catch (error) {
-              console.error('Error fetching cluster properties:', error);
-              const errorMessage = error instanceof Error ? error.message : 'Błąd ładowania ofert';
-              clusterMarker.setPopupContent(errorPopupHtml(errorMessage));
-            }
-          });
-
-          clusterMarker.addTo(propertyLayerGroupRef.current);
-          clusterMarkersRef.current.set(clusterId, clusterMarker);
-        }
-
-        // Remove cluster markers that are no longer in the list
-        for (const [id, marker] of clusterMarkersRef.current) {
-          if (!currentClusterIds.has(id)) {
-            propertyLayerGroupRef.current.removeLayer(marker);
-            clusterMarkersRef.current.delete(id);
-          }
-        }
-      } catch (error) {
-        console.error('Error updating property markers:', error);
-      }
-    };
-
-    updateProperties();
-  }, [mapReady, properties, propertyClusters, showProperties, propertyFilters, clusterPriceDisplay, clusterPriceAnalysis, detailedModeThreshold, clusterAnalysisData]);
 
   return (
     <div 

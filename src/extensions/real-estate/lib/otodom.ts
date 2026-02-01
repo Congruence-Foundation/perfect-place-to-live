@@ -23,9 +23,12 @@ const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
 const MAX_CACHE_ENTRIES = 50;
 
 /**
- * Default cluster search radius in meters
+ * Cluster search radius for Otodom API requests (in meters)
+ * This is used when fetching properties within a cluster area via the API.
+ * Note: This differs from DEFAULT_CLUSTER_RADIUS in enrichment.ts (1000m),
+ * which is used for UI-level cluster analysis and price comparison.
  */
-const DEFAULT_CLUSTER_RADIUS_METERS = 500;
+const OTODOM_CLUSTER_RADIUS_METERS = 500;
 
 /**
  * Common headers for Otodom API requests
@@ -432,7 +435,7 @@ interface OtodomSearchAdsResponse {
  * Build a GeoJSON polygon around a center point
  * Creates a small square area around the cluster center
  */
-function buildGeoJsonAroundPoint(lat: number, lng: number, radiusMeters: number = DEFAULT_CLUSTER_RADIUS_METERS): string {
+function buildGeoJsonAroundPoint(lat: number, lng: number, radiusMeters: number = OTODOM_CLUSTER_RADIUS_METERS): string {
   // Calculate degrees offset using the shared functions
   const latOffset = radiusMeters / METERS_PER_DEGREE_LAT;
   const lngOffset = radiusMeters / metersPerDegreeLng(lat);
@@ -515,7 +518,18 @@ function transformSearchAdsResponse(
   currentPage: number;
   totalPages: number;
 } {
-  const properties: OtodomProperty[] = response.data.searchAds.items.map(item => ({
+  // Defensive check for null/undefined response data
+  const searchAds = response?.data?.searchAds;
+  if (!searchAds?.items) {
+    return {
+      properties: [],
+      totalCount: 0,
+      currentPage: 1,
+      totalPages: 0,
+    };
+  }
+
+  const properties: OtodomProperty[] = searchAds.items.map(item => ({
     id: item.id,
     lat: clusterLat,  // Use cluster center since API doesn't return coordinates
     lng: clusterLng,
@@ -538,9 +552,9 @@ function transformSearchAdsResponse(
 
   return {
     properties,
-    totalCount: response.data.searchAds.pagination.totalItems,
-    currentPage: response.data.searchAds.pagination.currentPage,
-    totalPages: response.data.searchAds.pagination.totalPages,
+    totalCount: searchAds.pagination?.totalItems ?? 0,
+    currentPage: searchAds.pagination?.currentPage ?? 1,
+    totalPages: searchAds.pagination?.totalPages ?? 0,
   };
 }
 
@@ -565,7 +579,7 @@ export async function fetchClusterProperties(
   page: number = 1,
   limit: number = 36,
   shape?: string,
-  radiusMeters: number = DEFAULT_CLUSTER_RADIUS_METERS,
+  radiusMeters: number = OTODOM_CLUSTER_RADIUS_METERS,
   clusterEstateType?: string,
   signal?: AbortSignal
 ): Promise<{
@@ -606,6 +620,13 @@ export async function fetchClusterProperties(
     }
 
     const data: OtodomSearchAdsResponse = await response.json();
+    
+    // Check if response has valid data structure
+    if (!data?.data?.searchAds) {
+      console.warn('Otodom API returned empty or invalid response for estate type:', estateType);
+      continue; // Skip this estate type and try the next one
+    }
+    
     const result = transformSearchAdsResponse(data, lat, lng);
     
     // Deduplicate and merge

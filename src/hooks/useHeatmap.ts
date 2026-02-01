@@ -1,8 +1,29 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { decode } from '@msgpack/msgpack';
 import { Bounds, Factor, HeatmapPoint, HeatmapResponse, POI, DistanceCurve, DataSource } from '@/types';
+
+/**
+ * Create a hash for heatmap points to detect actual data changes
+ */
+function createHeatmapHash(points: HeatmapPoint[]): string {
+  if (points.length === 0) return 'empty';
+  // Use length + first/last points for efficient comparison
+  const first = points[0];
+  const last = points[points.length - 1];
+  return `${points.length}:${first.lat.toFixed(5)},${first.lng.toFixed(5)},${first.value.toFixed(3)}:${last.lat.toFixed(5)},${last.lng.toFixed(5)},${last.value.toFixed(3)}`;
+}
+
+/**
+ * Create a hash for POIs to detect actual data changes
+ */
+function createPoisHash(pois: Record<string, POI[]>): string {
+  const keys = Object.keys(pois).sort();
+  if (keys.length === 0) return 'empty';
+  const counts = keys.map(k => `${k}:${pois[k].length}`).join(',');
+  return counts;
+}
 
 interface UseHeatmapReturn {
   heatmapPoints: HeatmapPoint[];
@@ -180,9 +201,17 @@ export function useHeatmap(): UseHeatmapReturn {
     };
   }, []);
 
+  // Memoize heatmapPoints to maintain stable reference when data hasn't changed
+  const heatmapHash = createHeatmapHash(heatmapPoints);
+  const stableHeatmapPoints = useMemo(() => heatmapPoints, [heatmapHash]);
+  
+  // Memoize pois to maintain stable reference when data hasn't changed
+  const poisHash = createPoisHash(pois);
+  const stablePois = useMemo(() => pois, [poisHash]);
+
   return {
-    heatmapPoints,
-    pois,
+    heatmapPoints: stableHeatmapPoints,
+    pois: stablePois,
     isLoading,
     error,
     metadata,

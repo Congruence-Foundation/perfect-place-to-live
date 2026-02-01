@@ -286,6 +286,13 @@
     "place=city": "Miasta",
     "place=town": "Miasteczka"
   },
+  "realEstatePopup": {
+    "priceNegotiable": "Cena do negocjacji",
+    "noListingsFound": "Nie znaleziono ofert w tym obszarze",
+    "loadingError": "Błąd ładowania ofert",
+    "loading": "Ładowanie...",
+    "showMore": "Pokaż więcej"
+  },
   "realEstate": {
     "title": "Nieruchomości",
     "searchCriteria": "Kryteria wyszukiwania",

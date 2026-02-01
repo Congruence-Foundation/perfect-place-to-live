@@ -286,6 +286,13 @@
     "place=city": "Cities",
     "place=town": "Towns"
   },
+  "realEstatePopup": {
+    "priceNegotiable": "Price negotiable",
+    "noListingsFound": "No listings found in this area",
+    "loadingError": "Error loading listings",
+    "loading": "Loading...",
+    "showMore": "Show more"
+  },
   "realEstate": {
     "title": "Real Estate",
     "searchCriteria": "Search Criteria",

@@ -10,13 +10,13 @@ import { estimateGridSize, calculateAdaptiveGridSize } from '@/lib/grid';
 import { expandBounds, isValidBounds } from '@/lib/bounds';
 import { errorResponse } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG } from '@/constants/performance';
+import { GRID_BUFFER_DEGREES } from '@/constants/heatmap';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const { 
-  POI_BUFFER_DEGREES, 
-  GRID_BUFFER_DEGREES, 
+  POI_BUFFER_DEGREES,
   MAX_GRID_POINTS,
   POI_CACHE_TTL_SECONDS,
   DEFAULT_DATA_SOURCE,

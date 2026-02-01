@@ -6,14 +6,11 @@ import { GripHorizontal, ChevronDown, ChevronUp, SlidersHorizontal, RotateCcw } 
 import { Button } from '@/components/ui/button';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { Factor } from '@/types';
-import { PropertyFilters, PriceValueRange } from '@/types/property';
 import { FACTOR_PROFILES } from '@/config/factors';
 import { useSnapPoints } from '@/hooks';
 import ProfileSelector from './ProfileSelector';
 import WeightSliders from './WeightSliders';
-import RealEstateSidebar from './RealEstateSidebar';
-import ScoreRangeSlider from './ScoreRangeSlider';
-import { PriceValueFilter } from './filters';
+import ExtensionsBottomSheet from './ExtensionsBottomSheet';
 
 // Snap points configuration
 const SNAP_CONFIG = {
@@ -30,18 +27,6 @@ interface BottomSheetProps {
   onResetFactors: () => void;
   floatingControls?: ReactNode;
   onHeightChange?: (height: number) => void;
-  // Real estate props
-  realEstateEnabled?: boolean;
-  onRealEstateEnabledChange?: (enabled: boolean) => void;
-  propertyFilters?: PropertyFilters;
-  onPropertyFiltersChange?: (filters: Partial<PropertyFilters>) => void;
-  propertyCount?: number;
-  isLoadingProperties?: boolean;
-  propertiesError?: string | null;
-  scoreRange?: [number, number];
-  onScoreRangeChange?: (range: [number, number]) => void;
-  priceValueRange?: PriceValueRange;
-  onPriceValueRangeChange?: (range: PriceValueRange) => void;
 }
 
 export default function BottomSheet({
@@ -52,23 +37,10 @@ export default function BottomSheet({
   onResetFactors,
   floatingControls,
   onHeightChange,
-  // Real estate props
-  realEstateEnabled = false,
-  onRealEstateEnabledChange,
-  propertyFilters,
-  onPropertyFiltersChange,
-  propertyCount,
-  isLoadingProperties,
-  propertiesError,
-  scoreRange,
-  onScoreRangeChange,
-  priceValueRange = [0, 100],
-  onPriceValueRangeChange,
 }: BottomSheetProps) {
   const tApp = useTranslations('app');
   const tControls = useTranslations('controls');
   const tProfiles = useTranslations('profiles');
-  const tRealEstate = useTranslations('realEstate');
 
   const {
     height: sheetHeight,
@@ -318,108 +290,8 @@ export default function BottomSheet({
         {/* Divider */}
         <div className="border-t my-3" />
 
-        {/* Real Estate Section */}
-        <div className="pb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              {tControls('extensions')}
-            </span>
-            <InfoTooltip>
-              <p className="text-xs">{tControls('extensionsTooltip')}</p>
-            </InfoTooltip>
-          </div>
-
-          {/* Transaction Type Buttons */}
-          <div className="flex gap-1 mb-3">
-            <button
-              onClick={() => onRealEstateEnabledChange?.(false)}
-              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                !realEstateEnabled
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-              }`}
-            >
-              {tRealEstate('none')}
-            </button>
-            <button
-              onClick={() => {
-                onRealEstateEnabledChange?.(true);
-                onPropertyFiltersChange?.({ 
-                  transaction: 'RENT',
-                  priceMin: 1000,
-                  priceMax: 10000
-                });
-              }}
-              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                realEstateEnabled && propertyFilters?.transaction === 'RENT'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-              }`}
-            >
-              {tRealEstate('rent')}
-            </button>
-            <button
-              onClick={() => {
-                onRealEstateEnabledChange?.(true);
-                onPropertyFiltersChange?.({ 
-                  transaction: 'SELL',
-                  priceMin: 100000,
-                  priceMax: 2000000
-                });
-              }}
-              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                realEstateEnabled && propertyFilters?.transaction === 'SELL'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-              }`}
-            >
-              {tRealEstate('sell')}
-            </button>
-          </div>
-
-          {/* Score Range Slider (only when real estate is enabled) */}
-          {realEstateEnabled && scoreRange && onScoreRangeChange && (
-            <div className="mb-3">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs text-muted-foreground">{tRealEstate('scoreFilter')}</span>
-                <InfoTooltip>
-                  <p className="text-xs">{tRealEstate('scoreFilterTooltip')}</p>
-                </InfoTooltip>
-              </div>
-              <ScoreRangeSlider
-                value={scoreRange}
-                onChange={onScoreRangeChange}
-              />
-              <div className="flex justify-between mt-1">
-                <span className="text-[10px] text-muted-foreground">{scoreRange[0]}%</span>
-                <span className="text-[10px] text-muted-foreground">{scoreRange[1]}%</span>
-              </div>
-            </div>
-          )}
-
-          {/* Price Value Filter (only when real estate is enabled) */}
-          {realEstateEnabled && onPriceValueRangeChange && (
-            <div className="mb-3">
-              <PriceValueFilter
-                label={tRealEstate('priceValue')}
-                tooltip={tRealEstate('priceValueTooltip')}
-                range={priceValueRange}
-                onChange={onPriceValueRangeChange}
-              />
-            </div>
-          )}
-
-          {/* Real Estate Filters (only when enabled) */}
-          {realEstateEnabled && propertyFilters && onPropertyFiltersChange && (
-            <RealEstateSidebar
-              filters={propertyFilters}
-              onFiltersChange={onPropertyFiltersChange}
-              propertyCount={propertyCount}
-              isLoading={isLoadingProperties}
-              error={propertiesError}
-            />
-          )}
-        </div>
+        {/* Extensions Section */}
+        <ExtensionsBottomSheet />
       </div>
       </div>
     </>

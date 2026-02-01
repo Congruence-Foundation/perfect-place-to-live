@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect, useState, forwardRef, useImperativeHandle, useRef, useMemo } from 'react';
+import { useEffect, useState, forwardRef, useImperativeHandle, useRef, useMemo, useCallback, useContext } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { POLAND_CENTER } from '@/config/factors';
-import { HeatmapPoint, POI, Factor, Bounds, ClusterPriceAnalysisMode } from '@/types';
-import { PropertyCluster, PropertyFilters, EnrichedProperty, ClusterPriceDisplay, OtodomProperty } from '@/types/property';
-import type { PopupTranslations, FactorTranslations } from './MapView';
-import { ClusterAnalysisMap } from '@/lib/price-analysis';
+import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
+import type { PopupTranslations, FactorTranslations, MapViewRef } from './MapView';
 
 // Dynamically import the map to avoid SSR issues with Leaflet
 const MapWithNoSSR = dynamic(() => import('./MapView'), {
@@ -23,6 +21,9 @@ export interface MapContainerRef {
   flyTo: (lat: number, lng: number, zoom?: number) => void;
   fitBounds: (bounds: Bounds) => void;
   invalidateSize: () => void;
+  getMap: () => L.Map | null;
+  getExtensionLayerGroup: () => L.LayerGroup | null;
+  getLeaflet: () => typeof import('leaflet') | null;
 }
 
 interface MapContainerProps {
@@ -32,16 +33,8 @@ interface MapContainerProps {
   pois?: Record<string, POI[]>;
   showPOIs?: boolean;
   factors?: Factor[];
-  properties?: EnrichedProperty[];
-  propertyClusters?: PropertyCluster[];
-  showProperties?: boolean;
-  propertyFilters?: PropertyFilters;
-  clusterPriceDisplay?: ClusterPriceDisplay;
-  clusterPriceAnalysis?: ClusterPriceAnalysisMode;
-  detailedModeThreshold?: number;
-  clusterAnalysisData?: ClusterAnalysisMap;
-  clusterPropertiesCache?: Map<string, OtodomProperty[]>;
-  onClusterPropertiesFetched?: (clusterId: string, properties: OtodomProperty[]) => void;
+  /** Callback when map is ready with Leaflet instance and extension layer */
+  onMapReady?: (map: L.Map, L: typeof import('leaflet'), extensionLayer: L.LayerGroup) => void;
 }
 
 const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
@@ -51,19 +44,10 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
   pois = {},
   showPOIs = false,
   factors = [],
-  properties = [],
-  propertyClusters = [],
-  showProperties = false,
-  propertyFilters,
-  clusterPriceDisplay = 'median',
-  clusterPriceAnalysis = 'simplified',
-  detailedModeThreshold = 100,
-  clusterAnalysisData,
-  clusterPropertiesCache,
-  onClusterPropertiesFetched,
+  onMapReady,
 }, ref) => {
   const [isMounted, setIsMounted] = useState(false);
-  const mapViewRef = useRef<MapContainerRef>(null);
+  const mapViewRef = useRef<MapViewRef>(null);
   
   // Get translations for popup
   const tPopup = useTranslations('popup');
@@ -125,6 +109,9 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
     invalidateSize: () => {
       mapViewRef.current?.invalidateSize();
     },
+    getMap: () => mapViewRef.current?.getMap() ?? null,
+    getExtensionLayerGroup: () => mapViewRef.current?.getExtensionLayerGroup() ?? null,
+    getLeaflet: () => mapViewRef.current?.getLeaflet() ?? null,
   }));
 
   if (!isMounted) {
@@ -148,16 +135,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
       factors={factors}
       popupTranslations={popupTranslations}
       factorTranslations={factorTranslations}
-      properties={properties}
-      propertyClusters={propertyClusters}
-      showProperties={showProperties}
-      propertyFilters={propertyFilters}
-      clusterPriceDisplay={clusterPriceDisplay}
-      clusterPriceAnalysis={clusterPriceAnalysis}
-      detailedModeThreshold={detailedModeThreshold}
-      clusterAnalysisData={clusterAnalysisData}
-      clusterPropertiesCache={clusterPropertiesCache}
-      onClusterPropertiesFetched={onClusterPropertiesFetched}
+      onMapReady={onMapReady}
     />
   );
 });

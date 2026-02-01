@@ -10,6 +10,10 @@ export { RefreshButton } from './RefreshButton';
 export { default as RealEstateSidebar } from './RealEstateSidebar';
 export { default as ScoreRangeSlider } from './ScoreRangeSlider';
 export { default as DataSourcesPanel } from './DataSourcesPanel';
+export { default as ExtensionsSidebar } from './ExtensionsSidebar';
+export { default as ExtensionsBottomSheet } from './ExtensionsBottomSheet';
+export { ExtensionsDebugPanel } from './ExtensionsDebugPanel';
+export { ExtensionsSettingsPanel } from './ExtensionsSettingsPanel';
 export type { DataSource } from './DataSourcesPanel';
 export type { HeatmapSettings } from '@/types';
 

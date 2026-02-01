@@ -19,6 +19,9 @@ export const Z_INDEX = {
   
   /** Tooltips (highest priority) */
   TOOLTIP: 9999,
+  
+  /** Leaflet map heatmap pane (below tile pane at 200, above overlay pane at 400) */
+  MAP_HEATMAP_PANE: 450,
 } as const;
 
 export type ZIndexKey = keyof typeof Z_INDEX;

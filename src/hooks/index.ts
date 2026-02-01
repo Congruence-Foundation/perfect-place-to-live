@@ -6,4 +6,3 @@ export { renderHeatmapToCanvas } from './useCanvasRenderer';
 export { useNotification } from './useNotification';
 export type { Notification } from './useNotification';
 export { useClickOutside } from './useClickOutside';
-export { useOtodomProperties } from './useOtodomProperties';

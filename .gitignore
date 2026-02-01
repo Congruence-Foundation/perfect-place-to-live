@@ -47,3 +47,6 @@ next-env.d.ts
 
 # Generated osmium filters (source of truth: src/config/poi-categories.ts)
 osmium-filters.txt
+
+# Cursor
+.cursor/plans/

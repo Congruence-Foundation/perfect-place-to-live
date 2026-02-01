@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchOtodomProperties } from '@/lib/otodom';
+import { fetchOtodomProperties } from '@/extensions/real-estate/lib/otodom';
 import { PropertyRequest, DEFAULT_PROPERTY_FILTERS } from '@/types/property';
 import { isValidBounds } from '@/lib/bounds';
 import { errorResponse } from '@/lib/api-utils';

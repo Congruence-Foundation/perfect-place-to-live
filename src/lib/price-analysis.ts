@@ -9,6 +9,7 @@ import {
   PropertyCluster,
 } from '@/types/property';
 import { distanceInMeters } from './geo';
+import { roomCountToNumber } from './format';
 
 /**
  * Minimum number of properties in a group for valid statistical comparison
@@ -50,22 +51,13 @@ const QUALITY_TIERS: Array<{ min: number; max: number; tier: LocationQualityTier
 
 /**
  * Convert room string (e.g., "TWO", "THREE") to number
+ * Uses the shared roomCountToNumber from format.ts
  */
 function roomStringToNumber(roomsNumber: string): number {
-  const mapping: Record<string, number> = {
-    'ONE': 1,
-    'TWO': 2,
-    'THREE': 3,
-    'FOUR': 4,
-    'FIVE': 5,
-    'SIX': 6,
-    'SEVEN': 7,
-    'EIGHT': 8,
-    'NINE': 9,
-    'TEN': 10,
-    'MORE': 11,
-  };
-  return mapping[roomsNumber] || parseInt(roomsNumber) || 0;
+  const result = roomCountToNumber(roomsNumber);
+  // Handle "10+" case from format.ts by treating it as 11
+  if (result === '10+') return 11;
+  return parseInt(result, 10) || 0;
 }
 
 /**
@@ -398,34 +390,6 @@ export const PRICE_CATEGORY_COLORS: Record<PriceCategory, string> = {
   overpriced: '#ef4444',  // Red-500
   no_data: '#6b7280',     // Gray-500
 };
-
-/**
- * Get color for price category (for markers)
- */
-export function getPriceCategoryColor(category: PriceCategory): string {
-  return PRICE_CATEGORY_COLORS[category] || PRICE_CATEGORY_COLORS.no_data;
-}
-
-/**
- * Get label for price category
- */
-export function getPriceCategoryLabel(category: PriceCategory): string {
-  switch (category) {
-    case 'great_deal':
-      return 'Great Deal';
-    case 'good_deal':
-      return 'Good Deal';
-    case 'fair':
-      return 'Fair Price';
-    case 'above_avg':
-      return 'Above Average';
-    case 'overpriced':
-      return 'Overpriced';
-    case 'no_data':
-    default:
-      return 'No Data';
-  }
-}
 
 /**
  * Result of cluster price analysis

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Bug, X, AlertCircle } from 'lucide-react';
+import { ExtensionsDebugPanel } from './ExtensionsDebugPanel';
 
 interface DebugInfoProps {
   enabledFactorCount: number;
@@ -14,8 +15,6 @@ interface DebugInfoProps {
   error: string | null;
   isMobile?: boolean;
   zoomLevel?: number;
-  propertyCount?: number;
-  clusterCount?: number;
 }
 
 export default function DebugInfo({
@@ -25,8 +24,6 @@ export default function DebugInfo({
   error,
   isMobile = false,
   zoomLevel,
-  propertyCount = 0,
-  clusterCount = 0,
 }: DebugInfoProps) {
   const [isOpen, setIsOpen] = useState(false);
   const t = useTranslations('debug');
@@ -57,18 +54,9 @@ export default function DebugInfo({
                 <span className="font-mono font-medium">{zoomLevel.toFixed(1)}</span>
               </div>
             )}
-            {(propertyCount > 0 || clusterCount > 0) && (
-              <>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{t('properties')}</span>
-                  <span className="font-mono font-medium">{propertyCount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{t('clusters')}</span>
-                  <span className="font-mono font-medium">{clusterCount.toLocaleString()}</span>
-                </div>
-              </>
-            )}
+            
+            {/* Extension Debug Panels - Self-contained */}
+            <ExtensionsDebugPanel />
             
             {/* Heatmap Section */}
             <div className="flex justify-between">
