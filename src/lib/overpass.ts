@@ -1,5 +1,7 @@
 import { Bounds, POI } from '@/types';
 import { OVERPASS_API_URL } from '@/config/factors';
+import { snapBoundsForCacheKey } from '@/lib/bounds';
+import { OVERPASS_CONFIG } from '@/constants/performance';
 
 // Rate limiting: track last request time
 let lastRequestTime = 0;
@@ -107,7 +109,7 @@ function buildOverpassQuery(osmTags: string[], bounds: Bounds): string {
     .join('');
 
   return `
-    [out:json][timeout:30];
+    [out:json][timeout:${OVERPASS_CONFIG.TIMEOUT_SINGLE}];
     (
       ${tagQueries}
     );
@@ -140,7 +142,7 @@ function buildCombinedOverpassQuery(
     .join('');
 
   return `
-    [out:json][timeout:60];
+    [out:json][timeout:${OVERPASS_CONFIG.TIMEOUT_COMBINED}];
     (
       ${allTagQueries}
     );
@@ -280,13 +282,7 @@ export async function fetchAllPOIsCombined(
  */
 export function generatePOICacheKey(factorId: string, bounds: Bounds): string {
   // Round bounds to reduce cache fragmentation
-  const precision = 2;
-  const roundedBounds = {
-    north: Math.ceil(bounds.north * 10 ** precision) / 10 ** precision,
-    south: Math.floor(bounds.south * 10 ** precision) / 10 ** precision,
-    east: Math.ceil(bounds.east * 10 ** precision) / 10 ** precision,
-    west: Math.floor(bounds.west * 10 ** precision) / 10 ** precision,
-  };
+  const roundedBounds = snapBoundsForCacheKey(bounds, 2);
 
   return `poi:${factorId}:${roundedBounds.south},${roundedBounds.west},${roundedBounds.north},${roundedBounds.east}`;
 }

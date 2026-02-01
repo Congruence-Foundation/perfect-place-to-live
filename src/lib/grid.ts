@@ -1,5 +1,8 @@
 import { Bounds, Point } from '@/types';
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from './geo';
+import { PERFORMANCE_CONFIG } from '@/constants/performance';
+
+const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
 
 /**
  * Generate a grid of sample points within the given bounds
@@ -45,9 +48,9 @@ export function estimateGridSize(bounds: Bounds, cellSize: number): number {
  */
 export function calculateAdaptiveGridSize(
   bounds: Bounds,
-  targetPoints: number = 2500,
-  minCellSize: number = 50,
-  maxCellSize: number = 1000
+  targetPoints: number = TARGET_GRID_POINTS,
+  minCellSize: number = MIN_CELL_SIZE,
+  maxCellSize: number = MAX_CELL_SIZE
 ): number {
   const centerLat = (bounds.north + bounds.south) / 2;
 

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Database, ChevronDown, Check } from 'lucide-react';
+import { Database, ChevronDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
 export type DataSource = 'otodom' | 'gratka';

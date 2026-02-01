@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { decode } from '@msgpack/msgpack';
 import { Bounds, Factor, HeatmapPoint, HeatmapResponse, POI, DistanceCurve, DataSource } from '@/types';

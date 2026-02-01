@@ -52,7 +52,7 @@ export default function MapSettings({
     } z-[1000]`}>
       {/* Expanded Panel - Absolutely positioned above the button */}
       {isOpen && (
-        <div className={`absolute ${isMobile ? 'bottom-12 right-0' : 'bottom-12 right-0'} bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-64 animate-in fade-in slide-in-from-bottom-2 duration-200 ${
+        <div className={`absolute bottom-12 right-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-64 animate-in fade-in slide-in-from-bottom-2 duration-200 ${
           isMobile ? 'max-h-[50vh] overflow-y-auto' : ''
         }`}>
           {/* Header */}

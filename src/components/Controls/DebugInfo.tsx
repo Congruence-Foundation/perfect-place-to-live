@@ -31,7 +31,7 @@ export default function DebugInfo({
     } z-[1000]`}>
       {/* Expanded Panel - Absolutely positioned above the button */}
       {isOpen && (
-        <div className={`absolute ${isMobile ? 'bottom-12 left-0' : 'bottom-12 left-0'} bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-48 animate-in fade-in slide-in-from-bottom-2 duration-200`}>
+        <div className="absolute bottom-12 left-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-48 animate-in fade-in slide-in-from-bottom-2 duration-200">
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-semibold">{t('title')}</span>

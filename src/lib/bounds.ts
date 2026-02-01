@@ -1,6 +1,24 @@
 import { Bounds } from '@/types';
 
 /**
+ * Snap bounds to a grid for cache key generation
+ * Rounds north/east up and south/west down to reduce cache fragmentation
+ * 
+ * @param bounds - The original geographic bounds
+ * @param precision - Number of decimal places (default: 2, which gives ~1km precision)
+ * @returns Snapped bounds
+ */
+export function snapBoundsForCacheKey(bounds: Bounds, precision: number = 2): Bounds {
+  const multiplier = 10 ** precision;
+  return {
+    north: Math.ceil(bounds.north * multiplier) / multiplier,
+    south: Math.floor(bounds.south * multiplier) / multiplier,
+    east: Math.ceil(bounds.east * multiplier) / multiplier,
+    west: Math.floor(bounds.west * multiplier) / multiplier,
+  };
+}
+
+/**
  * Validate that bounds object has all required properties with valid values
  * 
  * @param bounds - The bounds object to validate

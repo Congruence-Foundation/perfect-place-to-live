@@ -37,6 +37,61 @@ export const PERFORMANCE_CONFIG = {
   
   /** Maximum cell size in meters for grid calculations */
   MAX_CELL_SIZE: 500,
+  
+  /** Fallback minimum cell size when viewport is too large */
+  FALLBACK_MIN_CELL_SIZE: 50,
+  
+  /** Fallback maximum cell size when viewport is too large */
+  FALLBACK_MAX_CELL_SIZE: 2000,
+  
+  /** Tolerance multiplier for max grid points check */
+  MAX_GRID_POINTS_TOLERANCE: 1.5,
+} as const;
+
+/**
+ * Tile generation configuration
+ */
+export const TILE_CONFIG = {
+  /** Cache TTL for POIs during tile generation (seconds) - 24 hours */
+  POI_CACHE_TTL_SECONDS: 86400,
+  
+  /** Cache TTL for generated tiles (seconds) - 7 days */
+  TILE_CACHE_TTL_SECONDS: 604800,
+  
+  /** Number of tiles to process in parallel */
+  BATCH_SIZE: 5,
+  
+  /** Delay between batches (ms) */
+  BATCH_DELAY_MS: 1000,
+  
+  /** Minimum zoom level for tile generation */
+  MIN_ZOOM: 8,
+  
+  /** Maximum zoom level for tile generation */
+  MAX_ZOOM: 14,
+  
+  /** Base grid size for adaptive calculation */
+  BASE_GRID_SIZE: 200,
+  
+  /** Minimum grid size for tiles */
+  MIN_GRID_SIZE: 50,
+  
+  /** Zoom level base for grid size calculation */
+  GRID_ZOOM_BASE: 10,
+} as const;
+
+/**
+ * Property cluster configuration
+ */
+export const CLUSTER_CONFIG = {
+  /** Default page number for pagination */
+  DEFAULT_PAGE: 1,
+  
+  /** Default number of results per page */
+  DEFAULT_LIMIT: 36,
+  
+  /** Default cluster radius in meters */
+  DEFAULT_RADIUS_METERS: 1000,
 } as const;
 
 /**
