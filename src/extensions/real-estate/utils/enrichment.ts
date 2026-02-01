@@ -1,6 +1,6 @@
 import type { HeatmapPoint } from '@/types';
-import type { OtodomProperty, EnrichedProperty } from '@/types/property';
-import { enrichPropertiesSimplified } from '@/lib/price-analysis';
+import type { OtodomProperty, EnrichedProperty } from '../types';
+import { enrichPropertiesSimplified } from '../lib';
 
 // Default grid cell size for enrichment calculations
 const DEFAULT_GRID_CELL_SIZE = 200;

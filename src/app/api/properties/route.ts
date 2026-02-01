@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchOtodomProperties } from '@/extensions/real-estate/lib/otodom';
-import { PropertyRequest, DEFAULT_PROPERTY_FILTERS } from '@/types/property';
-import { isValidBounds } from '@/lib/bounds';
+import { fetchOtodomProperties } from '@/extensions/real-estate/lib';
+import { PropertyRequest, DEFAULT_PROPERTY_FILTERS } from '@/extensions/real-estate/types';
+import { isValidBounds } from '@/lib/geo';
 import { errorResponse } from '@/lib/api-utils';
 
 export const runtime = 'nodejs';

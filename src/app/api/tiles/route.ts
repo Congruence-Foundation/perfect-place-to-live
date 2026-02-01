@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cacheGet } from '@/lib/cache';
-import { tileToBounds } from '@/lib/grid';
+import { tileToBounds } from '@/lib/geo';
 import { PrecomputedTile } from '@/types';
 import { errorResponse } from '@/lib/api-utils';
 

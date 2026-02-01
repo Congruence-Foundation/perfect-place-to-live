@@ -1,5 +1,5 @@
-import type { PriceCategory, EnrichedProperty, ClusterPriceDisplay } from '@/types/property';
-import { PRICE_CATEGORY_COLORS } from '@/lib/price-analysis';
+import type { PriceCategory, EnrichedProperty, ClusterPriceDisplay } from '../types';
+import { PRICE_CATEGORY_COLORS } from '../lib';
 import { formatCompactPrice } from '@/lib/format';
 
 // Cluster icon dimensions

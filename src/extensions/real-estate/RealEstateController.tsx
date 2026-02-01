@@ -5,17 +5,18 @@ import { useShallow } from 'zustand/react/shallow';
 import { useMapStore } from '@/stores/mapStore';
 import { useRealEstateStore } from './store';
 import { useRealEstateMarkers } from './hooks/useRealEstateMarkers';
-import { isBoundsTooLarge } from '@/lib/bounds';
+import { isBoundsTooLarge } from '@/lib/geo';
 import type { Bounds } from '@/types';
-import type { PropertyFilters, EnrichedProperty, PropertyCluster } from '@/types/property';
-import { DEFAULT_PROPERTY_FILTERS } from '@/types/property';
+import type { PropertyFilters, EnrichedProperty, PropertyCluster } from './types';
+import { DEFAULT_PROPERTY_FILTERS } from './types';
 import {
   enrichPropertiesWithPriceScore,
   filterPropertiesByPriceValue,
   analyzeClusterPrices,
   enrichPropertiesSimplified,
-} from '@/lib/price-analysis';
-import { filterPropertiesByScore, filterClustersByScore } from '@/lib/score-lookup';
+  filterPropertiesByScore,
+  filterClustersByScore,
+} from './lib';
 
 /**
  * RealEstateController - Self-contained controller for the real estate extension

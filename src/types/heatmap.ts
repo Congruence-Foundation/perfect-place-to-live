@@ -2,7 +2,7 @@ import { Bounds } from './poi';
 import { Factor } from './factors';
 import { POI } from './poi';
 import { DataSource } from '@/lib/errors';
-import { ClusterPriceDisplay } from './property';
+import type { ClusterPriceDisplay } from '@/extensions/real-estate/types';
 
 export type DistanceCurve = 'linear' | 'log' | 'exp' | 'power';
 

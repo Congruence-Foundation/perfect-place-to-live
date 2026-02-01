@@ -3,7 +3,7 @@
 import { ReactNode } from 'react';
 import { Label } from '@/components/ui/label';
 import { Building2, Home } from 'lucide-react';
-import { EstateType } from '@/types/property';
+import { EstateType } from '@/extensions/real-estate/types';
 
 interface EstateTypeToggleProps {
   label: string;

@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { Bounds, POI } from '@/types';
+import type { Bounds, POI } from '@/types';
 
 /**
  * Create a Neon SQL client

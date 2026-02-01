@@ -1,5 +1,6 @@
-import { Point, POI } from '@/types';
-import { EARTH_RADIUS_METERS, METERS_PER_DEGREE_LAT, toRad } from './geo';
+import type { Point, POI } from '@/types';
+import { EARTH_RADIUS_METERS, METERS_PER_DEGREE_LAT } from './constants';
+import { toRad } from './distance';
 
 /**
  * Calculate the Haversine distance between two points in meters

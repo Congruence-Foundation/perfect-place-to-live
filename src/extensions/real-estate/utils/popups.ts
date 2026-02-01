@@ -1,4 +1,4 @@
-import type { OtodomProperty, EnrichedProperty } from '@/types/property';
+import type { OtodomProperty, EnrichedProperty } from '../types';
 import { formatPrice, roomCountToNumber } from '@/lib/format';
 import { generatePriceAnalysisBadgeHtml, PRICE_BADGE_COLORS, PRICE_BADGE_LABELS } from './markers';
 

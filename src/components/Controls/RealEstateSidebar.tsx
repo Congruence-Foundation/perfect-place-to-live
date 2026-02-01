@@ -18,7 +18,7 @@ import {
   HouseBuildingType,
   BuildingMaterial,
   PropertyExtra,
-} from '@/types/property';
+} from '@/extensions/real-estate/types';
 import {
   ROOM_OPTIONS,
   FLOOR_OPTIONS,
@@ -30,7 +30,7 @@ import {
   MARKET_OPTIONS,
   OWNER_TYPE_OPTIONS,
   TranslatableFilterOption,
-} from '@/config/filters';
+} from '@/extensions/real-estate/config';
 
 interface RealEstateSidebarProps {
   filters: PropertyFilters;

@@ -4,7 +4,7 @@ import * as React from 'react';
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import { Label } from '@/components/ui/label';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
-import { PriceValueFilter as PriceValueFilterType } from '@/types/property';
+import type { PriceValueFilter as PriceValueFilterType } from '../../types/property';
 import { cn } from '@/lib/utils';
 
 interface PriceValueFilterOption {

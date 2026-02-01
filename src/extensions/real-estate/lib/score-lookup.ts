@@ -1,6 +1,6 @@
-import { HeatmapPoint } from '@/types/heatmap';
-import { OtodomProperty, PropertyCluster } from '@/types/property';
-import { distanceInMeters } from './geo';
+import type { HeatmapPoint } from '@/types/heatmap';
+import type { OtodomProperty, PropertyCluster } from '../types/property';
+import { distanceInMeters } from '@/lib/geo';
 
 /**
  * Interface for items that have geographic coordinates

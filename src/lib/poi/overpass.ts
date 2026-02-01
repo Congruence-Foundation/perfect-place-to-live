@@ -1,6 +1,6 @@
-import { Bounds, POI } from '@/types';
+import type { Bounds, POI } from '@/types';
 import { OVERPASS_API_URL } from '@/config/factors';
-import { snapBoundsForCacheKey } from '@/lib/geo';
+import { snapBoundsForCacheKey } from '@/lib/geo/bounds';
 import { OVERPASS_CONFIG } from '@/constants/performance';
 
 // Rate limiting: track last request time
@@ -223,7 +223,7 @@ interface OverpassResponse {
 /**
  * Fetch POIs from Overpass API with retry logic
  */
-export async function fetchPOIs(
+export async function fetchPOIsFromOverpass(
   osmTags: string[],
   bounds: Bounds,
   signal?: AbortSignal,

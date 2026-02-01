@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { encode } from '@msgpack/msgpack';
-import { generatePOICacheKey } from '@/lib/overpass';
-import { fetchPOIs, DataSource } from '@/lib/poi-service';
-import { calculateHeatmapParallel } from '@/lib/calculator-parallel';
+import { generatePOICacheKey, fetchPOIs, DataSource } from '@/lib/poi';
+import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS } from '@/config/factors';
 import { Factor, POI, HeatmapRequest } from '@/types';
-import { estimateGridSize, calculateAdaptiveGridSize } from '@/lib/grid';
-import { expandBounds, isValidBounds } from '@/lib/bounds';
+import { estimateGridSize, calculateAdaptiveGridSize, expandBounds, isValidBounds } from '@/lib/geo';
 import { errorResponse } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG } from '@/constants/performance';
 import { GRID_BUFFER_DEGREES } from '@/constants/heatmap';

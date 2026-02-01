@@ -13,12 +13,12 @@
  * - name?: string
  */
 
-import { Bounds, POI } from '@/types';
+import type { Bounds, POI } from '@/types';
 import { getPOIsWithDetailsFromDB } from './db';
 import { fetchAllPOIsCombined } from './overpass';
-import { POIFetchError, DataSource } from './errors';
+import { POIFetchError, DataSource } from '@/lib/errors';
 
-export type { DataSource } from './errors';
+export type { DataSource } from '@/lib/errors';
 
 /**
  * Fetches POIs from the specified data source within the given bounds.

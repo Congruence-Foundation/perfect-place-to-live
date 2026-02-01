@@ -1,4 +1,4 @@
-import { Bounds } from '@/types';
+import type { Bounds } from '@/types';
 
 /**
  * Snap bounds to a grid for cache key generation

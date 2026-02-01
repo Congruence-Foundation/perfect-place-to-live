@@ -1,13 +1,8 @@
 /**
- * Geographic utility functions and constants
- * Consolidates duplicated geo calculations from across the codebase
+ * Geographic distance utility functions
  */
 
-/** Earth's radius in meters */
-export const EARTH_RADIUS_METERS = 6371000;
-
-/** Meters per degree of latitude (approximately constant) */
-export const METERS_PER_DEGREE_LAT = 111320;
+import { METERS_PER_DEGREE_LAT } from './constants';
 
 /**
  * Convert degrees to radians
@@ -29,7 +24,7 @@ export function metersPerDegreeLng(lat: number): number {
  * Uses simple Euclidean approximation - faster but less accurate for large distances
  * 
  * For more accurate distance calculations over larger distances,
- * use haversineDistance from @/lib/haversine
+ * use haversineDistance from @/lib/geo/haversine
  */
 export function distanceInMeters(
   lat1: number,

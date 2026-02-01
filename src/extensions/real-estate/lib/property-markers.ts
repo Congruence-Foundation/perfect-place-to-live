@@ -1,6 +1,6 @@
-import { EstateType, PriceCategory } from '@/types/property';
+import type { EstateType, PriceCategory } from '../types/property';
 import { PRICE_CATEGORY_COLORS } from './price-analysis';
-import { formatCompactPrice } from './format';
+import { formatCompactPrice } from '@/lib/format';
 
 /**
  * Property marker colors by estate type

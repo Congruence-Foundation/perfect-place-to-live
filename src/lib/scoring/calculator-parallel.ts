@@ -10,8 +10,8 @@
 
 import { Worker } from 'worker_threads';
 import * as os from 'os';
-import { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/types';
-import { generateGrid, calculateAdaptiveGridSize } from './grid';
+import type { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/types';
+import { generateGrid, calculateAdaptiveGridSize } from '@/lib/geo/grid';
 import { normalizeKValues, logKStats } from './calculator';
 import { PERFORMANCE_CONFIG } from '@/constants';
 
@@ -49,15 +49,15 @@ function chunkArray<T>(array: T[], numChunks: number): T[][] {
  * The following code is intentionally duplicated here because worker threads
  * run in isolated contexts and cannot import from other modules:
  * 
- * - haversineDistance() - duplicated from src/lib/haversine.ts
- * - SpatialIndex class - duplicated from src/lib/haversine.ts
- * - applyDistanceCurve() - duplicated from src/lib/calculator.ts
- * - calculateDensityBonus() - duplicated from src/lib/calculator.ts
+ * - haversineDistance() - duplicated from src/lib/geo/haversine.ts
+ * - SpatialIndex class - duplicated from src/lib/geo/haversine.ts
+ * - applyDistanceCurve() - duplicated from src/lib/scoring/calculator.ts
+ * - calculateDensityBonus() - duplicated from src/lib/scoring/calculator.ts
  * 
  * Constants that must stay in sync:
- * - EARTH_RADIUS_METERS (6371000) - from src/lib/geo.ts
+ * - EARTH_RADIUS_METERS (6371000) - from src/lib/geo/constants.ts
  * - DENSITY_BONUS_* constants - from src/constants/performance.ts
- * - Magic number 111320 (meters per degree lat) - from src/lib/geo.ts METERS_PER_DEGREE_LAT
+ * - Magic number 111320 (meters per degree lat) - from src/lib/geo/constants.ts METERS_PER_DEGREE_LAT
  * 
  * When modifying any of these source files, remember to update this worker code!
  */

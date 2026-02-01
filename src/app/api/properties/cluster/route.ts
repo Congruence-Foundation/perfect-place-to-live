@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchClusterProperties } from '@/extensions/real-estate/lib/otodom';
-import { PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/types/property';
+import { fetchClusterProperties } from '@/extensions/real-estate/lib';
+import { PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/extensions/real-estate/types';
 import { errorResponse } from '@/lib/api-utils';
 import { CLUSTER_CONFIG } from '@/constants/performance';
 

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallba
 import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
 import { POI_COLORS, getColorForK, Z_INDEX } from '@/constants';
 import { formatDistance } from '@/lib/utils';
-import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/calculator';
+import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/scoring';
 import { renderHeatmapToCanvas } from '@/hooks/useCanvasRenderer';
 
 // Popup translations interface

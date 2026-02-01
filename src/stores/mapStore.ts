@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import type { Bounds, HeatmapPoint, POI, Factor, ClusterPriceAnalysisMode } from '@/types';
-import type { ClusterPriceDisplay } from '@/types/property';
+import type { ClusterPriceDisplay } from '@/extensions/real-estate/types';
 
 /**
  * Core map store state interface

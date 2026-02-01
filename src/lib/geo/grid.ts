@@ -1,5 +1,6 @@
-import { Bounds, Point } from '@/types';
-import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from './geo';
+import type { Bounds, Point } from '@/types';
+import { METERS_PER_DEGREE_LAT } from './constants';
+import { metersPerDegreeLng } from './distance';
 import { PERFORMANCE_CONFIG } from '@/constants/performance';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;

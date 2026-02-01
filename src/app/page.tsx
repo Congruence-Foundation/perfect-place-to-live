@@ -11,7 +11,7 @@ import { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, DataSource, HeatmapRe
 import { useHeatmap, useIsMobile, useNotification } from '@/hooks';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Loader2, ChevronLeft, ChevronRight, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
-import { isViewportCovered, isBoundsTooLarge, expandBounds } from '@/lib/bounds';
+import { isViewportCovered, isBoundsTooLarge, expandBounds } from '@/lib/geo';
 import { Toast } from '@/components/ui/toast';
 import { useMapStore } from '@/stores/mapStore';
 import { ExtensionControllers } from '@/components/ExtensionControllers';

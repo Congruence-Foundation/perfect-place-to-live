@@ -3,7 +3,7 @@
  * Centralized filter options for all data sources
  */
 
-import {
+import type {
   RoomCount,
   FloorLevel,
   FlatBuildingType,
@@ -12,8 +12,16 @@ import {
   PropertyExtra,
   MarketType,
   OwnerType,
-} from '@/types/property';
-import { DataSource } from '@/components/Controls/DataSourcesPanel';
+} from '../types/property';
+
+// ============================================================================
+// Data Source Type
+// ============================================================================
+
+/**
+ * Available data sources for property listings
+ */
+export type DataSource = 'otodom' | 'gratka';
 
 // ============================================================================
 // Filter Option Types

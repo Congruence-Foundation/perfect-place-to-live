@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchPOIs, generatePOICacheKey } from '@/lib/overpass';
-import { calculateHeatmap } from '@/lib/calculator';
-import { tileToBounds, getTilesForBounds } from '@/lib/grid';
+import { fetchPOIsFromOverpass as fetchPOIs, generatePOICacheKey } from '@/lib/poi';
+import { calculateHeatmap } from '@/lib/scoring';
+import { tileToBounds, getTilesForBounds } from '@/lib/geo';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS, POLAND_BOUNDS } from '@/config/factors';
 import { POI, PrecomputedTile } from '@/types';

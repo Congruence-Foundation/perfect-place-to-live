@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { RealEstateSidebar, ScoreRangeSlider } from '@/components/Controls';
-import { PriceValueFilter } from '@/components/Controls/filters';
+import PriceValueFilter from './filters/PriceValueFilter';
 import { useRealEstateExtension } from '../hooks';
 
 /**

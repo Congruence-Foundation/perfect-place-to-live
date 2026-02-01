@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { HeatmapSettings, ClusterPriceAnalysisMode } from '@/types';
-import { ClusterPriceDisplay } from '@/types/property';
+import { ClusterPriceDisplay } from '../types';
 import { useRealEstateExtension } from '../hooks';
 
 const CLUSTER_PRICE_VALUES: ClusterPriceDisplay[] = ['none', 'range', 'median', 'median_spread'];

@@ -1,6 +1,6 @@
-import { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/types';
-import { haversineDistance, SpatialIndex } from './haversine';
-import { generateGrid, calculateAdaptiveGridSize } from './grid';
+import type { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/types';
+import { haversineDistance, SpatialIndex } from '@/lib/geo/haversine';
+import { generateGrid, calculateAdaptiveGridSize } from '@/lib/geo/grid';
 import { PERFORMANCE_CONFIG, DENSITY_BONUS } from '@/constants';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
@@ -451,4 +451,3 @@ export function calculateFactorBreakdown(
 
   return { k, breakdown };
 }
-

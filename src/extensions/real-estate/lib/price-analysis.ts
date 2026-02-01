@@ -1,15 +1,14 @@
 import { median, standardDeviation, quantileRank } from 'simple-statistics';
-import { HeatmapPoint } from '@/types/heatmap';
-import {
+import type { HeatmapPoint } from '@/types/heatmap';
+import type {
   OtodomProperty,
   EnrichedProperty,
-  PropertyPriceAnalysis,
   LocationQualityTier,
   PriceCategory,
   PropertyCluster,
-} from '@/types/property';
-import { distanceInMeters } from './geo';
-import { roomCountToNumber } from './format';
+} from '../types/property';
+import { distanceInMeters } from '@/lib/geo';
+import { roomCountToNumber } from '@/lib/format';
 
 /**
  * Minimum number of properties in a group for valid statistical comparison

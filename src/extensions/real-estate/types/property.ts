@@ -1,4 +1,4 @@
-import { Bounds } from './poi';
+import type { Bounds } from '@/types/poi';
 
 /**
  * Transaction type for property listings

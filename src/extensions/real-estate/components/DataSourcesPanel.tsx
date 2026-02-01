@@ -4,8 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Database, ChevronDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-
-export type DataSource = 'otodom' | 'gratka';
+import type { DataSource } from '../config/filters';
 
 interface DataSourcesPanelProps {
   enabledSources: DataSource[];

@@ -11,8 +11,8 @@ import type {
   ClusterPropertiesResponse,
   PriceCategory,
   EstateType,
-} from '@/types/property';
-import { generatePropertyMarkerHtml, getPropertyMarkerClassName } from '@/lib/property-markers';
+} from '../types';
+import { generatePropertyMarkerHtml, getPropertyMarkerClassName } from '../lib';
 import {
   generateClusterPriceLabel,
   getClusterPriceCategories,

@@ -5,9 +5,8 @@ import {
   PropertyResponse,
   PropertyCluster,
   EstateType,
-} from '@/types/property';
-import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '@/lib/geo';
-import { snapBoundsForCacheKey } from '@/lib/bounds';
+} from '../types';
+import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, snapBoundsForCacheKey } from '@/lib/geo';
 
 /**
  * Otodom GraphQL API configuration

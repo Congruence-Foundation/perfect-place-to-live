@@ -10,10 +10,10 @@ import type {
   EnrichedProperty,
   PriceValueRange,
   PropertyResponse,
-} from '@/types/property';
-import { DEFAULT_PROPERTY_FILTERS } from '@/types/property';
-import type { DataSource } from '@/components/Controls/DataSourcesPanel';
-import type { ClusterAnalysisMap } from '@/lib/price-analysis';
+} from './types';
+import { DEFAULT_PROPERTY_FILTERS } from './types';
+import type { DataSource } from './config';
+import type { ClusterAnalysisMap } from './lib';
 
 /**
  * Real estate store state interface
