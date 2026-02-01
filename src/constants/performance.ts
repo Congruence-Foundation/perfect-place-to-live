@@ -131,3 +131,42 @@ export const DENSITY_BONUS = {
   /** Number of additional POIs needed for full bonus */
   SCALE: 3,
 } as const;
+
+/**
+ * Property tile configuration for real estate extension
+ * Uses fixed zoom level tiles for optimal cache efficiency
+ */
+export const PROPERTY_TILE_CONFIG = {
+  /** Fixed tile zoom level for property fetching (~2.4km x 2.4km tiles at Poland's latitude) */
+  TILE_ZOOM: 13,
+  
+  /** Maximum viewport tiles before showing "zoom in" message */
+  MAX_VIEWPORT_TILES: 25,
+  
+  /** Hard limit on total tiles including radius buffer */
+  MAX_TOTAL_TILES: 50,
+  
+  /** Number of tiles to fetch per batch (to respect Otodom API limits) */
+  BATCH_SIZE: 5,
+  
+  /** Delay between batches in milliseconds */
+  BATCH_DELAY_MS: 100,
+  
+  /** Client-side cache stale time (React Query) - 5 minutes */
+  CLIENT_STALE_TIME_MS: 5 * 60 * 1000,
+  
+  /** Client-side cache garbage collection time (React Query) - 30 minutes */
+  CLIENT_GC_TIME_MS: 30 * 60 * 1000,
+  
+  /** Server-side LRU cache maximum entries */
+  SERVER_LRU_MAX: 500,
+  
+  /** Server-side cache TTL in seconds - 5 minutes */
+  SERVER_TTL_SECONDS: 300,
+  
+  /** Default price analysis radius (number of tile layers around viewport) */
+  DEFAULT_PRICE_RADIUS: 1,
+  
+  /** Maximum price analysis radius */
+  MAX_PRICE_RADIUS: 2,
+} as const;

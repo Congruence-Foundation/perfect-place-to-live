@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useMapStore } from '@/stores/mapStore';
 import { useRealEstateStore } from './store';
 import { useRealEstateMarkers } from './hooks/useRealEstateMarkers';
-import { isBoundsTooLarge } from '@/lib/geo';
-import type { Bounds } from '@/types';
-import type { PropertyFilters, EnrichedProperty, PropertyCluster } from './types';
-import { DEFAULT_PROPERTY_FILTERS } from './types';
+import { useTileQueries } from './hooks/useTileQueries';
+import type { EnrichedProperty, PropertyCluster } from './types';
 import {
   enrichPropertiesWithPriceScore,
   filterPropertiesByPriceValue,
@@ -22,7 +20,7 @@ import {
  * RealEstateController - Self-contained controller for the real estate extension
  * 
  * This component handles all side effects for the real estate extension:
- * 1. Fetching properties when bounds/filters change
+ * 1. Fetching properties using tile-based approach (via useTileQueries)
  * 2. Computing enriched/filtered properties
  * 3. Rendering markers on the map
  * 
@@ -31,9 +29,10 @@ import {
  */
 export function RealEstateController() {
   // Get map state
-  const { bounds, heatmapPoints, gridCellSize, clusterPriceDisplay, clusterPriceAnalysis, detailedModeThreshold } = useMapStore(
+  const { bounds, zoom, heatmapPoints, gridCellSize, clusterPriceDisplay, clusterPriceAnalysis, detailedModeThreshold } = useMapStore(
     useShallow((s) => ({
       bounds: s.bounds,
+      zoom: s.zoom,
       heatmapPoints: s.heatmapPoints,
       gridCellSize: s.gridCellSize,
       clusterPriceDisplay: s.clusterPriceDisplay,
@@ -57,69 +56,79 @@ export function RealEstateController() {
     filters,
     scoreRange,
     priceValueRange,
-    rawProperties,
-    rawClusters,
+    priceAnalysisRadius,
     clusterPropertiesCache,
     cacheVersion,
-    fetchProperties,
-    clearProperties,
+    setRawData,
     setComputedData,
+    setIsLoading,
+    setIsTooLarge,
+    setError,
     cacheClusterProperties,
+    clearProperties,
   } = useRealEstateStore(
     useShallow((s) => ({
       enabled: s.enabled,
       filters: s.filters,
       scoreRange: s.scoreRange,
       priceValueRange: s.priceValueRange,
-      rawProperties: s.rawProperties,
-      rawClusters: s.rawClusters,
+      priceAnalysisRadius: s.priceAnalysisRadius,
       clusterPropertiesCache: s.clusterPropertiesCache,
       cacheVersion: s.cacheVersion,
-      fetchProperties: s.fetchProperties,
-      clearProperties: s.clearProperties,
+      setRawData: s.setRawData,
       setComputedData: s.setComputedData,
+      setIsLoading: s.setIsLoading,
+      setIsTooLarge: s.setIsTooLarge,
+      setError: s.setError,
       cacheClusterProperties: s.cacheClusterProperties,
+      clearProperties: s.clearProperties,
     }))
   );
-  
-  // Refs for tracking previous values (for fetch logic)
-  const prevBoundsRef = useRef<Bounds | null>(null);
-  const prevFiltersRef = useRef<PropertyFilters>(DEFAULT_PROPERTY_FILTERS);
-  const prevEnabledRef = useRef(false);
 
   // ============================================
-  // EFFECT 1: Fetch properties when bounds/filters change
+  // TILE-BASED FETCHING: Use useTileQueries hook
   // ============================================
+  const {
+    properties: rawProperties,
+    clusters: rawClusters,
+    isLoading,
+    isTooLarge,
+    error,
+  } = useTileQueries({
+    bounds,
+    zoom,
+    filters,
+    priceAnalysisRadius,
+    enabled,
+  });
+
+  // Sync tile query state to store
   useEffect(() => {
-    const justEnabled = enabled && !prevEnabledRef.current;
-    prevEnabledRef.current = enabled;
-    
-    if (!enabled || !bounds) {
-      if (!enabled && prevBoundsRef.current !== null) {
-        clearProperties();
-      }
-      prevBoundsRef.current = bounds;
+    setIsLoading(isLoading);
+  }, [isLoading, setIsLoading]);
+
+  useEffect(() => {
+    setIsTooLarge(isTooLarge);
+  }, [isTooLarge, setIsTooLarge]);
+
+  useEffect(() => {
+    setError(error);
+  }, [error, setError]);
+
+  // Update raw data in store when tile data changes
+  useEffect(() => {
+    if (!enabled) {
       return;
     }
+    setRawData(rawProperties, rawClusters, rawProperties.length);
+  }, [rawProperties, rawClusters, enabled, setRawData]);
 
-    if (isBoundsTooLarge(bounds)) {
-      return;
+  // Clear properties when disabled
+  useEffect(() => {
+    if (!enabled) {
+      clearProperties();
     }
-
-    const boundsChanged = !prevBoundsRef.current || 
-      bounds.north !== prevBoundsRef.current.north ||
-      bounds.south !== prevBoundsRef.current.south ||
-      bounds.east !== prevBoundsRef.current.east ||
-      bounds.west !== prevBoundsRef.current.west;
-    
-    const filtersChanged = JSON.stringify(filters) !== JSON.stringify(prevFiltersRef.current);
-
-    if (boundsChanged || filtersChanged || justEnabled) {
-      fetchProperties(bounds);
-      prevBoundsRef.current = bounds;
-      prevFiltersRef.current = filters;
-    }
-  }, [bounds, enabled, filters, fetchProperties, clearProperties]);
+  }, [enabled, clearProperties]);
 
   // ============================================
   // COMPUTED: Enrich and filter properties
@@ -198,14 +207,14 @@ export function RealEstateController() {
   }, [clusterPriceAnalysis, enabled, filteredClusters, enrichedProperties, allPropertiesForAnalytics, heatmapPoints, gridCellSize]);
 
   // ============================================
-  // EFFECT 2: Update computed data in store
+  // EFFECT: Update computed data in store
   // ============================================
   useEffect(() => {
     setComputedData(filteredProperties, filteredClusters, clusterAnalysisData);
   }, [filteredProperties, filteredClusters, clusterAnalysisData, setComputedData]);
 
   // ============================================
-  // EFFECT 3: Render markers on the map
+  // EFFECT: Render markers on the map
   // ============================================
   // Only render markers when map is ready
   useRealEstateMarkers({

@@ -63,7 +63,12 @@
     "detailedThreshold": "Detailed Threshold",
     "detailedThresholdTooltip": "Maximum cluster size for detailed mode. Larger clusters fall back to simplified mode to avoid too many API calls.",
     "fewClusters": "Fewer",
-    "manyClusters": "More"
+    "manyClusters": "More",
+    "priceAnalysisRadius": "Price Analysis Area",
+    "priceAnalysisRadiusTooltip": "Expand the area used for price comparison. Larger areas provide more accurate analysis but may be slower.",
+    "priceAnalysisRadius_0": "Viewport",
+    "priceAnalysisRadius_1": "+1 tile",
+    "priceAnalysisRadius_2": "+2 tiles"
   },
   "curves": {
     "log": {

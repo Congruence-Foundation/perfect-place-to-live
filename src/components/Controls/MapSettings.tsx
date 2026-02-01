@@ -185,33 +185,6 @@ export default function MapSettings({
               </div>
             </div>
 
-            {/* Computation Mode */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-1">
-                <Label className="text-xs">{t('computation')}</Label>
-                <InfoTooltip>
-                  <p className="text-xs">{t('computationTooltip')}</p>
-                </InfoTooltip>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className={mode === 'realtime' ? 'font-medium' : 'text-muted-foreground'}>
-                  {t('realtime')}
-                </span>
-                <Switch
-                  checked={mode === 'precomputed'}
-                  onCheckedChange={(checked) => onModeChange(checked ? 'precomputed' : 'realtime')}
-                />
-                <span className={mode === 'precomputed' ? 'font-medium' : 'text-muted-foreground'}>
-                  {t('cached')}
-                </span>
-              </div>
-              {mode === 'precomputed' && (
-                <p className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg">
-                  {t('cachedNotAvailable')}
-                </p>
-              )}
-            </div>
-
             {/* Data Source Toggle - Overpass API (disabled by default) */}
             {onUseOverpassAPIChange && (
               <div className="space-y-2">

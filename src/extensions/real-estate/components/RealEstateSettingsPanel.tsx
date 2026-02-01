@@ -14,9 +14,13 @@ import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { HeatmapSettings, ClusterPriceAnalysisMode } from '@/types';
 import { ClusterPriceDisplay } from '../types';
 import { useRealEstateExtension } from '../hooks';
+import { useRealEstateStore } from '../store';
 
 const CLUSTER_PRICE_VALUES: ClusterPriceDisplay[] = ['none', 'range', 'median', 'median_spread'];
 const CLUSTER_ANALYSIS_VALUES: ClusterPriceAnalysisMode[] = ['off', 'simplified', 'detailed'];
+
+// Price analysis radius options (values only, labels come from translations)
+const PRICE_RADIUS_VALUES = [0, 1, 2] as const;
 
 interface RealEstateSettingsPanelProps {
   settings: HeatmapSettings;
@@ -32,12 +36,39 @@ interface RealEstateSettingsPanelProps {
 export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEstateSettingsPanelProps) {
   const t = useTranslations('settings');
   const realEstate = useRealEstateExtension();
+  const priceAnalysisRadius = useRealEstateStore((s) => s.priceAnalysisRadius);
+  const setPriceAnalysisRadius = useRealEstateStore((s) => s.setPriceAnalysisRadius);
   
   // Don't render anything if extension is not enabled
   if (!realEstate.enabled) return null;
   
   return (
     <>
+      {/* Price Analysis Radius */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <Label className="text-xs">{t('priceAnalysisRadius')}</Label>
+          <InfoTooltip>
+            <p className="text-xs">{t('priceAnalysisRadiusTooltip')}</p>
+          </InfoTooltip>
+        </div>
+        <Select
+          value={priceAnalysisRadius.toString()}
+          onValueChange={(value) => setPriceAnalysisRadius(parseInt(value, 10))}
+        >
+          <SelectTrigger className="h-7 text-xs w-[100px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" className="z-[1100]">
+            {PRICE_RADIUS_VALUES.map((value) => (
+              <SelectItem key={value} value={value.toString()} className="text-xs">
+                {t(`priceAnalysisRadius_${value}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Cluster Price Display */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1">
@@ -50,7 +81,7 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
           value={settings.clusterPriceDisplay}
           onValueChange={(value: ClusterPriceDisplay) => onSettingsChange({ clusterPriceDisplay: value })}
         >
-          <SelectTrigger className="h-7 text-xs w-[90px]">
+          <SelectTrigger className="h-7 text-xs w-[100px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper" className="z-[1100]">
@@ -75,7 +106,7 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
           value={settings.clusterPriceAnalysis}
           onValueChange={(value: ClusterPriceAnalysisMode) => onSettingsChange({ clusterPriceAnalysis: value })}
         >
-          <SelectTrigger className="h-7 text-xs w-[90px]">
+          <SelectTrigger className="h-7 text-xs w-[100px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper" className="z-[1100]">

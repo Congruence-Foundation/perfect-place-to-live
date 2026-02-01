@@ -14,6 +14,7 @@ import type {
 import { DEFAULT_PROPERTY_FILTERS } from './types';
 import type { DataSource } from './config';
 import type { ClusterAnalysisMap } from './lib';
+import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
 
 /**
  * Real estate store state interface
@@ -26,7 +27,10 @@ export interface RealEstateState {
   priceValueRange: PriceValueRange;
   dataSources: DataSource[];
   
-  // Raw API data
+  // Tile-based fetching settings
+  priceAnalysisRadius: number; // 0, 1, or 2 tile layers around viewport
+  
+  // Raw API data (now populated by useTileQueries)
   rawProperties: OtodomProperty[];
   rawClusters: PropertyCluster[];
   totalCount: number;
@@ -38,6 +42,7 @@ export interface RealEstateState {
   
   // API state
   isLoading: boolean;
+  isTooLarge: boolean; // Viewport too large for tile fetching
   error: string | null;
   
   // Cache
@@ -55,6 +60,7 @@ export interface RealEstateActions {
   setScoreRange: (range: [number, number]) => void;
   setPriceValueRange: (range: PriceValueRange) => void;
   setDataSources: (sources: DataSource[]) => void;
+  setPriceAnalysisRadius: (radius: number) => void;
   
   // Data actions
   setRawData: (properties: OtodomProperty[], clusters: PropertyCluster[], totalCount: number) => void;
@@ -62,6 +68,7 @@ export interface RealEstateActions {
   
   // API state actions
   setIsLoading: (loading: boolean) => void;
+  setIsTooLarge: (isTooLarge: boolean) => void;
   setError: (error: string | null) => void;
   
   // Cache actions
@@ -71,7 +78,7 @@ export interface RealEstateActions {
   // Clear all
   clearProperties: () => void;
   
-  // Fetch action (async)
+  // Legacy fetch action (kept for backwards compatibility, but useTileQueries is preferred)
   fetchProperties: (bounds: Bounds) => Promise<void>;
 }
 
@@ -89,6 +96,7 @@ const initialState: RealEstateState = {
   scoreRange: [50, 100],
   priceValueRange: [0, 100],
   dataSources: ['otodom'],
+  priceAnalysisRadius: PROPERTY_TILE_CONFIG.DEFAULT_PRICE_RADIUS,
   rawProperties: [],
   rawClusters: [],
   totalCount: 0,
@@ -96,6 +104,7 @@ const initialState: RealEstateState = {
   clusters: [],
   clusterAnalysisData: new Map(),
   isLoading: false,
+  isTooLarge: false,
   error: null,
   clusterPropertiesCache: new Map(),
   cacheVersion: 0,
@@ -136,6 +145,12 @@ export const useRealEstateStore = create<RealEstateStore>()(
       
       setDataSources: (dataSources) => set({ dataSources }, false, 'setDataSources'),
       
+      setPriceAnalysisRadius: (priceAnalysisRadius) => set(
+        { priceAnalysisRadius: Math.min(Math.max(priceAnalysisRadius, 0), PROPERTY_TILE_CONFIG.MAX_PRICE_RADIUS) },
+        false,
+        'setPriceAnalysisRadius'
+      ),
+      
       // Data actions
       setRawData: (rawProperties, rawClusters, totalCount) => set(
         {
@@ -157,6 +172,7 @@ export const useRealEstateStore = create<RealEstateStore>()(
       
       // API state actions
       setIsLoading: (isLoading) => set({ isLoading }, false, 'setIsLoading'),
+      setIsTooLarge: (isTooLarge) => set({ isTooLarge }, false, 'setIsTooLarge'),
       setError: (error) => set({ error }, false, 'setError'),
       
       // Cache actions
@@ -197,6 +213,7 @@ export const useRealEstateStore = create<RealEstateStore>()(
             totalCount: 0,
             error: null,
             isLoading: false,
+            isTooLarge: false,
             clusterPropertiesCache: new Map(),
             clusterAnalysisData: new Map(),
             cacheVersion: get().cacheVersion + 1,
@@ -287,3 +304,5 @@ export const useRealEstateProperties = () => useRealEstateStore((s) => s.propert
 export const useRealEstateClusters = () => useRealEstateStore((s) => s.clusters);
 export const useRealEstateLoading = () => useRealEstateStore((s) => s.isLoading);
 export const useRealEstateError = () => useRealEstateStore((s) => s.error);
+export const useRealEstatePriceAnalysisRadius = () => useRealEstateStore((s) => s.priceAnalysisRadius);
+export const useRealEstateIsTooLarge = () => useRealEstateStore((s) => s.isTooLarge);

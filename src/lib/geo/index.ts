@@ -29,3 +29,15 @@ export {
   tileToBounds,
   getTilesForBounds,
 } from './grid';
+
+// Property tile utilities
+export {
+  type TileCoord,
+  PROPERTY_TILE_ZOOM,
+  getTileKey,
+  getExpandedTilesForRadius,
+  hashFilters,
+  isViewportTooLarge,
+  getPropertyTilesForBounds,
+  separateViewportAndBufferTiles,
+} from './tiles';

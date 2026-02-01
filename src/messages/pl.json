@@ -63,7 +63,12 @@
     "detailedThreshold": "Próg szczegółowy",
     "detailedThresholdTooltip": "Maksymalny rozmiar klastra dla trybu szczegółowego. Większe klastry przełączają się na tryb uproszczony, aby uniknąć zbyt wielu zapytań API.",
     "fewClusters": "Mniej",
-    "manyClusters": "Więcej"
+    "manyClusters": "Więcej",
+    "priceAnalysisRadius": "Obszar analizy",
+    "priceAnalysisRadiusTooltip": "Rozszerz obszar używany do porównywania cen. Większe obszary zapewniają dokładniejszą analizę, ale mogą być wolniejsze.",
+    "priceAnalysisRadius_0": "Widok",
+    "priceAnalysisRadius_1": "+1 kafel",
+    "priceAnalysisRadius_2": "+2 kafle"
   },
   "curves": {
     "log": {
