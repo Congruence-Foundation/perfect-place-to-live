@@ -1,6 +1,14 @@
 import { HeatmapPoint } from '@/types/heatmap';
 import { OtodomProperty, PropertyCluster } from '@/types/property';
-import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, distanceInMeters } from './geo';
+import { distanceInMeters } from './geo';
+
+/**
+ * Interface for items that have geographic coordinates
+ */
+interface GeoLocated {
+  lat: number;
+  lng: number;
+}
 
 /**
  * Get the heatmap score (K value) for a specific location.
@@ -12,7 +20,7 @@ import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, distanceInMeters } from './g
  * @param gridCellSize - Grid cell size in meters (used to determine search radius)
  * @returns K value (0-1, where 0 is best) or null if no nearby point found
  */
-export function getScoreForLocation(
+function getScoreForLocation(
   lat: number,
   lng: number,
   heatmapPoints: HeatmapPoint[],
@@ -43,8 +51,56 @@ export function getScoreForLocation(
 /**
  * Convert quality percentage (0-100, higher is better) to K value (0-1, lower is better)
  */
-export function qualityToKValue(quality: number): number {
+function qualityToKValue(quality: number): number {
   return 1 - (quality / 100);
+}
+
+/**
+ * Generic filter function for items with geographic coordinates based on heatmap score.
+ * Only returns items whose score falls within the specified quality range.
+ * 
+ * @param items - Array of items with lat/lng coordinates to filter
+ * @param heatmapPoints - Array of heatmap points with scores
+ * @param qualityRange - [min, max] quality range (0-100, where 100 is best)
+ * @param gridCellSize - Grid cell size in meters
+ * @returns Filtered array of items
+ */
+function filterByScore<T extends GeoLocated>(
+  items: T[],
+  heatmapPoints: HeatmapPoint[],
+  qualityRange: [number, number],
+  gridCellSize: number
+): T[] {
+  // If no heatmap data, return all items
+  if (!heatmapPoints || heatmapPoints.length === 0) {
+    return items;
+  }
+
+  // If full range selected, return all items
+  if (qualityRange[0] === 0 && qualityRange[1] === 100) {
+    return items;
+  }
+
+  // Convert quality range to K value range (inverted)
+  const kValueMax = qualityToKValue(qualityRange[0]); // Low quality = high K value
+  const kValueMin = qualityToKValue(qualityRange[1]); // High quality = low K value
+
+  return items.filter((item) => {
+    const kValue = getScoreForLocation(
+      item.lat,
+      item.lng,
+      heatmapPoints,
+      gridCellSize
+    );
+
+    // If no score found for this location, include the item
+    if (kValue === null) {
+      return true;
+    }
+
+    // Check if K value falls within the range
+    return kValue >= kValueMin && kValue <= kValueMax;
+  });
 }
 
 /**
@@ -63,36 +119,7 @@ export function filterPropertiesByScore(
   qualityRange: [number, number],
   gridCellSize: number
 ): OtodomProperty[] {
-  // If no heatmap data, return all properties
-  if (!heatmapPoints || heatmapPoints.length === 0) {
-    return properties;
-  }
-
-  // If full range selected, return all properties
-  if (qualityRange[0] === 0 && qualityRange[1] === 100) {
-    return properties;
-  }
-
-  // Convert quality range to K value range (inverted)
-  const kValueMax = qualityToKValue(qualityRange[0]); // Low quality = high K value
-  const kValueMin = qualityToKValue(qualityRange[1]); // High quality = low K value
-
-  return properties.filter((property) => {
-    const kValue = getScoreForLocation(
-      property.lat,
-      property.lng,
-      heatmapPoints,
-      gridCellSize
-    );
-
-    // If no score found for this location, include the property
-    if (kValue === null) {
-      return true;
-    }
-
-    // Check if K value falls within the range
-    return kValue >= kValueMin && kValue <= kValueMax;
-  });
+  return filterByScore(properties, heatmapPoints, qualityRange, gridCellSize);
 }
 
 /**
@@ -111,34 +138,5 @@ export function filterClustersByScore(
   qualityRange: [number, number],
   gridCellSize: number
 ): PropertyCluster[] {
-  // If no heatmap data, return all clusters
-  if (!heatmapPoints || heatmapPoints.length === 0) {
-    return clusters;
-  }
-
-  // If full range selected, return all clusters
-  if (qualityRange[0] === 0 && qualityRange[1] === 100) {
-    return clusters;
-  }
-
-  // Convert quality range to K value range (inverted)
-  const kValueMax = qualityToKValue(qualityRange[0]);
-  const kValueMin = qualityToKValue(qualityRange[1]);
-
-  return clusters.filter((cluster) => {
-    const kValue = getScoreForLocation(
-      cluster.lat,
-      cluster.lng,
-      heatmapPoints,
-      gridCellSize
-    );
-
-    // If no score found for this location, include the cluster
-    if (kValue === null) {
-      return true;
-    }
-
-    // Check if K value falls within the range
-    return kValue >= kValueMin && kValue <= kValueMax;
-  });
+  return filterByScore(clusters, heatmapPoints, qualityRange, gridCellSize);
 }

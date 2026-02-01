@@ -140,7 +140,7 @@ export interface OtodomProperty {
  */
 export interface PropertyFilters {
   transaction: TransactionType;
-  estate: EstateType;
+  estate: EstateType[];  // Allow multiple selection (FLAT, HOUSE, or both)
   priceMin?: number;
   priceMax?: number;
   areaMin?: number;
@@ -174,7 +174,7 @@ export interface PropertyFilters {
  */
 export const DEFAULT_PROPERTY_FILTERS: PropertyFilters = {
   transaction: 'SELL',
-  estate: 'FLAT',
+  estate: ['FLAT'],  // Default to apartment only
   priceMin: 100000,
   priceMax: 2000000,
   areaMin: 20,
@@ -209,15 +209,17 @@ export interface PropertyCluster {
   lat: number;
   lng: number;
   count: number;
+  radiusInMeters?: number;
+  shape?: string; // GeoJSON polygon string defining the cluster boundary
+  estateType?: string; // The estate type this cluster represents (FLAT, HOUSE, etc.)
 }
 
 /**
- * Real estate panel state
+ * Response from cluster properties API
  */
-export interface RealEstateState {
-  enabled: boolean;
-  filters: PropertyFilters;
+export interface ClusterPropertiesResponse {
   properties: OtodomProperty[];
-  isLoading: boolean;
-  error: string | null;
+  totalCount: number;
+  currentPage: number;
+  totalPages: number;
 }

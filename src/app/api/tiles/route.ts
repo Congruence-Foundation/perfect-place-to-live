@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cacheGet } from '@/lib/cache';
 import { tileToBounds } from '@/lib/grid';
 import { PrecomputedTile } from '@/types';
+import { errorResponse } from '@/lib/api-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     const y = parseInt(searchParams.get('y') || '', 10);
 
     if (isNaN(z) || isNaN(x) || isNaN(y)) {
-      return NextResponse.json({ error: 'Invalid tile coordinates' }, { status: 400 });
+      return errorResponse(new Error('Invalid tile coordinates'), 400);
     }
 
     // Try to get pre-computed tile from cache
@@ -40,9 +41,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Tiles API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return errorResponse(error);
   }
 }

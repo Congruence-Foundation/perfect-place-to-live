@@ -19,15 +19,15 @@ export const FACTOR_PROFILES: FactorProfile[] = [
     description: 'Well-rounded for general living',
     icon: 'scale',
     overrides: {
-      // Essential - core factors for daily life (6 enabled)
+      // Essential - core factors for daily European life
       grocery: { weight: 85, maxDistance: 1200, enabled: true },
-      transit: { weight: 75, maxDistance: 1000, enabled: true },
-      healthcare: { weight: 70, maxDistance: 2000, enabled: true },
-      parks: { weight: 65, maxDistance: 1000, enabled: true },
-      schools: { weight: 45, enabled: false }, // Enable if you have kids
-      post: { weight: 50, maxDistance: 1200, enabled: true },
-      // Lifestyle - disabled by default for speed
-      restaurants: { weight: 40, enabled: false },
+      transit: { weight: 80, maxDistance: 1000, enabled: true },
+      parks: { weight: 70, maxDistance: 1000, enabled: true },
+      post: { weight: 55, maxDistance: 1200, enabled: true },
+      restaurants: { weight: 50, maxDistance: 1000, enabled: true },
+      // Disabled by default
+      healthcare: { weight: 70, enabled: false },
+      schools: { weight: 45, enabled: false },
       banks: { weight: 35, enabled: false },
       gyms: { weight: 30, enabled: false },
       playgrounds: { weight: 35, enabled: false },
@@ -40,9 +40,9 @@ export const FACTOR_PROFILES: FactorProfile[] = [
       cinemas: { weight: 25, enabled: false },
       markets: { weight: 35, enabled: false },
       water: { weight: 40, enabled: false },
-      // Environment - only key negatives (2 enabled)
-      industrial: { weight: -30, maxDistance: 1500, enabled: true },
-      highways: { weight: -40, maxDistance: 300, enabled: true },
+      // Environment - industrial with reduced importance
+      industrial: { weight: -20, maxDistance: 1500, enabled: true },
+      highways: { weight: -40, enabled: false },
       airports: { weight: -40, enabled: false },
       railways: { weight: -25, enabled: false },
       cemeteries: { weight: -15, enabled: false },
@@ -261,6 +261,44 @@ export const FACTOR_PROFILES: FactorProfile[] = [
       construction: { weight: -55, maxDistance: 500, enabled: true },
       city_center: { weight: 50, maxDistance: 10000, enabled: true },
       city_downtown: { weight: -35, maxDistance: 3000, enabled: true },
+    },
+  },
+  {
+    id: 'suburban',
+    name: 'Suburban',
+    description: 'Outside city, railway commute, basic amenities',
+    icon: 'train-front',
+    overrides: {
+      // Essential infrastructure
+      grocery: { weight: 90, maxDistance: 1500, enabled: true },
+      transit: { weight: 40, maxDistance: 1500, enabled: true }, // Less important, but nice to have
+      train_stations: { weight: 100, maxDistance: 3000, enabled: true }, // Critical for commuting to city
+      healthcare: { weight: 65, maxDistance: 3000, enabled: true },
+      parks: { weight: 75, maxDistance: 1200, enabled: true },
+      schools: { weight: 50, enabled: false }, // Enable if you have kids
+      post: { weight: 55, maxDistance: 1500, enabled: true },
+      restaurants: { weight: 35, maxDistance: 1500, enabled: false }, // Less variety expected
+      banks: { weight: 40, enabled: false },
+      gyms: { weight: 35, enabled: false },
+      playgrounds: { weight: 40, enabled: false },
+      stadiums: { weight: 0, enabled: false },
+      nightlife: { weight: 0, enabled: false },
+      universities: { weight: 0, enabled: false },
+      religious: { weight: 0, enabled: false },
+      dog_parks: { weight: 45, enabled: false },
+      coworking: { weight: 0, enabled: false },
+      cinemas: { weight: 20, enabled: false },
+      markets: { weight: 40, enabled: false },
+      water: { weight: 50, maxDistance: 2000, enabled: false },
+      // Environment - prefer quieter suburban areas
+      industrial: { weight: -45, maxDistance: 1500, enabled: true },
+      highways: { weight: -35, maxDistance: 400, enabled: true }, // Some tolerance, need car access
+      airports: { weight: -40, enabled: false },
+      railways: { weight: -15, maxDistance: 300, enabled: true }, // Minor negative, trains are good
+      cemeteries: { weight: -10, enabled: false },
+      construction: { weight: -30, enabled: false },
+      city_center: { weight: 50, maxDistance: 15000, enabled: true }, // Want to be within reach but not too close
+      city_downtown: { weight: -50, maxDistance: 5000, enabled: true }, // Avoid downtown
     },
   },
   {

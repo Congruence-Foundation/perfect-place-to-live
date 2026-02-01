@@ -5,6 +5,8 @@ import { tileToBounds, getTilesForBounds } from '@/lib/grid';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS, POLAND_BOUNDS } from '@/config/factors';
 import { POI, PrecomputedTile } from '@/types';
+import { errorResponse } from '@/lib/api-utils';
+import { TILE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,15 +30,12 @@ export async function POST(request: NextRequest) {
 
     // Verify admin secret
     if (adminSecret !== process.env.ADMIN_SECRET) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return errorResponse(new Error('Unauthorized'), 401);
     }
 
     // Validate zoom level
-    if (zoom < 8 || zoom > 14) {
-      return NextResponse.json(
-        { error: 'Zoom level must be between 8 and 14' },
-        { status: 400 }
-      );
+    if (zoom < TILE_CONFIG.MIN_ZOOM || zoom > TILE_CONFIG.MAX_ZOOM) {
+      return errorResponse(new Error(`Zoom level must be between ${TILE_CONFIG.MIN_ZOOM} and ${TILE_CONFIG.MAX_ZOOM}`), 400);
     }
 
     const bounds = customBounds || POLAND_BOUNDS;
@@ -53,9 +52,8 @@ export async function POST(request: NextRequest) {
     let errorCount = 0;
 
     // Process tiles in batches to avoid overwhelming the Overpass API
-    const batchSize = 5;
-    for (let i = 0; i < tiles.length; i += batchSize) {
-      const batch = tiles.slice(i, i + batchSize);
+    for (let i = 0; i < tiles.length; i += TILE_CONFIG.BATCH_SIZE) {
+      const batch = tiles.slice(i, i + TILE_CONFIG.BATCH_SIZE);
 
       await Promise.all(
         batch.map(async (tile) => {
@@ -75,7 +73,7 @@ export async function POST(request: NextRequest) {
                 try {
                   const pois = await fetchPOIs(factor.osmTags, tileBounds);
                   poiData.set(factor.id, pois);
-                  await cacheSet(cacheKey, pois, 86400); // 24 hour TTL for POIs
+                  await cacheSet(cacheKey, pois, TILE_CONFIG.POI_CACHE_TTL_SECONDS);
                 } catch (poiError) {
                   console.error(`Error fetching POIs for factor ${factor.id}:`, poiError);
                   poiData.set(factor.id, []);
@@ -83,8 +81,11 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            // Calculate heatmap for this tile
-            const gridSize = Math.max(50, 200 / Math.pow(2, zoom - 10)); // Adaptive grid size
+            // Calculate heatmap for this tile - adaptive grid size based on zoom
+            const gridSize = Math.max(
+              TILE_CONFIG.MIN_GRID_SIZE,
+              TILE_CONFIG.BASE_GRID_SIZE / Math.pow(2, zoom - TILE_CONFIG.GRID_ZOOM_BASE)
+            );
             const heatmapPoints = calculateHeatmap(tileBounds, poiData, enabledFactors, gridSize);
 
             // Create pre-computed tile
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
 
             // Store in cache
             const tileCacheKey = `tile:${tile.z}:${tile.x}:${tile.y}`;
-            await cacheSet(tileCacheKey, precomputedTile, 604800); // 7 day TTL
+            await cacheSet(tileCacheKey, precomputedTile, TILE_CONFIG.TILE_CACHE_TTL_SECONDS);
 
             generatedCount++;
           } catch (error) {
@@ -110,8 +111,8 @@ export async function POST(request: NextRequest) {
       );
 
       // Small delay between batches to be nice to Overpass API
-      if (i + batchSize < tiles.length) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (i + TILE_CONFIG.BATCH_SIZE < tiles.length) {
+        await new Promise((resolve) => setTimeout(resolve, TILE_CONFIG.BATCH_DELAY_MS));
       }
     }
 
@@ -124,9 +125,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Tile generation error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return errorResponse(error);
   }
 }

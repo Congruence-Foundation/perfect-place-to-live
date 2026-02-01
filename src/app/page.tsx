@@ -531,6 +531,7 @@ export default function Home() {
           properties={filteredProperties}
           propertyClusters={filteredClusters}
           showProperties={realEstateEnabled}
+          propertyFilters={propertyFilters}
         />
 
         {/* Top Right Controls - Language Switcher and App Info */}

@@ -90,7 +90,7 @@ export const HOUSE_BUILDING_TYPE_OPTIONS: TranslatableFilterOption<HouseBuilding
 // ============================================================================
 
 export const BUILDING_MATERIAL_OPTIONS: TranslatableFilterOption<BuildingMaterial>[] = [
-  { value: 'BRICK', labelKey: 'materialBite' },
+  { value: 'BRICK', labelKey: 'materialBrick' },
   { value: 'WOOD', labelKey: 'materialWood' },
   { value: 'CONCRETE', labelKey: 'materialConcrete' },
   { value: 'CONCRETE_PLATE', labelKey: 'materialConcretePlate' },

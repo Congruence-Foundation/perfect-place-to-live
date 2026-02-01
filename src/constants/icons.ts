@@ -85,6 +85,7 @@ export const PROFILE_ICON_MAP: Record<string, React.ComponentType<{ className?: 
   heart: Heart,
   'graduation-cap': GraduationCap,
   gem: Gem,
+  'train-front': TrainFront,
 };
 
 /**

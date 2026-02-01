@@ -87,12 +87,12 @@ export async function POST(request: NextRequest) {
 
     // Validate bounds
     if (!isValidBounds(bounds)) {
-      return NextResponse.json({ error: 'Invalid bounds' }, { status: 400 });
+      return errorResponse(new Error('Invalid bounds'), 400);
     }
 
     // Validate factor IDs
     if (!factorIds || !Array.isArray(factorIds) || factorIds.length === 0) {
-      return NextResponse.json({ error: 'Invalid factor IDs' }, { status: 400 });
+      return errorResponse(new Error('Invalid factor IDs'), 400);
     }
 
     const result = await fetchPOIsWithCache(bounds, factorIds);
@@ -114,11 +114,11 @@ export async function GET(request: NextRequest) {
   const factorIds = searchParams.get('factorIds')?.split(',') || [];
 
   if (isNaN(north) || isNaN(south) || isNaN(east) || isNaN(west)) {
-    return NextResponse.json({ error: 'Invalid bounds' }, { status: 400 });
+    return errorResponse(new Error('Invalid bounds'), 400);
   }
 
   if (factorIds.length === 0) {
-    return NextResponse.json({ error: 'Invalid factor IDs' }, { status: 400 });
+    return errorResponse(new Error('Invalid factor IDs'), 400);
   }
 
   try {

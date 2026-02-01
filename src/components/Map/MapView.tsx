@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
-import { OtodomProperty, PropertyCluster } from '@/types/property';
+import { OtodomProperty, PropertyCluster, PropertyFilters, ClusterPropertiesResponse, EstateType } from '@/types/property';
 import { POI_COLORS, getColorForK } from '@/constants';
 import { formatDistance } from '@/lib/utils';
-import { formatPrice } from '@/lib/format';
+import { formatPrice, roomCountToNumber } from '@/lib/format';
+import { generatePropertyMarkerHtml, getPropertyMarkerClassName } from '@/lib/property-markers';
 import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/calculator';
 import { renderHeatmapToCanvas } from '@/hooks/useCanvasRenderer';
 
@@ -145,6 +146,7 @@ interface MapViewProps {
   properties?: OtodomProperty[];
   propertyClusters?: PropertyCluster[];
   showProperties?: boolean;
+  propertyFilters?: PropertyFilters;
 }
 
 // Default translations (English)
@@ -331,6 +333,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   properties = [],
   propertyClusters = [],
   showProperties = false,
+  propertyFilters,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -338,7 +341,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   const poiLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const propertyLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const propertyMarkersRef = useRef<Map<number, L.Marker>>(new Map());
-  const clusterMarkersRef = useRef<L.Marker[]>([]);
+  const clusterMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const canvasOverlayRef = useRef<L.ImageOverlay | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const blobUrlRef = useRef<string | null>(null); // Track blob URL for cleanup
@@ -557,7 +560,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         poiLayerGroupRef.current = null;
         propertyLayerGroupRef.current = null;
         propertyMarkersRef.current.clear();
-        clusterMarkersRef.current = [];
+        clusterMarkersRef.current.clear();
         canvasOverlayRef.current = null;
         offscreenCanvasRef.current = null;
       }
@@ -801,44 +804,26 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         if (!showProperties) {
           propertyLayerGroupRef.current.clearLayers();
           propertyMarkersRef.current.clear();
-          clusterMarkersRef.current = [];
+          clusterMarkersRef.current.clear();
           return;
         }
 
-        // Clear old cluster markers
-        for (const marker of clusterMarkersRef.current) {
-          propertyLayerGroupRef.current.removeLayer(marker);
-        }
-        clusterMarkersRef.current = [];
+        // Track which cluster IDs we've seen in this update
+        const currentClusterIds = new Set<string>();
 
         // Track which property IDs we've seen
         const currentIds = new Set<number>();
 
-        // Create custom icon for properties
-        const propertyIcon = L.divIcon({
-          className: 'property-marker',
-          html: `
-            <div style="
-              width: 28px;
-              height: 28px;
-              background: #3b82f6;
-              border: 2px solid white;
-              border-radius: 50%;
-              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-              display: flex;
-              align-items: center;
-              justify-content: center;
-            ">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                <polyline points="9 22 9 12 15 12 15 22"></polyline>
-              </svg>
-            </div>
-          `,
-          iconSize: [28, 28],
-          iconAnchor: [14, 28],
-          popupAnchor: [0, -28],
-        });
+        // Create custom icon for properties based on estate type
+        const createPropertyIcon = (estateType: EstateType) => {
+          return L.divIcon({
+            className: getPropertyMarkerClassName(estateType),
+            html: generatePropertyMarkerHtml(estateType, 28),
+            iconSize: [28, 28],
+            iconAnchor: [14, 28],
+            popupAnchor: [0, -28],
+          });
+        };
 
         // Add or update property markers
         for (const property of properties) {
@@ -858,22 +843,29 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           const imageCount = property.images.length;
           const galleryId = `gallery-${property.id}`;
           let imageHtml = '';
+
+          // Property type badge
+          const isHouse = property.estate === 'HOUSE';
+          const typeBadgeColor = isHouse ? '#16a34a' : '#3b82f6';
+          const typeBadgeText = isHouse ? 'Dom' : 'Mieszkanie';
           
           if (imageCount > 0) {
             const imagesJson = JSON.stringify(property.images.map(img => img.medium)).replace(/"/g, '&quot;');
             imageHtml = `
-              <div style="position: relative; margin: -8px -8px 6px -8px; background: #f3f4f6; border-radius: 6px 6px 0 0;">
+              <div style="position: relative; background: #f3f4f6; border-radius: 8px 8px 0 0; overflow: hidden;">
                 <img 
                   id="${galleryId}-img" 
                   src="${property.images[0].medium}" 
                   alt="" 
-                  style="width: 100%; height: auto; max-height: 180px; object-fit: contain; border-radius: 6px 6px 0 0; display: block;" 
+                  style="width: 100%; height: auto; max-height: 180px; object-fit: contain; display: block;" 
                   onerror="this.style.display='none'" 
                 />
+                <!-- Property type badge -->
+                <div style="position: absolute; top: 8px; left: 8px; background: ${typeBadgeColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+                  ${typeBadgeText}
+                </div>
                 ${imageCount > 1 ? `
-                  <div style="position: absolute; bottom: 6px; right: 6px; background: rgba(0,0,0,0.6); color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px;">
-                    <span id="${galleryId}-counter">1</span>/${imageCount}
-                  </div>
+                  <!-- Left button - centered between close button area and bottom -->
                   <button 
                     onclick="(function(){
                       var imgs = ${imagesJson};
@@ -884,58 +876,81 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
                       img.src = imgs[idx];
                       counter.textContent = idx + 1;
                     })()"
-                    style="position: absolute; left: 4px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center;"
+                    style="position: absolute; left: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
                   >‹</button>
+                  <!-- Counter at bottom center -->
+                  <span id="${galleryId}-counter" style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px;">1/${imageCount}</span>
+                  <!-- Right button - centered between close button area and bottom -->
                   <button 
                     onclick="(function(){
                       var imgs = ${imagesJson};
                       var img = document.getElementById('${galleryId}-img');
                       var counter = document.getElementById('${galleryId}-counter');
-                      var idx = parseInt(counter.textContent) - 1;
+                      var idx = parseInt(counter.textContent.split('/')[0]) - 1;
                       idx = (idx + 1) % imgs.length;
                       img.src = imgs[idx];
-                      counter.textContent = idx + 1;
+                      counter.textContent = (idx + 1) + '/${imageCount}';
                     })()"
-                    style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center;"
+                    style="position: absolute; right: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
                   >›</button>
                 ` : ''}
               </div>
             `;
           }
 
+          // Format rooms display
+          const roomsDisplay = property.roomsNumber ? roomCountToNumber(property.roomsNumber) : null;
+
           const popupContent = `
-            <div style="min-width: 200px; max-width: 260px; font-family: system-ui, -apple-system, sans-serif; font-size: 11px;">
+            <div style="min-width: 220px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
               ${imageHtml}
-              <div style="font-weight: 600; font-size: 12px; margin-bottom: 4px; line-height: 1.3; max-height: 2.6em; overflow: hidden;">
-                ${property.title}
+              <div style="padding: 12px;">
+                <!-- Title as link -->
+                <a 
+                  href="${property.url}" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style="display: flex; align-items: flex-start; gap: 4px; font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; color: #1f2937; text-decoration: none;"
+                >
+                  <span style="flex: 1; max-height: 2.6em; overflow: hidden;">${property.title}</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
+                </a>
+                <!-- Price -->
+                <div style="font-size: 16px; font-weight: 700; color: #16a34a; margin-bottom: 8px;">
+                  ${property.hidePrice ? 'Cena do negocjacji' : formatPrice(property.totalPrice.value, property.totalPrice.currency)}
+                </div>
+                <!-- Property details -->
+                <div style="display: flex; align-items: center; gap: 4px; color: #4b5563; font-size: 12px;">
+                  <span style="font-weight: 500;">${property.areaInSquareMeters} m²</span>
+                  ${roomsDisplay ? `<span style="color: #9ca3af;">•</span><span style="font-weight: 500;">${roomsDisplay} pok.</span>` : ''}
+                  ${pricePerMeter ? `<span style="color: #9ca3af;">•</span><span style="color: #6b7280;">${pricePerMeter.toLocaleString('pl-PL')} PLN/m²</span>` : ''}
+                </div>
               </div>
-              <div style="font-size: 14px; font-weight: 700; color: #16a34a; margin-bottom: 6px;">
-                ${property.hidePrice ? 'Cena do negocjacji' : formatPrice(property.totalPrice.value, property.totalPrice.currency)}
-              </div>
-              <div style="display: flex; gap: 8px; color: #6b7280; margin-bottom: 6px; flex-wrap: wrap;">
-                <span>📐 ${property.areaInSquareMeters} m²</span>
-                ${property.roomsNumber ? `<span>🚪 ${property.roomsNumber}</span>` : ''}
-              </div>
-              ${pricePerMeter ? `<div style="color: #9ca3af; font-size: 10px; margin-bottom: 6px;">${formatPrice(pricePerMeter)}/m²</div>` : ''}
-              <a 
-                href="${property.url}" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                style="display: inline-block; background: #3b82f6; color: white; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 10px; font-weight: 500;"
-              >
-                Otodom →
-              </a>
             </div>
           `;
 
-          // Create new marker
+          // Create new marker with estate-type-specific icon
           const marker = L.marker([property.lat, property.lng], {
-            icon: propertyIcon,
+            icon: createPropertyIcon(property.estate),
           });
 
           marker.bindPopup(popupContent, {
             maxWidth: 280,
             className: 'property-popup',
+          });
+
+          // Close any existing popup (especially cluster popups with autoClose: false) and open this one
+          marker.on('click', (e) => {
+            // Prevent default popup behavior
+            e.originalEvent?.preventDefault();
+            // Close any existing popup first
+            mapInstanceRef.current?.closePopup();
+            // Then open this marker's popup
+            marker.openPopup();
           });
 
           marker.addTo(propertyLayerGroupRef.current);
@@ -952,6 +967,14 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
         // Add cluster markers (when zoomed out)
         for (const cluster of propertyClusters) {
+          const clusterId = `cluster-${cluster.lat.toFixed(6)}-${cluster.lng.toFixed(6)}`;
+          currentClusterIds.add(clusterId);
+          
+          // Check if cluster marker already exists - skip if it does to preserve popup state
+          if (clusterMarkersRef.current.has(clusterId)) {
+            continue;
+          }
+          
           // Create cluster icon with count
           const clusterIcon = L.divIcon({
             className: 'property-cluster-marker',
@@ -967,6 +990,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
                 align-items: center;
                 justify-content: center;
                 padding: 0 8px;
+                cursor: pointer;
               ">
                 <span style="color: white; font-weight: 700; font-size: 12px;">${cluster.count}</span>
               </div>
@@ -979,13 +1003,279 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
             icon: clusterIcon,
           });
 
-          clusterMarker.bindTooltip(`${cluster.count} properties`, {
-            direction: 'top',
-            offset: [0, -18],
+          // Generate popup HTML for a single property in the cluster with image gallery
+          const generateClusterPropertyHtml = (
+            property: OtodomProperty,
+            currentIndex: number,
+            totalCount: number,
+            fetchedCount: number,
+            imageIndex: number = 0
+          ): string => {
+            const isHouse = property.estate === 'HOUSE';
+            const typeBadgeColor = isHouse ? '#16a34a' : '#3b82f6';
+            const typeBadgeText = isHouse ? 'Dom' : 'Mieszkanie';
+            const roomsDisplay = property.roomsNumber ? roomCountToNumber(property.roomsNumber) : null;
+            const pricePerMeter = property.areaInSquareMeters > 0
+              ? Math.round(property.totalPrice.value / property.areaInSquareMeters)
+              : null;
+            
+            const hasMultipleImages = property.images.length > 1;
+            const currentImage = property.images[imageIndex] || property.images[0];
+            
+            // Show "X / Y" where X is current position and Y is total
+            // If we have more properties than fetched, show "X / Y (Z loaded)"
+            const paginationText = fetchedCount < totalCount 
+              ? `${currentIndex + 1} / ${totalCount}`
+              : `${currentIndex + 1} / ${totalCount}`;
+            
+            // Disable next button when we've reached the end of fetched properties
+            const isAtEnd = currentIndex >= fetchedCount - 1;
+
+            const imageHtml = property.images.length > 0 ? `
+              <div style="position: relative; background: #f3f4f6; border-radius: 8px 8px 0 0; overflow: hidden;">
+                <img 
+                  id="${clusterId}-img"
+                  src="${currentImage.medium}" 
+                  alt="" 
+                  style="width: 100%; height: 160px; object-fit: cover; display: block;" 
+                  onerror="this.style.display='none'" 
+                />
+                <div style="position: absolute; top: 8px; left: 8px; background: ${typeBadgeColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+                  ${typeBadgeText}
+                </div>
+                ${hasMultipleImages ? `
+                  <!-- Left button - centered between close button area and bottom -->
+                  <button 
+                    id="${clusterId}-img-prev"
+                    style="position: absolute; left: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; color: white; font-size: 16px; display: flex; align-items: center; justify-content: center; ${imageIndex === 0 ? 'opacity: 0.3;' : ''}"
+                  >‹</button>
+                  <!-- Counter at bottom center -->
+                  <span style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px;">${imageIndex + 1}/${property.images.length}</span>
+                  <!-- Right button - centered between close button area and bottom -->
+                  <button 
+                    id="${clusterId}-img-next"
+                    style="position: absolute; right: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; color: white; font-size: 16px; display: flex; align-items: center; justify-content: center; ${imageIndex >= property.images.length - 1 ? 'opacity: 0.3;' : ''}"
+                  >›</button>
+                ` : ''}
+              </div>
+            ` : `
+              <div style="background: #f3f4f6; border-radius: 8px 8px 0 0; padding: 20px; text-align: center;">
+                <div style="display: inline-block; background: ${typeBadgeColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+                  ${typeBadgeText}
+                </div>
+              </div>
+            `;
+
+            return `
+              <div style="min-width: 240px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
+                ${imageHtml}
+                <div style="padding: 12px;">
+                  <!-- Title as link -->
+                  <a 
+                    href="${property.url}" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style="display: flex; align-items: flex-start; gap: 4px; font-weight: 600; font-size: 12px; margin-bottom: 6px; line-height: 1.3; color: #1f2937; text-decoration: none;"
+                  >
+                    <span style="flex: 1; max-height: 2.6em; overflow: hidden;">${property.title}</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                      <polyline points="15 3 21 3 21 9"></polyline>
+                      <line x1="10" y1="14" x2="21" y2="3"></line>
+                    </svg>
+                  </a>
+                  <div style="font-size: 15px; font-weight: 700; color: #16a34a; margin-bottom: 6px;">
+                    ${property.hidePrice ? 'Cena do negocjacji' : `${property.totalPrice.value.toLocaleString('pl-PL')} ${property.totalPrice.currency}`}
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 4px; color: #4b5563; margin-bottom: 8px; font-size: 11px;">
+                    <span style="font-weight: 500;">${property.areaInSquareMeters} m²</span>
+                    ${roomsDisplay ? `<span style="color: #9ca3af;">•</span><span style="font-weight: 500;">${roomsDisplay} pok.</span>` : ''}
+                    ${pricePerMeter ? `<span style="color: #9ca3af;">•</span><span style="color: #6b7280;">${pricePerMeter.toLocaleString('pl-PL')} PLN/m²</span>` : ''}
+                  </div>
+                  
+                  <!-- Subtle pagination at bottom -->
+                  <div style="display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 8px; border-top: 1px solid #f3f4f6;">
+                    <button 
+                      id="${clusterId}-prev"
+                      style="background: none; border: none; padding: 4px 8px; cursor: pointer; font-size: 18px; color: ${currentIndex === 0 ? '#d1d5db' : '#6b7280'}; ${currentIndex === 0 ? 'cursor: default;' : ''}"
+                    >‹</button>
+                    <span style="font-size: 11px; color: #9ca3af;">${paginationText}</span>
+                    <button 
+                      id="${clusterId}-next"
+                      style="background: none; border: none; padding: 4px 8px; cursor: pointer; font-size: 18px; color: ${isAtEnd ? '#d1d5db' : '#6b7280'}; ${isAtEnd ? 'cursor: default;' : ''}"
+                    >›</button>
+                  </div>
+                </div>
+              </div>
+            `;
+          };
+
+          // Loading popup HTML
+          const loadingPopupHtml = `
+            <div style="min-width: 200px; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
+              <div style="display: inline-block; width: 24px; height: 24px; border: 2px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+              <div style="margin-top: 12px; color: #6b7280; font-size: 12px;">Ładowanie ${cluster.count} ofert...</div>
+              <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+            </div>
+          `;
+
+          // Error popup HTML
+          const errorPopupHtml = (message: string) => `
+            <div style="min-width: 200px; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
+              <div style="color: #ef4444; font-size: 12px; margin-bottom: 12px;">${message}</div>
+              <a 
+                href="https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie/poznan?viewType=listing" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style="display: inline-block; background: #3b82f6; color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: 500;"
+              >
+                Zobacz na Otodom
+              </a>
+            </div>
+          `;
+
+          // Click handler for cluster
+          clusterMarker.on('click', async () => {
+            // Close any existing popup before opening new one
+            mapInstanceRef.current?.closePopup();
+            
+            // Show loading popup
+            clusterMarker.unbindPopup();
+            clusterMarker.bindPopup(loadingPopupHtml, { 
+              className: 'cluster-popup',
+              maxWidth: 300,
+              closeOnClick: false,
+              autoClose: false,
+            }).openPopup();
+
+            try {
+              // Fetch cluster properties using the cluster's actual shape polygon if available
+              // Also pass the estate type to get accurate counts matching the cluster
+              const response = await fetch('/api/properties/cluster', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  lat: cluster.lat,
+                  lng: cluster.lng,
+                  filters: propertyFilters,
+                  page: 1,
+                  limit: Math.min(cluster.count, 500), // Fetch up to cluster count, max 500
+                  shape: cluster.shape, // Use actual cluster boundary polygon
+                  radius: cluster.radiusInMeters || 1000, // Fallback radius
+                  estateType: cluster.estateType, // Fetch only this estate type for accurate count
+                }),
+              });
+
+              if (!response.ok) {
+                throw new Error('Failed to fetch properties');
+              }
+
+              const data: ClusterPropertiesResponse = await response.json();
+              
+              if (data.properties.length === 0) {
+                clusterMarker.setPopupContent(errorPopupHtml('Nie znaleziono ofert w tym obszarze'));
+                return;
+              }
+
+              // Store properties in window for navigation
+              const windowKey = `__cluster_${clusterId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+              (window as unknown as Record<string, OtodomProperty[]>)[windowKey] = data.properties;
+              
+              // Use the actual total count from API, not just fetched properties length
+              const actualTotalCount = data.totalCount;
+              const fetchedCount = data.properties.length;
+
+              let currentPropertyIndex = 0;
+              let currentImageIndex = 0;
+
+              // Function to update popup content and attach event listeners
+              const updatePopup = () => {
+                const props = (window as unknown as Record<string, OtodomProperty[]>)[windowKey];
+                if (!props || props.length === 0) return;
+                
+                // Show actual total count in pagination, but navigate only through fetched properties
+                const html = generateClusterPropertyHtml(props[currentPropertyIndex], currentPropertyIndex, actualTotalCount, fetchedCount, currentImageIndex);
+                clusterMarker.setPopupContent(html);
+
+                // Re-attach event listeners after DOM update
+                setTimeout(() => {
+                  // Property navigation buttons
+                  const prevBtn = document.getElementById(`${clusterId}-prev`);
+                  const nextBtn = document.getElementById(`${clusterId}-next`);
+                  
+                  if (prevBtn) {
+                    prevBtn.onclick = (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (currentPropertyIndex > 0) {
+                        currentPropertyIndex--;
+                        currentImageIndex = 0; // Reset image index when changing property
+                        updatePopup();
+                      }
+                    };
+                  }
+                  
+                  if (nextBtn) {
+                    nextBtn.onclick = (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      // Navigate only through fetched properties
+                      if (currentPropertyIndex < fetchedCount - 1) {
+                        currentPropertyIndex++;
+                        currentImageIndex = 0; // Reset image index when changing property
+                        updatePopup();
+                      }
+                    };
+                  }
+
+                  // Image gallery navigation buttons
+                  const imgPrevBtn = document.getElementById(`${clusterId}-img-prev`);
+                  const imgNextBtn = document.getElementById(`${clusterId}-img-next`);
+                  const currentProperty = props[currentPropertyIndex];
+                  
+                  if (imgPrevBtn && currentProperty) {
+                    imgPrevBtn.onclick = (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (currentImageIndex > 0) {
+                        currentImageIndex--;
+                        updatePopup();
+                      }
+                    };
+                  }
+                  
+                  if (imgNextBtn && currentProperty) {
+                    imgNextBtn.onclick = (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (currentImageIndex < currentProperty.images.length - 1) {
+                        currentImageIndex++;
+                        updatePopup();
+                      }
+                    };
+                  }
+                }, 50);
+              };
+
+              // Show first property
+              updatePopup();
+
+            } catch (error) {
+              console.error('Error fetching cluster properties:', error);
+              clusterMarker.setPopupContent(errorPopupHtml('Błąd ładowania ofert'));
+            }
           });
 
           clusterMarker.addTo(propertyLayerGroupRef.current);
-          clusterMarkersRef.current.push(clusterMarker);
+          clusterMarkersRef.current.set(clusterId, clusterMarker);
+        }
+
+        // Remove cluster markers that are no longer in the list
+        for (const [id, marker] of clusterMarkersRef.current) {
+          if (!currentClusterIds.has(id)) {
+            propertyLayerGroupRef.current.removeLayer(marker);
+            clusterMarkersRef.current.delete(id);
+          }
         }
       } catch (error) {
         console.error('Error updating property markers:', error);
@@ -993,7 +1283,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     };
 
     updateProperties();
-  }, [mapReady, properties, propertyClusters, showProperties]);
+  }, [mapReady, properties, propertyClusters, showProperties, propertyFilters]);
 
   return (
     <div 

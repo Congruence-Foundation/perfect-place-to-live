@@ -18,10 +18,7 @@ export async function POST(request: NextRequest) {
 
     // Validate bounds
     if (!bounds || !isValidBounds(bounds)) {
-      return NextResponse.json(
-        { error: 'Invalid bounds', message: 'Please provide valid map bounds' },
-        { status: 400 }
-      );
+      return errorResponse(new Error('Invalid bounds: Please provide valid map bounds'), 400);
     }
 
     // Merge with default filters
@@ -32,10 +29,7 @@ export async function POST(request: NextRequest) {
 
     // Validate required filter fields
     if (!filters.transaction || !filters.estate) {
-      return NextResponse.json(
-        { error: 'Invalid filters', message: 'Transaction and estate type are required' },
-        { status: 400 }
-      );
+      return errorResponse(new Error('Invalid filters: Transaction and estate type are required'), 400);
     }
 
     // Fetch properties from Otodom

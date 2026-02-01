@@ -44,10 +44,22 @@ function chunkArray<T>(array: T[], numChunks: number): T[][] {
  * 
  * OPTIMIZED: Receives pre-built spatial index data to avoid rebuilding
  * 
- * NOTE: Constants (EARTH_RADIUS_METERS, DENSITY_BONUS_*) are duplicated here
- * because worker threads cannot import from other modules. Keep in sync with:
- * - src/lib/geo.ts (EARTH_RADIUS_METERS)
- * - src/constants/performance.ts (DENSITY_BONUS)
+ * IMPORTANT: Code Duplication Notice
+ * ----------------------------------
+ * The following code is intentionally duplicated here because worker threads
+ * run in isolated contexts and cannot import from other modules:
+ * 
+ * - haversineDistance() - duplicated from src/lib/haversine.ts
+ * - SpatialIndex class - duplicated from src/lib/haversine.ts
+ * - applyDistanceCurve() - duplicated from src/lib/calculator.ts
+ * - calculateDensityBonus() - duplicated from src/lib/calculator.ts
+ * 
+ * Constants that must stay in sync:
+ * - EARTH_RADIUS_METERS (6371000) - from src/lib/geo.ts
+ * - DENSITY_BONUS_* constants - from src/constants/performance.ts
+ * - Magic number 111320 (meters per degree lat) - from src/lib/geo.ts METERS_PER_DEGREE_LAT
+ * 
+ * When modifying any of these source files, remember to update this worker code!
  */
 const WORKER_CODE = `
 const { parentPort, workerData } = require('worker_threads');

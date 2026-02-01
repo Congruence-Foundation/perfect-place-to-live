@@ -4,14 +4,40 @@ import {
   PropertyFilters,
   PropertyResponse,
   PropertyCluster,
-  RoomCount,
+  EstateType,
 } from '@/types/property';
+import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '@/lib/geo';
+import { snapBoundsForCacheKey } from '@/lib/bounds';
 
 /**
  * Otodom GraphQL API configuration
  */
 const OTODOM_API_URL = 'https://www.otodom.pl/api/query';
 const SEARCH_MAP_PINS_HASH = '51e8703aff1dd9b3ad3bae1ab6c543254e19b3576da1ee23eba0dca2b9341e27';
+const SEARCH_MAP_QUERY_HASH = 'cef9f63d93a284e3a896b78d67ff42139214c4317f6dfa73231cc1b136a2313d';
+
+/**
+ * Cache configuration
+ */
+const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+const MAX_CACHE_ENTRIES = 50;
+
+/**
+ * Default cluster search radius in meters
+ */
+const DEFAULT_CLUSTER_RADIUS_METERS = 500;
+
+/**
+ * Common headers for Otodom API requests
+ */
+const OTODOM_API_HEADERS: HeadersInit = {
+  'Content-Type': 'application/json',
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json',
+  'Accept-Language': 'pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Origin': 'https://www.otodom.pl',
+  'Referer': 'https://www.otodom.pl/',
+};
 
 /**
  * Cache for property responses
@@ -19,23 +45,22 @@ const SEARCH_MAP_PINS_HASH = '51e8703aff1dd9b3ad3bae1ab6c543254e19b3576da1ee23eb
  * Value: { data, timestamp }
  */
 const propertyCache = new Map<string, { data: PropertyResponse; timestamp: number }>();
-const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
 
 /**
  * Generate a cache key from bounds and filters
  */
-export function generatePropertyCacheKey(bounds: Bounds, filters: PropertyFilters): string {
-  // Snap bounds to reduce cache misses (round to 2 decimal places)
-  const snappedBounds = {
-    north: Math.ceil(bounds.north * 100) / 100,
-    south: Math.floor(bounds.south * 100) / 100,
-    east: Math.ceil(bounds.east * 100) / 100,
-    west: Math.floor(bounds.west * 100) / 100,
-  };
+function generatePropertyCacheKey(bounds: Bounds, filters: PropertyFilters): string {
+  // Snap bounds to reduce cache misses
+  const snappedBounds = snapBoundsForCacheKey(bounds, 2);
+
+  // Sort estate types for consistent cache keys
+  const estateKey = (filters.estate ?? ['FLAT']).slice().sort().join(',');
+  const isSingleFlat = filters.estate?.length === 1 && filters.estate[0] === 'FLAT';
+  const isSingleHouse = filters.estate?.length === 1 && filters.estate[0] === 'HOUSE';
 
   const filterKey = [
     filters.transaction,
-    filters.estate,
+    estateKey,
     filters.priceMin ?? 0,
     filters.priceMax ?? 999999999,
     filters.areaMin ?? 0,
@@ -43,11 +68,11 @@ export function generatePropertyCacheKey(bounds: Bounds, filters: PropertyFilter
     (filters.roomsNumber ?? []).sort().join(','),
     filters.ownerType ?? 'ALL',
     filters.market ?? 'ALL',
-    // Estate-specific filters
-    filters.estate === 'FLAT' ? (filters.floors ?? []).sort().join(',') : '',
-    filters.estate === 'FLAT' ? (filters.flatBuildingType ?? []).sort().join(',') : '',
-    filters.estate === 'HOUSE' ? `${filters.terrainAreaMin ?? 0}-${filters.terrainAreaMax ?? 999999}` : '',
-    filters.estate === 'HOUSE' ? (filters.houseBuildingType ?? []).sort().join(',') : '',
+    // Estate-specific filters (only include when single type selected)
+    isSingleFlat ? (filters.floors ?? []).sort().join(',') : '',
+    isSingleFlat ? (filters.flatBuildingType ?? []).sort().join(',') : '',
+    isSingleHouse ? `${filters.terrainAreaMin ?? 0}-${filters.terrainAreaMax ?? 999999}` : '',
+    isSingleHouse ? (filters.houseBuildingType ?? []).sort().join(',') : '',
   ].join(':');
 
   return `otodom:${snappedBounds.south},${snappedBounds.west},${snappedBounds.north},${snappedBounds.east}:${filterKey}`;
@@ -81,21 +106,14 @@ function buildGeoJsonFromBounds(bounds: Bounds): string {
 }
 
 /**
- * Convert room count filter to Otodom format
- */
-function mapRoomCounts(rooms?: RoomCount[]): string[] | undefined {
-  if (!rooms || rooms.length === 0) return undefined;
-  return rooms;
-}
-
-/**
  * Build the GraphQL request body for SearchMapPins
+ * Note: This function takes a single estate type for the API request
  */
-export function buildSearchMapPinsRequest(bounds: Bounds, filters: PropertyFilters): object {
+function buildSearchMapPinsRequest(bounds: Bounds, filters: PropertyFilters, estateType: EstateType): object {
   const geoJson = buildGeoJsonFromBounds(bounds);
 
   const filterAttributes: Record<string, unknown> = {
-    estate: filters.estate,
+    estate: estateType,  // Single estate type for API
     transaction: filters.transaction,
     market: filters.market ?? 'ALL',
     ownerTypeSingleSelect: filters.ownerType ?? 'ALL',
@@ -108,7 +126,7 @@ export function buildSearchMapPinsRequest(bounds: Bounds, filters: PropertyFilte
   if (filters.priceMin !== undefined) filterAttributes.priceMin = filters.priceMin;
   if (filters.priceMax !== undefined) filterAttributes.priceMax = filters.priceMax;
   if (filters.roomsNumber && filters.roomsNumber.length > 0) {
-    filterAttributes.roomsNumber = mapRoomCounts(filters.roomsNumber);
+    filterAttributes.roomsNumber = filters.roomsNumber;
   }
   if (filters.pricePerMeterMin !== undefined) filterAttributes.pricePerMeterMin = filters.pricePerMeterMin;
   if (filters.pricePerMeterMax !== undefined) filterAttributes.pricePerMeterMax = filters.pricePerMeterMax;
@@ -126,8 +144,8 @@ export function buildSearchMapPinsRequest(bounds: Bounds, filters: PropertyFilte
     if (filters.extras.includes('HAS_PHOTOS')) filterAttributes.hasPhotos = true;
   }
 
-  // FLAT-specific filters
-  if (filters.estate === 'FLAT') {
+  // FLAT-specific filters (only when single FLAT type selected)
+  if (estateType === 'FLAT' && filters.estate?.length === 1) {
     if (filters.floors && filters.floors.length > 0) {
       filterAttributes.floors = filters.floors;
     }
@@ -138,8 +156,8 @@ export function buildSearchMapPinsRequest(bounds: Bounds, filters: PropertyFilte
     }
   }
 
-  // HOUSE-specific filters
-  if (filters.estate === 'HOUSE') {
+  // HOUSE-specific filters (only when single HOUSE type selected)
+  if (estateType === 'HOUSE' && filters.estate?.length === 1) {
     if (filters.terrainAreaMin !== undefined) filterAttributes.terrainAreaMin = filters.terrainAreaMin;
     if (filters.terrainAreaMax !== undefined) filterAttributes.terrainAreaMax = filters.terrainAreaMax;
     if (filters.houseBuildingType && filters.houseBuildingType.length > 0) {
@@ -216,9 +234,17 @@ interface OtodomSearchMapPinsResponse {
 /**
  * Transform Otodom API response to our internal format
  */
-function transformOtodomResponse(response: OtodomSearchMapPinsResponse): { properties: OtodomProperty[]; clusters: PropertyCluster[] } {
+function transformOtodomResponse(
+  response: OtodomSearchMapPinsResponse,
+  estateType?: EstateType
+): { properties: OtodomProperty[]; clusters: PropertyCluster[] } {
   const properties: OtodomProperty[] = [];
   const clusters: PropertyCluster[] = [];
+
+  // Handle null or missing data from API
+  if (!response.data?.searchMapPins?.items) {
+    return { properties, clusters };
+  }
 
   for (const group of response.data.searchMapPins.items) {
     if (group.type === 'SINGLE') {
@@ -254,6 +280,9 @@ function transformOtodomResponse(response: OtodomSearchMapPinsResponse): { prope
             lat: item.lat,
             lng: item.lng,
             count: item.value,
+            radiusInMeters: item.radiusInMeters ?? undefined,
+            shape: item.shape ?? undefined,
+            estateType: estateType, // Track which estate type this cluster belongs to
           });
         }
       }
@@ -264,8 +293,36 @@ function transformOtodomResponse(response: OtodomSearchMapPinsResponse): { prope
 }
 
 /**
+ * Fetch properties for a single estate type from Otodom API
+ */
+async function fetchSingleEstateType(
+  bounds: Bounds,
+  filters: PropertyFilters,
+  estateType: EstateType,
+  signal?: AbortSignal
+): Promise<{ properties: OtodomProperty[]; clusters: PropertyCluster[] }> {
+  const requestBody = buildSearchMapPinsRequest(bounds, filters, estateType);
+
+  const response = await fetch(OTODOM_API_URL, {
+    method: 'POST',
+    headers: OTODOM_API_HEADERS,
+    body: JSON.stringify(requestBody),
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.error('Otodom API error:', response.status, errorText);
+    throw new Error(`Otodom API error: ${response.status} ${response.statusText}`);
+  }
+
+  const data: OtodomSearchMapPinsResponse = await response.json();
+  return transformOtodomResponse(data, estateType);
+}
+
+/**
  * Fetch properties from Otodom API
- * This function is meant to be called from the server-side API route
+ * Supports multiple estate types by making parallel requests and merging results
  */
 export async function fetchOtodomProperties(
   bounds: Bounds,
@@ -280,38 +337,37 @@ export async function fetchOtodomProperties(
     return { ...cached.data, cached: true };
   }
 
-  const requestBody = buildSearchMapPinsRequest(bounds, filters);
+  const estateTypes = filters.estate ?? ['FLAT'];
+  
+  // Fetch properties for each estate type in parallel
+  const results = await Promise.all(
+    estateTypes.map(type => fetchSingleEstateType(bounds, filters, type, signal))
+  );
 
-  const response = await fetch(OTODOM_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json',
-      'Accept-Language': 'pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Origin': 'https://www.otodom.pl',
-      'Referer': 'https://www.otodom.pl/',
-    },
-    body: JSON.stringify(requestBody),
-    signal,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    console.error('Otodom API error:', response.status, errorText);
-    throw new Error(`Otodom API error: ${response.status} ${response.statusText}`);
+  // Merge results from all estate types
+  const allProperties: OtodomProperty[] = [];
+  const allClusters: PropertyCluster[] = [];
+  const seenPropertyIds = new Set<number>();
+  
+  for (const result of results) {
+    // Deduplicate properties by ID
+    for (const property of result.properties) {
+      if (!seenPropertyIds.has(property.id)) {
+        seenPropertyIds.add(property.id);
+        allProperties.push(property);
+      }
+    }
+    // Clusters can be added directly (they represent different areas)
+    allClusters.push(...result.clusters);
   }
 
-  const data: OtodomSearchMapPinsResponse = await response.json();
-  const { properties, clusters } = transformOtodomResponse(data);
-
   // Calculate total count from properties + sum of cluster counts
-  const clusterTotal = clusters.reduce((sum, c) => sum + c.count, 0);
-  const totalCount = properties.length > 0 ? properties.length : clusterTotal;
+  const clusterTotal = allClusters.reduce((sum, c) => sum + c.count, 0);
+  const totalCount = allProperties.length > 0 ? allProperties.length : clusterTotal;
 
   const result: PropertyResponse = {
-    properties,
-    clusters,
+    properties: allProperties,
+    clusters: allClusters,
     totalCount,
     cached: false,
     fetchedAt: new Date().toISOString(),
@@ -320,13 +376,254 @@ export async function fetchOtodomProperties(
   // Update cache
   propertyCache.set(cacheKey, { data: result, timestamp: Date.now() });
 
-  // Clean old cache entries (keep last 50)
-  if (propertyCache.size > 50) {
+  // Clean old cache entries
+  if (propertyCache.size > MAX_CACHE_ENTRIES) {
     const entries = Array.from(propertyCache.entries());
     entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-    const toDelete = entries.slice(0, entries.length - 50);
+    const toDelete = entries.slice(0, entries.length - MAX_CACHE_ENTRIES);
     toDelete.forEach(([key]) => propertyCache.delete(key));
   }
 
   return result;
+}
+
+/**
+ * Response type for SearchMapQuery API (actually uses searchAds)
+ */
+interface OtodomSearchAdsItem {
+  id: number;
+  slug: string;
+  estate: string;
+  transaction: string;
+  title: string;
+  totalPrice: { value: number; currency: string } | null;
+  pricePerSquareMeter?: { value: number; currency: string } | null;
+  areaInSquareMeters: number;
+  roomsNumber?: string;
+  floorNumber?: string;
+  images: Array<{ medium: string; large: string }>;
+  isPromoted: boolean;
+  hidePrice: boolean;
+  createdAtFirst: string;
+  location: {
+    mapDetails?: { radius: number };
+    address?: {
+      street?: { name: string };
+      city?: { name: string };
+    };
+  };
+}
+
+interface OtodomSearchAdsResponse {
+  data: {
+    searchAds: {
+      items: OtodomSearchAdsItem[];
+      pagination: {
+        totalItems: number;
+        totalPages: number;
+        currentPage: number;
+        itemsPerPage: number;
+      };
+    };
+  };
+}
+
+/**
+ * Build a GeoJSON polygon around a center point
+ * Creates a small square area around the cluster center
+ */
+function buildGeoJsonAroundPoint(lat: number, lng: number, radiusMeters: number = DEFAULT_CLUSTER_RADIUS_METERS): string {
+  // Calculate degrees offset using the shared functions
+  const latOffset = radiusMeters / METERS_PER_DEGREE_LAT;
+  const lngOffset = radiusMeters / metersPerDegreeLng(lat);
+  
+  const geoJson = {
+    type: 'Polygon',
+    coordinates: [[
+      [lng - lngOffset, lat + latOffset],  // top-left
+      [lng + lngOffset, lat + latOffset],  // top-right
+      [lng + lngOffset, lat - latOffset],  // bottom-right
+      [lng - lngOffset, lat - latOffset],  // bottom-left
+      [lng - lngOffset, lat + latOffset],  // close polygon
+    ]],
+  };
+  
+  return JSON.stringify(geoJson);
+}
+
+/**
+ * Build the GraphQL request body for SearchMapQuery
+ * Used to fetch individual properties within a cluster area
+ */
+function buildSearchMapQueryRequest(
+  geoJson: string,
+  filters: PropertyFilters,
+  estateType: EstateType,
+  page: number = 1,
+  limit: number = 36
+): object {
+  const filterAttributes: Record<string, unknown> = {
+    estate: estateType,
+    transaction: filters.transaction,
+    market: filters.market ?? 'ALL',
+    ownerTypeSingleSelect: filters.ownerType ?? 'ALL',
+  };
+
+  // Add price filters if set
+  if (filters.priceMin !== undefined) filterAttributes.priceMin = filters.priceMin;
+  if (filters.priceMax !== undefined) filterAttributes.priceMax = filters.priceMax;
+  if (filters.areaMin !== undefined) filterAttributes.areaMin = filters.areaMin;
+  if (filters.areaMax !== undefined) filterAttributes.areaMax = filters.areaMax;
+
+  return {
+    extensions: {
+      persistedQuery: {
+        sha256Hash: SEARCH_MAP_QUERY_HASH,
+        version: 1,
+      },
+    },
+    operationName: 'SearchMapQuery',
+    variables: {
+      filterAttributes,
+      filterLocations: {
+        byGeometry: [{ byGeoJson: geoJson }],
+      },
+      lang: 'PL',
+      page: {
+        current: page,
+        limit: limit,
+      },
+      sortingOption: {
+        by: 'DEFAULT',
+        direction: 'DESC',
+      },
+    },
+  };
+}
+
+/**
+ * Transform SearchAds response to OtodomProperty array
+ * Note: This API doesn't return coordinates, so we use the cluster center
+ */
+function transformSearchAdsResponse(
+  response: OtodomSearchAdsResponse,
+  clusterLat: number,
+  clusterLng: number
+): {
+  properties: OtodomProperty[];
+  totalCount: number;
+  currentPage: number;
+  totalPages: number;
+} {
+  const properties: OtodomProperty[] = response.data.searchAds.items.map(item => ({
+    id: item.id,
+    lat: clusterLat,  // Use cluster center since API doesn't return coordinates
+    lng: clusterLng,
+    title: item.title,
+    slug: item.slug,
+    estate: item.estate as EstateType,
+    transaction: item.transaction as OtodomProperty['transaction'],
+    totalPrice: item.totalPrice ?? { value: 0, currency: 'PLN' },
+    pricePerMeter: item.pricePerSquareMeter ?? undefined,
+    areaInSquareMeters: item.areaInSquareMeters,
+    roomsNumber: item.roomsNumber ?? '',
+    floor: item.floorNumber ? parseInt(item.floorNumber) || undefined : undefined,
+    buildYear: undefined,
+    images: item.images ?? [],
+    isPromoted: item.isPromoted,
+    hidePrice: item.hidePrice,
+    createdAt: item.createdAtFirst,
+    url: `https://www.otodom.pl/pl/oferta/${item.slug}`,
+  }));
+
+  return {
+    properties,
+    totalCount: response.data.searchAds.pagination.totalItems,
+    currentPage: response.data.searchAds.pagination.currentPage,
+    totalPages: response.data.searchAds.pagination.totalPages,
+  };
+}
+
+/**
+ * Fetch properties within a cluster area using SearchMapQuery API
+ * This API returns individual properties with pagination support
+ * 
+ * @param lat - Cluster center latitude
+ * @param lng - Cluster center longitude  
+ * @param filters - Property filters
+ * @param page - Page number (default 1)
+ * @param limit - Results per page (default 36)
+ * @param shape - GeoJSON polygon string defining the cluster boundary (preferred)
+ * @param radiusMeters - Fallback radius if shape not provided
+ * @param clusterEstateType - If provided, only fetch this estate type (for accurate cluster counts)
+ * @param signal - AbortSignal for cancellation
+ */
+export async function fetchClusterProperties(
+  lat: number,
+  lng: number,
+  filters: PropertyFilters,
+  page: number = 1,
+  limit: number = 36,
+  shape?: string,
+  radiusMeters: number = DEFAULT_CLUSTER_RADIUS_METERS,
+  clusterEstateType?: string,
+  signal?: AbortSignal
+): Promise<{
+  properties: OtodomProperty[];
+  totalCount: number;
+  currentPage: number;
+  totalPages: number;
+}> {
+  // Use the cluster's actual shape if provided, otherwise fall back to a generated polygon
+  const geoJson = shape || buildGeoJsonAroundPoint(lat, lng, radiusMeters);
+  
+  // If cluster has a specific estate type, only fetch that type for accurate counts
+  // Otherwise, fetch all estate types from filters
+  const estateTypes = clusterEstateType 
+    ? [clusterEstateType as EstateType]
+    : (filters.estate ?? ['FLAT']);
+  
+  // Fetch for each estate type and merge results
+  const allProperties: OtodomProperty[] = [];
+  let totalCount = 0;
+  let totalPages = 1;
+  const seenIds = new Set<number>();
+  
+  for (const estateType of estateTypes) {
+    const requestBody = buildSearchMapQueryRequest(geoJson, filters, estateType, page, limit);
+    
+    const response = await fetch(OTODOM_API_URL, {
+      method: 'POST',
+      headers: OTODOM_API_HEADERS,
+      body: JSON.stringify(requestBody),
+      signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.error('Otodom SearchMapQuery API error:', response.status, errorText);
+      throw new Error(`Otodom API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data: OtodomSearchAdsResponse = await response.json();
+    const result = transformSearchAdsResponse(data, lat, lng);
+    
+    // Deduplicate and merge
+    for (const property of result.properties) {
+      if (!seenIds.has(property.id)) {
+        seenIds.add(property.id);
+        allProperties.push(property);
+      }
+    }
+    
+    totalCount += result.totalCount;
+    totalPages = Math.max(totalPages, result.totalPages);
+  }
+
+  return {
+    properties: allProperties,
+    totalCount,
+    currentPage: page,
+    totalPages,
+  };
 }

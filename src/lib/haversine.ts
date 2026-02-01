@@ -1,5 +1,5 @@
 import { Point, POI } from '@/types';
-import { EARTH_RADIUS_METERS, toRad } from './geo';
+import { EARTH_RADIUS_METERS, METERS_PER_DEGREE_LAT, toRad } from './geo';
 
 /**
  * Calculate the Haversine distance between two points in meters
@@ -52,7 +52,7 @@ export class SpatialIndex {
     const centerCellLng = Math.floor(point.lng / this.cellSize);
 
     // Convert max distance to approximate cell radius
-    const maxCellRadius = Math.ceil(maxDistance / (this.cellSize * 111320)) + 1;
+    const maxCellRadius = Math.ceil(maxDistance / (this.cellSize * METERS_PER_DEGREE_LAT)) + 1;
 
     let nearestPOI: POI | null = null;
     let minDistance = Infinity;
@@ -60,7 +60,7 @@ export class SpatialIndex {
     // Search in expanding rings
     for (let radius = 0; radius <= maxCellRadius; radius++) {
       // If we found a POI and the current ring is beyond the minimum distance, stop
-      if (nearestPOI && radius * this.cellSize * 111320 > minDistance) {
+      if (nearestPOI && radius * this.cellSize * METERS_PER_DEGREE_LAT > minDistance) {
         break;
       }
 
@@ -107,7 +107,7 @@ export class SpatialIndex {
     const centerCellLng = Math.floor(point.lng / this.cellSize);
 
     // Convert radius to approximate cell radius
-    const cellRadius = Math.ceil(radius / (this.cellSize * 111320)) + 1;
+    const cellRadius = Math.ceil(radius / (this.cellSize * METERS_PER_DEGREE_LAT)) + 1;
 
     let count = 0;
 

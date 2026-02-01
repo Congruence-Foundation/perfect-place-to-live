@@ -23,6 +23,9 @@ const {
   TARGET_GRID_POINTS,
   MIN_CELL_SIZE,
   MAX_CELL_SIZE,
+  FALLBACK_MIN_CELL_SIZE,
+  FALLBACK_MAX_CELL_SIZE,
+  MAX_GRID_POINTS_TOLERANCE,
 } = PERFORMANCE_CONFIG;
 
 export async function POST(request: NextRequest) {
@@ -46,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     // Validate bounds
     if (!isValidBounds(bounds)) {
-      return NextResponse.json({ error: 'Invalid bounds' }, { status: 400 });
+      return errorResponse(new Error('Invalid bounds'), 400);
     }
 
     // Use provided factors or defaults
@@ -54,7 +57,7 @@ export async function POST(request: NextRequest) {
     const enabledFactors = factors.filter((f) => f.enabled && f.weight !== 0);
 
     if (enabledFactors.length === 0) {
-      return NextResponse.json({ error: 'No enabled factors' }, { status: 400 });
+      return errorResponse(new Error('No enabled factors'), 400);
     }
 
     // Expand bounds for grid/canvas to extend beyond viewport (prevents reload on small scrolls)
@@ -69,11 +72,11 @@ export async function POST(request: NextRequest) {
     // If too many points, increase grid size to stay within limits
     if (estimatedPoints > MAX_GRID_POINTS) {
       // Calculate the minimum grid size needed to stay under the limit
-      effectiveGridSize = calculateAdaptiveGridSize(gridBounds, MAX_GRID_POINTS, 50, 2000);
+      effectiveGridSize = calculateAdaptiveGridSize(gridBounds, MAX_GRID_POINTS, FALLBACK_MIN_CELL_SIZE, FALLBACK_MAX_CELL_SIZE);
       estimatedPoints = estimateGridSize(gridBounds, effectiveGridSize);
       
       // If still too many points even with max grid size, reject
-      if (estimatedPoints > MAX_GRID_POINTS * 1.5) {
+      if (estimatedPoints > MAX_GRID_POINTS * MAX_GRID_POINTS_TOLERANCE) {
         return NextResponse.json(
           { 
             error: 'Viewport too large',

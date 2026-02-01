@@ -2,11 +2,11 @@
 
 import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { Search, ChevronDown, ChevronUp, Home, Building2 } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { RangeInput, ToggleButtonGroup, FilterSelect } from './filters';
+import { RangeInput, ToggleButtonGroup, FilterSelect, EstateTypeToggle } from './filters';
 import {
   PropertyFilters,
   RoomCount,
@@ -91,20 +91,10 @@ export default function RealEstateSidebar({
   const handleMaterialChange = createArrayToggle<BuildingMaterial>('buildingMaterial');
   const handleExtrasChange = createArrayToggle<PropertyExtra>('extras');
 
-  const handleEstateChange = (estate: EstateType) => {
-    onFiltersChange({
-      estate,
-      // Reset estate-specific filters
-      floors: undefined,
-      flatBuildingType: undefined,
-      floorsNumberMin: undefined,
-      floorsNumberMax: undefined,
-      terrainAreaMin: undefined,
-      terrainAreaMax: undefined,
-      houseBuildingType: undefined,
-      isBungalow: undefined,
-    });
-  };
+  // Determine if we're showing type-specific filters
+  const isSingleType = filters.estate?.length === 1;
+  const isFlat = isSingleType && filters.estate?.[0] === 'FLAT';
+  const isHouse = isSingleType && filters.estate?.[0] === 'HOUSE';
 
   const getStatusText = () => {
     if (isLoading) return t('loading');
@@ -147,34 +137,28 @@ export default function RealEstateSidebar({
       {isExpanded && (
         <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="border-t border-background/50 pt-3 space-y-4">
-            {/* Estate Type Toggle */}
-            <div className="space-y-2">
-              <Label className="text-xs">{t('estateType')}</Label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleEstateChange('FLAT')}
-                  className={`flex-1 flex items-center justify-center gap-2 h-8 rounded border text-xs transition-colors ${
-                    filters.estate === 'FLAT'
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-background hover:bg-muted border-input'
-                  }`}
-                >
-                  <Building2 className="h-3.5 w-3.5" />
-                  {t('flat')}
-                </button>
-                <button
-                  onClick={() => handleEstateChange('HOUSE')}
-                  className={`flex-1 flex items-center justify-center gap-2 h-8 rounded border text-xs transition-colors ${
-                    filters.estate === 'HOUSE'
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-background hover:bg-muted border-input'
-                  }`}
-                >
-                  <Home className="h-3.5 w-3.5" />
-                  {t('house')}
-                </button>
-              </div>
-            </div>
+            {/* Estate Type Toggle - Multi-select */}
+            <EstateTypeToggle
+              label={t('estateType')}
+              selected={filters.estate || ['FLAT']}
+              onChange={(selected) => {
+                // Reset type-specific filters when selecting both types
+                const resetFilters = selected.length > 1 ? {
+                  floors: undefined,
+                  flatBuildingType: undefined,
+                  floorsNumberMin: undefined,
+                  floorsNumberMax: undefined,
+                  terrainAreaMin: undefined,
+                  terrainAreaMax: undefined,
+                  houseBuildingType: undefined,
+                  isBungalow: undefined,
+                } : {};
+                onFiltersChange({ estate: selected, ...resetFilters });
+              }}
+              flatLabel={t('flat')}
+              houseLabel={t('house')}
+              requireOne
+            />
 
             {/* Price Range */}
             <RangeInput
@@ -251,23 +235,25 @@ export default function RealEstateSidebar({
                   onMaxChange={(v) => onFiltersChange({ buildYearMax: v })}
                 />
 
-                {/* Building Type */}
-                <ToggleButtonGroup
-                  label={t('buildingType')}
-                  options={filters.estate === 'FLAT' ? flatBuildingOptions : houseBuildingOptions}
-                  selected={
-                    filters.estate === 'FLAT'
-                      ? filters.flatBuildingType || []
-                      : filters.houseBuildingType || []
-                  }
-                  onChange={(values) => {
-                    if (filters.estate === 'FLAT') {
-                      handleFlatBuildingTypeChange(values as FlatBuildingType[]);
-                    } else {
-                      handleHouseBuildingTypeChange(values as HouseBuildingType[]);
+                {/* Building Type - only show when single type selected */}
+                {isSingleType && (
+                  <ToggleButtonGroup
+                    label={t('buildingType')}
+                    options={isFlat ? flatBuildingOptions : houseBuildingOptions}
+                    selected={
+                      isFlat
+                        ? filters.flatBuildingType || []
+                        : filters.houseBuildingType || []
                     }
-                  }}
-                />
+                    onChange={(values) => {
+                      if (isFlat) {
+                        handleFlatBuildingTypeChange(values as FlatBuildingType[]);
+                      } else {
+                        handleHouseBuildingTypeChange(values as HouseBuildingType[]);
+                      }
+                    }}
+                  />
+                )}
 
                 {/* Building Material */}
                 <ToggleButtonGroup
@@ -297,7 +283,7 @@ export default function RealEstateSidebar({
                 />
 
                 {/* FLAT-specific: Floor Level */}
-                {filters.estate === 'FLAT' && (
+                {isFlat && (
                   <ToggleButtonGroup
                     label={t('floorLevel')}
                     options={floorOptions}
@@ -307,7 +293,7 @@ export default function RealEstateSidebar({
                 )}
 
                 {/* FLAT-specific: Number of floors in building */}
-                {filters.estate === 'FLAT' && (
+                {isFlat && (
                   <RangeInput
                     label={t('floorsInBuilding')}
                     minValue={filters.floorsNumberMin}
@@ -318,7 +304,7 @@ export default function RealEstateSidebar({
                 )}
 
                 {/* HOUSE-specific: Terrain/Plot Area */}
-                {filters.estate === 'HOUSE' && (
+                {isHouse && (
                   <RangeInput
                     label={t('terrainArea')}
                     unit="m²"
@@ -330,7 +316,7 @@ export default function RealEstateSidebar({
                 )}
 
                 {/* HOUSE-specific: Bungalow */}
-                {filters.estate === 'HOUSE' && (
+                {isHouse && (
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Checkbox
                       checked={filters.isBungalow === true}

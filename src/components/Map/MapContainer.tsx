@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { POLAND_CENTER } from '@/config/factors';
 import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
-import { OtodomProperty, PropertyCluster } from '@/types/property';
+import { OtodomProperty, PropertyCluster, PropertyFilters } from '@/types/property';
 import type { PopupTranslations, FactorTranslations } from './MapView';
 
 // Dynamically import the map to avoid SSR issues with Leaflet
@@ -34,6 +34,7 @@ interface MapContainerProps {
   properties?: OtodomProperty[];
   propertyClusters?: PropertyCluster[];
   showProperties?: boolean;
+  propertyFilters?: PropertyFilters;
 }
 
 const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
@@ -46,6 +47,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
   properties = [],
   propertyClusters = [],
   showProperties = false,
+  propertyFilters,
 }, ref) => {
   const [isMounted, setIsMounted] = useState(false);
   const mapViewRef = useRef<MapContainerRef>(null);
@@ -136,6 +138,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
       properties={properties}
       propertyClusters={propertyClusters}
       showProperties={showProperties}
+      propertyFilters={propertyFilters}
     />
   );
 });
