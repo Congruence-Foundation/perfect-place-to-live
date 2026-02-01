@@ -431,7 +431,7 @@ export default function Home() {
     <main className="h-screen w-screen flex overflow-hidden relative">
       {/* Search Box - Floating on top center */}
       <div 
-        className={`absolute z-[1001] transition-all duration-300 ${
+        className={`absolute z-[1001] ${
           isMobile 
             ? 'top-4 left-14 right-24' 
             : 'top-4'

@@ -5,10 +5,11 @@ import { useState, useEffect } from 'react';
 /**
  * Hook to detect if a media query matches
  * @param query - CSS media query string (e.g., '(min-width: 768px)')
+ * @param defaultValue - Default value to use during SSR (defaults to false)
  * @returns boolean indicating if the query matches
  */
-export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
+export function useMediaQuery(query: string, defaultValue = false): boolean {
+  const [matches, setMatches] = useState(defaultValue);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(query);
@@ -38,5 +39,7 @@ export function useMediaQuery(query: string): boolean {
  * @returns boolean - true if mobile, false if desktop
  */
 export function useIsMobile(): boolean {
-  return !useMediaQuery('(min-width: 768px)');
+  // Default to desktop (false) to prevent layout shift on desktop
+  // Most users are on desktop, so this minimizes flash
+  return !useMediaQuery('(min-width: 768px)', true);
 }

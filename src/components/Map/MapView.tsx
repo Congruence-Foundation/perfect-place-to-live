@@ -1681,7 +1681,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     };
 
     updateProperties();
-  }, [mapReady, properties, propertyClusters, showProperties, propertyFilters, clusterPriceDisplay, clusterPriceAnalysis, clusterAnalysisData]);
+  }, [mapReady, properties, propertyClusters, showProperties, propertyFilters, clusterPriceDisplay, clusterPriceAnalysis, detailedModeThreshold, clusterAnalysisData]);
 
   return (
     <div 

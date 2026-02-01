@@ -165,10 +165,10 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
   return (
     <div 
       ref={containerRef} 
-      className={`relative transition-all duration-300 ${
+      className={`relative transition-[width] duration-300 ${
         isMobile 
           ? 'w-full' 
-          : isFocused ? 'w-72' : 'w-48'
+          : isFocused ? 'w-72' : 'w-52'
       }`}
     >
       <div className="relative shadow-lg rounded-full flex items-center">
