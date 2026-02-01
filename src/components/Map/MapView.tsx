@@ -1,14 +1,247 @@
 'use client';
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
-import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
-import { OtodomProperty, PropertyCluster, PropertyFilters, ClusterPropertiesResponse, EstateType } from '@/types/property';
+import { HeatmapPoint, POI, Factor, Bounds, ClusterPriceAnalysisMode } from '@/types';
+import { OtodomProperty, PropertyCluster, PropertyFilters, ClusterPropertiesResponse, EstateType, EnrichedProperty, PriceCategory, ClusterPriceDisplay } from '@/types/property';
 import { POI_COLORS, getColorForK } from '@/constants';
 import { formatDistance } from '@/lib/utils';
-import { formatPrice, roomCountToNumber } from '@/lib/format';
+import { formatPrice, roomCountToNumber, formatCompactPrice } from '@/lib/format';
 import { generatePropertyMarkerHtml, getPropertyMarkerClassName } from '@/lib/property-markers';
 import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/calculator';
 import { renderHeatmapToCanvas } from '@/hooks/useCanvasRenderer';
+import { ClusterAnalysisMap, getClusterId, PRICE_CATEGORY_COLORS, enrichPropertiesSimplified } from '@/lib/price-analysis';
+
+// Constants for cluster operations
+const DEFAULT_GRID_CELL_SIZE = 200;
+const BACKGROUND_FETCH_LIMIT = 100;
+const CLICK_FETCH_LIMIT = 500;
+const DEFAULT_CLUSTER_RADIUS = 1000;
+const CLUSTER_ICON_SIZE = 36;
+const CLUSTER_ICON_WITH_LABEL_HEIGHT = 54;
+
+// Price analysis badge configuration
+const PRICE_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
+  great_deal: { bg: '#f0fdf4', text: '#16a34a' },
+  good_deal: { bg: '#f0fdf4', text: '#059669' },
+  fair: { bg: '#f8fafc', text: '#64748b' },
+  above_avg: { bg: '#fff7ed', text: '#ea580c' },
+  overpriced: { bg: '#fef2f2', text: '#dc2626' },
+};
+
+const PRICE_BADGE_LABELS: Record<string, string> = {
+  great_deal: 'Great Deal',
+  good_deal: 'Good Deal',
+  fair: 'Fair Price',
+  above_avg: 'Above Avg',
+  overpriced: 'Overpriced',
+};
+
+// Generate cluster price label based on display mode
+function generateClusterPriceLabel(
+  prices: number[],
+  displayMode: ClusterPriceDisplay
+): string {
+  if (displayMode === 'none' || prices.length === 0) {
+    return '';
+  }
+
+  const sortedPrices = [...prices].sort((a, b) => a - b);
+  const minPrice = sortedPrices[0];
+  const maxPrice = sortedPrices[sortedPrices.length - 1];
+  const medianPrice = sortedPrices[Math.floor(sortedPrices.length / 2)];
+
+  switch (displayMode) {
+    case 'range':
+      return `${formatCompactPrice(minPrice)} - ${formatCompactPrice(maxPrice)}`;
+    
+    case 'median':
+      return `~${formatCompactPrice(medianPrice)}`;
+    
+    case 'median_spread': {
+      // Calculate spread as percentage from median
+      const spread = Math.round(((maxPrice - minPrice) / medianPrice) * 50); // ±spread%
+      return `${formatCompactPrice(medianPrice)} ±${spread}%`;
+    }
+    
+    default:
+      return '';
+  }
+}
+
+// Get min/max price categories from enriched properties
+function getClusterPriceCategories(
+  properties: EnrichedProperty[]
+): { minCategory: PriceCategory | null; maxCategory: PriceCategory | null } {
+  const withAnalysis = properties.filter(p => p.priceAnalysis && p.priceAnalysis.priceCategory !== 'no_data');
+  
+  if (withAnalysis.length === 0) {
+    return { minCategory: null, maxCategory: null };
+  }
+
+  // Sort by price score (lower = better deal)
+  const sorted = [...withAnalysis].sort((a, b) => 
+    (a.priceAnalysis?.priceScore || 0) - (b.priceAnalysis?.priceScore || 0)
+  );
+
+  return {
+    minCategory: sorted[0].priceAnalysis?.priceCategory || null,
+    maxCategory: sorted[sorted.length - 1].priceAnalysis?.priceCategory || null,
+  };
+}
+
+// Create cluster icon HTML with optional price label and glow
+function createClusterIconHtml(
+  count: number,
+  priceLabel: string,
+  minCategory: PriceCategory | null,
+  maxCategory: PriceCategory | null
+): { html: string; hasLabel: boolean } {
+  const leftGlowColor = minCategory ? PRICE_CATEGORY_COLORS[minCategory] : null;
+  const rightGlowColor = maxCategory ? PRICE_CATEGORY_COLORS[maxCategory] : null;
+  const hasGlow = leftGlowColor || rightGlowColor;
+  
+  // Build box-shadow for left/right glow
+  let boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+  if (hasGlow) {
+    const shadows = ['0 2px 8px rgba(0,0,0,0.3)'];
+    if (leftGlowColor) {
+      shadows.push(`-6px 0 12px -2px ${leftGlowColor}`);
+    }
+    if (rightGlowColor) {
+      shadows.push(`6px 0 12px -2px ${rightGlowColor}`);
+    }
+    boxShadow = shadows.join(', ');
+  }
+  
+  // Build the label below cluster (price only)
+  const hasLabel = !!priceLabel;
+  let bottomLabelHtml = '';
+  if (hasLabel) {
+    bottomLabelHtml = `
+      <div style="
+        position: absolute;
+        top: 38px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(255,255,255,0.95);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 9px;
+        font-weight: 500;
+        color: #374151;
+        white-space: nowrap;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        pointer-events: none;
+      ">${priceLabel}</div>
+    `;
+  }
+  
+  const html = `
+    <div style="position: relative;">
+      <div style="
+        min-width: 36px;
+        height: 36px;
+        background: #3b82f6;
+        border: 3px solid white;
+        border-radius: 18px;
+        box-shadow: ${boxShadow};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 8px;
+        cursor: pointer;
+      ">
+        <span style="color: white; font-weight: 700; font-size: 12px;">${count}</span>
+      </div>
+      ${bottomLabelHtml}
+    </div>
+  `;
+  
+  return { html, hasLabel };
+}
+
+/**
+ * Enrich fetched cluster properties with price analysis data
+ * First tries to find existing enriched versions, then falls back to simplified enrichment
+ */
+function enrichClusterProperties(
+  fetchedProperties: OtodomProperty[],
+  existingEnrichedProperties: EnrichedProperty[],
+  heatmapPoints: HeatmapPoint[]
+): EnrichedProperty[] {
+  // Create a map of already-enriched properties by ID for quick lookup
+  const enrichedPropsMap = new Map<number, EnrichedProperty>();
+  for (const p of existingEnrichedProperties) {
+    enrichedPropsMap.set(p.id, p);
+  }
+  
+  // Map fetched properties to enriched versions
+  let enrichedProps = fetchedProperties.map(p => {
+    const existingEnriched = enrichedPropsMap.get(p.id);
+    if (existingEnriched && existingEnriched.priceAnalysis) {
+      return existingEnriched;
+    }
+    return { ...p } as EnrichedProperty;
+  });
+  
+  // If we didn't find any enriched properties and have heatmap data, try to enrich
+  const hasAnyEnriched = enrichedProps.some(p => p.priceAnalysis);
+  if (!hasAnyEnriched && heatmapPoints.length > 0) {
+    enrichedProps = enrichPropertiesSimplified(fetchedProperties, heatmapPoints, DEFAULT_GRID_CELL_SIZE);
+  }
+  
+  return enrichedProps;
+}
+
+/**
+ * Extract valid prices from properties (excluding hidden/zero prices)
+ */
+function getValidPrices(properties: Array<OtodomProperty | EnrichedProperty>): number[] {
+  return properties
+    .filter(p => !p.hidePrice && p.totalPrice.value > 0)
+    .map(p => p.totalPrice.value);
+}
+
+/**
+ * Create a Leaflet divIcon for a cluster marker
+ */
+function createClusterDivIcon(
+  L: typeof import('leaflet'),
+  count: number,
+  priceLabel: string,
+  minCategory: PriceCategory | null,
+  maxCategory: PriceCategory | null
+): L.DivIcon {
+  const { html, hasLabel } = createClusterIconHtml(count, priceLabel, minCategory, maxCategory);
+  return L.divIcon({
+    className: 'property-cluster-marker',
+    html,
+    iconSize: [CLUSTER_ICON_SIZE, hasLabel ? CLUSTER_ICON_WITH_LABEL_HEIGHT : CLUSTER_ICON_SIZE],
+    iconAnchor: [CLUSTER_ICON_SIZE / 2, CLUSTER_ICON_SIZE / 2],
+  });
+}
+
+/**
+ * Generate price analysis badge HTML for property popups
+ */
+function generatePriceAnalysisBadgeHtml(priceAnalysis: EnrichedProperty['priceAnalysis']): string {
+  if (!priceAnalysis || priceAnalysis.priceCategory === 'no_data') {
+    return '';
+  }
+  
+  const colors = PRICE_BADGE_COLORS[priceAnalysis.priceCategory] || PRICE_BADGE_COLORS.fair;
+  const label = PRICE_BADGE_LABELS[priceAnalysis.priceCategory] || 'Fair';
+  const percentSign = priceAnalysis.percentFromMedian >= 0 ? '+' : '';
+  
+  return `
+    <div style="margin-bottom: 6px; padding: 6px 8px; background: ${colors.bg}; border-radius: 4px;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 10px; color: ${colors.text};">${label} · vs ${priceAnalysis.groupSize} similar</span>
+        <span style="font-weight: 600; color: ${colors.text}; font-size: 11px;">${percentSign}${priceAnalysis.percentFromMedian}%</span>
+      </div>
+    </div>
+  `;
+}
 
 // Popup translations interface
 export interface PopupTranslations {
@@ -135,7 +368,7 @@ export interface MapViewRef {
 interface MapViewProps {
   center: [number, number];
   zoom: number;
-  onBoundsChange?: (bounds: { north: number; south: number; east: number; west: number }) => void;
+  onBoundsChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;
   heatmapPoints?: HeatmapPoint[];
   heatmapOpacity?: number;
   pois?: Record<string, POI[]>;
@@ -143,10 +376,16 @@ interface MapViewProps {
   factors?: Factor[];
   popupTranslations?: PopupTranslations;
   factorTranslations?: FactorTranslations;
-  properties?: OtodomProperty[];
+  properties?: EnrichedProperty[];
   propertyClusters?: PropertyCluster[];
   showProperties?: boolean;
   propertyFilters?: PropertyFilters;
+  clusterPriceDisplay?: ClusterPriceDisplay;
+  clusterPriceAnalysis?: ClusterPriceAnalysisMode;
+  detailedModeThreshold?: number;
+  clusterAnalysisData?: ClusterAnalysisMap;
+  clusterPropertiesCache?: Map<string, OtodomProperty[]>;
+  onClusterPropertiesFetched?: (clusterId: string, properties: OtodomProperty[]) => void;
 }
 
 // Default translations (English)
@@ -334,6 +573,12 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   propertyClusters = [],
   showProperties = false,
   propertyFilters,
+  clusterPriceDisplay = 'median',
+  clusterPriceAnalysis = 'simplified',
+  detailedModeThreshold = 100,
+  clusterAnalysisData,
+  clusterPropertiesCache,
+  onClusterPropertiesFetched,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -356,6 +601,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   const factorsRef = useRef(factors);
   const popupTranslationsRef = useRef(popupTranslations);
   const factorTranslationsRef = useRef(factorTranslations);
+  const onBoundsChangeRef = useRef(onBoundsChange);
   
   // Update refs when props change
   useEffect(() => {
@@ -373,6 +619,10 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   useEffect(() => {
     factorTranslationsRef.current = factorTranslations;
   }, [factorTranslations]);
+
+  useEffect(() => {
+    onBoundsChangeRef.current = onBoundsChange;
+  }, [onBoundsChange]);
 
   // Handle map click to show location details
   const handleMapClick = useCallback(async (e: L.LeafletMouseEvent) => {
@@ -501,15 +751,16 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
         // Handle bounds change
         const handleBoundsChange = () => {
-          if (!onBoundsChange || !mapInstanceRef.current) return;
+          if (!onBoundsChangeRef.current || !mapInstanceRef.current) return;
           try {
             const bounds = mapInstanceRef.current.getBounds();
-            onBoundsChange({
+            const currentZoom = mapInstanceRef.current.getZoom();
+            onBoundsChangeRef.current({
               north: bounds.getNorth(),
               south: bounds.getSouth(),
               east: bounds.getEast(),
               west: bounds.getWest(),
-            });
+            }, currentZoom);
           } catch {
             // Ignore errors during cleanup
           }
@@ -814,12 +1065,12 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         // Track which property IDs we've seen
         const currentIds = new Set<number>();
 
-        // Create custom icon for properties based on estate type
-        const createPropertyIcon = (estateType: EstateType) => {
+        // Create custom icon for properties based on estate type, price category, and price
+        const createPropertyIcon = (estateType: EstateType, priceCategory?: PriceCategory, price?: number) => {
           return L.divIcon({
-            className: getPropertyMarkerClassName(estateType),
-            html: generatePropertyMarkerHtml(estateType, 28),
-            iconSize: [28, 28],
+            className: getPropertyMarkerClassName(estateType, priceCategory),
+            html: generatePropertyMarkerHtml(estateType, 28, priceCategory, price),
+            iconSize: [28, 44], // Increased height to accommodate price label
             iconAnchor: [14, 28],
             popupAnchor: [0, -28],
           });
@@ -901,6 +1152,38 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           // Format rooms display
           const roomsDisplay = property.roomsNumber ? roomCountToNumber(property.roomsNumber) : null;
 
+          // Generate price analysis badge HTML
+          const priceAnalysis = property.priceAnalysis;
+          let priceAnalysisBadgeHtml = '';
+          if (priceAnalysis && priceAnalysis.priceCategory !== 'no_data') {
+            const badgeColors: Record<string, { bg: string; text: string }> = {
+              great_deal: { bg: '#f0fdf4', text: '#16a34a' },
+              good_deal: { bg: '#f0fdf4', text: '#059669' },
+              fair: { bg: '#f8fafc', text: '#64748b' },
+              above_avg: { bg: '#fff7ed', text: '#ea580c' },
+              overpriced: { bg: '#fef2f2', text: '#dc2626' },
+            };
+            const badgeLabels: Record<string, string> = {
+              great_deal: 'Great Deal',
+              good_deal: 'Good Deal',
+              fair: 'Fair Price',
+              above_avg: 'Above Avg',
+              overpriced: 'Overpriced',
+            };
+            const colors = badgeColors[priceAnalysis.priceCategory] || badgeColors.fair;
+            const label = badgeLabels[priceAnalysis.priceCategory] || 'Fair';
+            const percentSign = priceAnalysis.percentFromMedian >= 0 ? '+' : '';
+            
+            priceAnalysisBadgeHtml = `
+              <div style="margin-bottom: 6px; padding: 6px 8px; background: ${colors.bg}; border-radius: 4px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <span style="font-size: 10px; color: ${colors.text};">${label} · vs ${priceAnalysis.groupSize} similar</span>
+                  <span style="font-weight: 600; color: ${colors.text}; font-size: 11px;">${percentSign}${priceAnalysis.percentFromMedian}%</span>
+                </div>
+              </div>
+            `;
+          }
+
           const popupContent = `
             <div style="min-width: 220px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
               ${imageHtml}
@@ -923,6 +1206,8 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
                 <div style="font-size: 16px; font-weight: 700; color: #16a34a; margin-bottom: 8px;">
                   ${property.hidePrice ? 'Cena do negocjacji' : formatPrice(property.totalPrice.value, property.totalPrice.currency)}
                 </div>
+                <!-- Price Analysis Badge -->
+                ${priceAnalysisBadgeHtml}
                 <!-- Property details -->
                 <div style="display: flex; align-items: center; gap: 4px; color: #4b5563; font-size: 12px;">
                   <span style="font-weight: 500;">${property.areaInSquareMeters} m²</span>
@@ -933,9 +1218,13 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
             </div>
           `;
 
-          // Create new marker with estate-type-specific icon
+          // Create new marker with estate-type-specific icon, price category indicator, and price label
           const marker = L.marker([property.lat, property.lng], {
-            icon: createPropertyIcon(property.estate),
+            icon: createPropertyIcon(
+              property.estate, 
+              property.priceAnalysis?.priceCategory,
+              property.hidePrice ? undefined : property.totalPrice.value
+            ),
           });
 
           marker.bindPopup(popupContent, {
@@ -949,6 +1238,10 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
             e.originalEvent?.preventDefault();
             // Close any existing popup first
             mapInstanceRef.current?.closePopup();
+            // Also close any cluster marker popups (they have autoClose: false)
+            clusterMarkersRef.current.forEach(clusterMarker => {
+              clusterMarker.closePopup();
+            });
             // Then open this marker's popup
             marker.openPopup();
           });
@@ -975,37 +1268,108 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
             continue;
           }
           
-          // Create cluster icon with count
-          const clusterIcon = L.divIcon({
-            className: 'property-cluster-marker',
-            html: `
-              <div style="
-                min-width: 36px;
-                height: 36px;
-                background: #3b82f6;
-                border: 3px solid white;
-                border-radius: 18px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 0 8px;
-                cursor: pointer;
-              ">
-                <span style="color: white; font-weight: 700; font-size: 12px;">${cluster.count}</span>
-              </div>
-            `,
-            iconSize: [36, 36],
-            iconAnchor: [18, 18],
-          });
+          // Determine initial price label and glow based on mode
+          let initialPriceLabel = '';
+          let initialMinCategory: PriceCategory | null = null;
+          let initialMaxCategory: PriceCategory | null = null;
+          
+          // Check if we have cached properties for this cluster
+          const cachedClusterProps = clusterPropertiesCache?.get(clusterId);
+          
+          // Use detailed mode only if cluster count is within threshold
+          const useDetailedMode = clusterPriceAnalysis === 'detailed' && cluster.count <= detailedModeThreshold;
+          
+          if (useDetailedMode && cachedClusterProps && cachedClusterProps.length > 0) {
+            // Detailed mode with cached data: use cached properties for price/glow
+            const validPrices = cachedClusterProps
+              .filter(p => !p.hidePrice && p.totalPrice.value > 0)
+              .map(p => p.totalPrice.value);
+            initialPriceLabel = generateClusterPriceLabel(validPrices, clusterPriceDisplay);
+            
+            // Find enriched versions of cached properties for glow calculation
+            const enrichedPropsMap = new Map<number, EnrichedProperty>();
+            for (const p of properties) {
+              enrichedPropsMap.set(p.id, p);
+            }
+            const enrichedCachedProps = cachedClusterProps
+              .map(p => enrichedPropsMap.get(p.id))
+              .filter((p): p is EnrichedProperty => !!p && !!p.priceAnalysis);
+            
+            if (enrichedCachedProps.length > 0) {
+              const result = getClusterPriceCategories(enrichedCachedProps);
+              initialMinCategory = result.minCategory;
+              initialMaxCategory = result.maxCategory;
+            }
+          }
+          // For simplified mode or detailed without cache: no initial price/glow
+          // Price and glow will be calculated after fetching properties on click
+          
+          // Create initial cluster icon
+          const clusterIcon = createClusterDivIcon(
+            L,
+            cluster.count,
+            initialPriceLabel,
+            initialMinCategory,
+            initialMaxCategory
+          );
 
           const clusterMarker = L.marker([cluster.lat, cluster.lng], {
             icon: clusterIcon,
           });
 
+          // For detailed mode without cached data, fetch properties immediately to show price/glow
+          // Only if cluster count is within threshold
+          if (useDetailedMode && !cachedClusterProps) {
+            // Fetch in background (don't await) to update marker icon
+            (async () => {
+              try {
+                const response = await fetch('/api/properties/cluster', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    lat: cluster.lat,
+                    lng: cluster.lng,
+                    filters: propertyFilters,
+                    page: 1,
+                    limit: Math.min(cluster.count, BACKGROUND_FETCH_LIMIT),
+                    shape: cluster.shape,
+                    radius: cluster.radiusInMeters || DEFAULT_CLUSTER_RADIUS,
+                    estateType: cluster.estateType,
+                  }),
+                });
+
+                if (!response.ok) return;
+
+                const data: ClusterPropertiesResponse = await response.json();
+                if (data.properties.length === 0) return;
+
+                // Report to parent for caching
+                if (onClusterPropertiesFetched) {
+                  onClusterPropertiesFetched(clusterId, data.properties);
+                }
+
+                // Enrich and calculate price/glow
+                const enrichedFetchedProps = enrichClusterProperties(data.properties, properties, heatmapPoints);
+                const validPrices = getValidPrices(data.properties);
+                const newPriceLabel = generateClusterPriceLabel(validPrices, clusterPriceDisplay);
+                const { minCategory: newMin, maxCategory: newMax } = getClusterPriceCategories(enrichedFetchedProps);
+
+                // Update marker icon
+                const newIcon = createClusterDivIcon(L, cluster.count, newPriceLabel, newMin, newMax);
+
+                // Only update if marker still exists
+                if (clusterMarkersRef.current.has(clusterId)) {
+                  clusterMarker.setIcon(newIcon);
+                }
+              } catch {
+                // Silently fail background fetch
+              }
+            })();
+          }
+
           // Generate popup HTML for a single property in the cluster with image gallery
           const generateClusterPropertyHtml = (
-            property: OtodomProperty,
+            property: OtodomProperty | EnrichedProperty,
             currentIndex: number,
             totalCount: number,
             fetchedCount: number,
@@ -1030,6 +1394,10 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
             
             // Disable next button when we've reached the end of fetched properties
             const isAtEnd = currentIndex >= fetchedCount - 1;
+
+            // Generate price analysis badge HTML for cluster popup
+            const enrichedProp = property as EnrichedProperty;
+            const clusterPriceAnalysisBadgeHtml = generatePriceAnalysisBadgeHtml(enrichedProp.priceAnalysis);
 
             const imageHtml = property.images.length > 0 ? `
               <div style="position: relative; background: #f3f4f6; border-radius: 8px 8px 0 0; overflow: hidden;">
@@ -1087,6 +1455,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
                   <div style="font-size: 15px; font-weight: 700; color: #16a34a; margin-bottom: 6px;">
                     ${property.hidePrice ? 'Cena do negocjacji' : `${property.totalPrice.value.toLocaleString('pl-PL')} ${property.totalPrice.currency}`}
                   </div>
+                  ${clusterPriceAnalysisBadgeHtml}
                   <div style="display: flex; align-items: center; gap: 4px; color: #4b5563; margin-bottom: 8px; font-size: 11px;">
                     <span style="font-weight: 500;">${property.areaInSquareMeters} m²</span>
                     ${roomsDisplay ? `<span style="color: #9ca3af;">•</span><span style="font-weight: 500;">${roomsDisplay} pok.</span>` : ''}
@@ -1138,6 +1507,16 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           clusterMarker.on('click', async () => {
             // Close any existing popup before opening new one
             mapInstanceRef.current?.closePopup();
+            // Also close any other cluster marker popups (they have autoClose: false)
+            clusterMarkersRef.current.forEach(cm => {
+              if (cm !== clusterMarker) {
+                cm.closePopup();
+              }
+            });
+            // Close any standalone property marker popups
+            propertyMarkersRef.current.forEach(pm => {
+              pm.closePopup();
+            });
             
             // Show loading popup
             clusterMarker.unbindPopup();
@@ -1159,15 +1538,16 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
                   lng: cluster.lng,
                   filters: propertyFilters,
                   page: 1,
-                  limit: Math.min(cluster.count, 500), // Fetch up to cluster count, max 500
-                  shape: cluster.shape, // Use actual cluster boundary polygon
-                  radius: cluster.radiusInMeters || 1000, // Fallback radius
-                  estateType: cluster.estateType, // Fetch only this estate type for accurate count
+                  limit: Math.min(cluster.count, CLICK_FETCH_LIMIT),
+                  shape: cluster.shape,
+                  radius: cluster.radiusInMeters || DEFAULT_CLUSTER_RADIUS,
+                  estateType: cluster.estateType,
                 }),
               });
 
               if (!response.ok) {
-                throw new Error('Failed to fetch properties');
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                throw new Error(errorData.error || `Failed to fetch properties (${response.status})`);
               }
 
               const data: ClusterPropertiesResponse = await response.json();
@@ -1177,9 +1557,26 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
                 return;
               }
 
-              // Store properties in window for navigation
+              // Report fetched properties to parent for caching and analytics
+              if (onClusterPropertiesFetched) {
+                onClusterPropertiesFetched(clusterId, data.properties);
+              }
+
+              // Enrich properties with price analysis
+              const enrichedClusterProps = enrichClusterProperties(data.properties, properties, heatmapPoints);
+
+              // Update cluster marker icon with accurate price/glow based on fetched properties
+              if (clusterPriceAnalysis !== 'off') {
+                const validPrices = getValidPrices(enrichedClusterProps);
+                const newPriceLabel = generateClusterPriceLabel(validPrices, clusterPriceDisplay);
+                const { minCategory: newMinCategory, maxCategory: newMaxCategory } = getClusterPriceCategories(enrichedClusterProps);
+                const newClusterIcon = createClusterDivIcon(L, cluster.count, newPriceLabel, newMinCategory, newMaxCategory);
+                clusterMarker.setIcon(newClusterIcon);
+              }
+
+              // Store enriched properties in window for navigation
               const windowKey = `__cluster_${clusterId.replace(/[^a-zA-Z0-9]/g, '_')}`;
-              (window as unknown as Record<string, OtodomProperty[]>)[windowKey] = data.properties;
+              (window as unknown as Record<string, EnrichedProperty[]>)[windowKey] = enrichedClusterProps;
               
               // Use the actual total count from API, not just fetched properties length
               const actualTotalCount = data.totalCount;
@@ -1190,7 +1587,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
               // Function to update popup content and attach event listeners
               const updatePopup = () => {
-                const props = (window as unknown as Record<string, OtodomProperty[]>)[windowKey];
+                const props = (window as unknown as Record<string, EnrichedProperty[]>)[windowKey];
                 if (!props || props.length === 0) return;
                 
                 // Show actual total count in pagination, but navigate only through fetched properties
@@ -1262,7 +1659,8 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
             } catch (error) {
               console.error('Error fetching cluster properties:', error);
-              clusterMarker.setPopupContent(errorPopupHtml('Błąd ładowania ofert'));
+              const errorMessage = error instanceof Error ? error.message : 'Błąd ładowania ofert';
+              clusterMarker.setPopupContent(errorPopupHtml(errorMessage));
             }
           });
 
@@ -1283,7 +1681,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     };
 
     updateProperties();
-  }, [mapReady, properties, propertyClusters, showProperties, propertyFilters]);
+  }, [mapReady, properties, propertyClusters, showProperties, propertyFilters, clusterPriceDisplay, clusterPriceAnalysis, clusterAnalysisData]);
 
   return (
     <div 

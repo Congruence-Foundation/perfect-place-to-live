@@ -48,7 +48,22 @@
     "dataSource": "Data Source",
     "dataSourceTooltip": "Neon DB is faster (pre-cached data). Overpass API fetches real-time data from OpenStreetMap but is slower.",
     "useOverpass": "Use Overpass API",
-    "useOverpassTooltip": "Enable to always fetch real-time data from OpenStreetMap. When disabled, the app uses fast cached data but will automatically fall back to Overpass if no data is available for the area."
+    "useOverpassTooltip": "Enable to always fetch real-time data from OpenStreetMap. When disabled, the app uses fast cached data but will automatically fall back to Overpass if no data is available for the area.",
+    "clusterPrice": "Cluster Price",
+    "clusterPriceTooltip": "How to display price information on property cluster pins.",
+    "clusterPrice_none": "None",
+    "clusterPrice_range": "Range",
+    "clusterPrice_median": "Median",
+    "clusterPrice_median_spread": "Median ±%",
+    "clusterAnalysis": "Price Analysis",
+    "clusterAnalysisTooltip": "Analyze cluster prices to show deal quality (glow effect). Simplified uses loaded data, Detailed fetches actual cluster data.",
+    "clusterAnalysis_off": "Off",
+    "clusterAnalysis_simplified": "Simplified",
+    "clusterAnalysis_detailed": "Detailed",
+    "detailedThreshold": "Detailed Threshold",
+    "detailedThresholdTooltip": "Maximum cluster size for detailed mode. Larger clusters fall back to simplified mode to avoid too many API calls.",
+    "fewClusters": "Fewer",
+    "manyClusters": "More"
   },
   "curves": {
     "log": {
@@ -74,6 +89,9 @@
   },
   "debug": {
     "title": "Debug",
+    "zoomLevel": "Zoom level",
+    "properties": "Properties",
+    "clusters": "Clusters",
     "activeFactors": "Active factors",
     "gridPoints": "Grid points",
     "poisLoaded": "POIs loaded",
@@ -82,7 +100,10 @@
   "search": {
     "placeholder": "Search city...",
     "noResults": "No results found",
-    "failed": "Search failed. Please try again."
+    "failed": "Search failed. Please try again.",
+    "locateMe": "Go to my location",
+    "locationFailed": "Could not get location",
+    "noGeolocation": "Geolocation not supported"
   },
   "hint": {
     "rightClick": "Right-click on map for location details"
@@ -366,6 +387,14 @@
     "scoreFilterTooltip": "Filter properties by heatmap score. Drag handles to show only properties in areas matching your preferences.",
     "dataSources": "Data Sources",
     "dataSourcesActive": "{count} active",
-    "comingSoon": "Coming soon"
+    "comingSoon": "Coming soon",
+    "priceValue": "Price Value",
+    "priceValueTooltip": "Filter properties by price compared to similar listings. Great deals are priced below median, overpriced are above.",
+    "priceValueAll": "All",
+    "priceValueGreatDeal": "Great Deal",
+    "priceValueGoodDeal": "Good Deal",
+    "priceValueFair": "Fair Price",
+    "priceValueAboveAvg": "Above Avg",
+    "priceValueOverpriced": "Overpriced"
   }
 }

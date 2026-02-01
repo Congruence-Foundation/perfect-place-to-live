@@ -1,4 +1,6 @@
-import { EstateType } from '@/types/property';
+import { EstateType, PriceCategory } from '@/types/property';
+import { PRICE_CATEGORY_COLORS } from './price-analysis';
+import { formatCompactPrice } from './format';
 
 /**
  * Property marker colors by estate type
@@ -31,36 +33,93 @@ const PROPERTY_MARKER_ICONS: Record<EstateType, string> = {
 };
 
 /**
- * Generate HTML for a property marker icon
+ * Generate HTML for a property marker icon with optional price category indicator and price label
  * Can be used with Leaflet's L.divIcon
  */
-export function generatePropertyMarkerHtml(estateType: EstateType, size: number = 28): string {
+export function generatePropertyMarkerHtml(
+  estateType: EstateType, 
+  size: number = 28,
+  priceCategory?: PriceCategory,
+  price?: number
+): string {
   const color = PROPERTY_MARKER_COLORS[estateType] || PROPERTY_MARKER_COLORS.FLAT;
   const iconSvg = PROPERTY_MARKER_ICONS[estateType] || PROPERTY_MARKER_ICONS.FLAT;
   const iconSize = Math.round(size / 2);
   
-  return `
+  // Determine border color and glow based on price category
+  const hasPriceData = priceCategory && priceCategory !== 'no_data' && priceCategory !== 'fair';
+  const borderColor = hasPriceData ? PRICE_CATEGORY_COLORS[priceCategory] : 'white';
+  const glowColor = hasPriceData ? PRICE_CATEGORY_COLORS[priceCategory] : 'transparent';
+  const borderWidth = hasPriceData ? 3 : 2;
+  const glowSize = hasPriceData ? '0 0 8px 2px' : '0 2px 6px';
+  const glowOpacity = hasPriceData ? '0.6' : '0.3';
+  
+  // Price label (subtle, below the marker)
+  const priceLabel = price ? `
     <div style="
-      width: ${size}px;
-      height: ${size}px;
-      background: ${color};
-      border: 2px solid white;
-      border-radius: 50%;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    ">
-      <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        ${iconSvg}
-      </svg>
+      position: absolute;
+      top: ${size + 2}px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,255,255,0.9);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 500;
+      color: #374151;
+      white-space: nowrap;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+      pointer-events: none;
+    ">${formatCompactPrice(price)}</div>
+  ` : '';
+  
+  return `
+    <div style="position: relative;">
+      <div style="
+        width: ${size}px;
+        height: ${size}px;
+        background: ${color};
+        border: ${borderWidth}px solid ${borderColor};
+        border-radius: 50%;
+        box-shadow: ${glowSize} rgba(${hexToRgb(glowColor) || '0,0,0'}, ${glowOpacity});
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">
+        <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          ${iconSvg}
+        </svg>
+      </div>
+      ${priceLabel}
     </div>
   `;
 }
 
 /**
+ * Convert hex color to RGB string
+ */
+function hexToRgb(hex: string): string | null {
+  if (hex === 'transparent' || hex === 'white') return null;
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result 
+    ? `${parseInt(result[1], 16)},${parseInt(result[2], 16)},${parseInt(result[3], 16)}`
+    : null;
+}
+
+/**
  * Get the CSS class name for a property marker
  */
-export function getPropertyMarkerClassName(estateType: EstateType): string {
-  return `property-marker property-marker-${estateType.toLowerCase()}`;
+export function getPropertyMarkerClassName(estateType: EstateType, priceCategory?: PriceCategory): string {
+  const base = `property-marker property-marker-${estateType.toLowerCase()}`;
+  if (priceCategory && priceCategory !== 'no_data') {
+    return `${base} property-marker-${priceCategory.replace('_', '-')}`;
+  }
+  return base;
+}
+
+/**
+ * Get the color for a price category
+ */
+export function getPriceCategoryBorderColor(category: PriceCategory): string {
+  return PRICE_CATEGORY_COLORS[category] || PRICE_CATEGORY_COLORS.no_data;
 }

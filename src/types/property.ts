@@ -223,3 +223,57 @@ export interface ClusterPropertiesResponse {
   currentPage: number;
   totalPages: number;
 }
+
+/**
+ * Location quality tier based on heatmap score (20% windows)
+ */
+export type LocationQualityTier = '0-20' | '20-40' | '40-60' | '60-80' | '80-100';
+
+/**
+ * Price category based on comparison with similar properties
+ */
+export type PriceCategory = 'great_deal' | 'good_deal' | 'fair' | 'above_avg' | 'overpriced' | 'no_data';
+
+/**
+ * Price analysis result for a property
+ */
+export interface PropertyPriceAnalysis {
+  /** Price score in standard deviations from median (-3 to +3 typical range) */
+  priceScore: number;
+  /** Categorized price assessment */
+  priceCategory: PriceCategory;
+  /** Median price per m² in the comparison group */
+  groupMedianPrice: number;
+  /** Number of properties in the comparison group */
+  groupSize: number;
+  /** Percentile rank (0-100) - lower means cheaper */
+  percentile: number;
+  /** Percentage difference from median (e.g., -15 means 15% below median) */
+  percentFromMedian: number;
+  /** Location quality tier based on heatmap */
+  locationQualityTier: LocationQualityTier;
+  /** Human-readable comparison group description */
+  comparisonGroup: string;
+}
+
+/**
+ * Property with price analysis data
+ */
+export interface EnrichedProperty extends OtodomProperty {
+  priceAnalysis?: PropertyPriceAnalysis;
+}
+
+/**
+ * Price value filter options
+ */
+export type PriceValueFilter = 'all' | 'great_deal' | 'good_deal' | 'fair' | 'above_avg' | 'overpriced';
+
+/**
+ * Price value range for filtering (0-100 positions)
+ */
+export type PriceValueRange = [number, number];
+
+/**
+ * Cluster price display mode
+ */
+export type ClusterPriceDisplay = 'none' | 'range' | 'median' | 'median_spread';

@@ -48,7 +48,22 @@
     "dataSource": "Źródło danych",
     "dataSourceTooltip": "Neon DB jest szybszy (dane w cache). Overpass API pobiera dane w czasie rzeczywistym z OpenStreetMap, ale jest wolniejszy.",
     "useOverpass": "Użyj Overpass API",
-    "useOverpassTooltip": "Włącz, aby zawsze pobierać dane w czasie rzeczywistym z OpenStreetMap. Gdy wyłączone, aplikacja używa szybkich danych z cache, ale automatycznie przełączy się na Overpass, jeśli brak danych dla danego obszaru."
+    "useOverpassTooltip": "Włącz, aby zawsze pobierać dane w czasie rzeczywistym z OpenStreetMap. Gdy wyłączone, aplikacja używa szybkich danych z cache, ale automatycznie przełączy się na Overpass, jeśli brak danych dla danego obszaru.",
+    "clusterPrice": "Cena klastra",
+    "clusterPriceTooltip": "Sposób wyświetlania informacji o cenie na pinach klastrów nieruchomości.",
+    "clusterPrice_none": "Brak",
+    "clusterPrice_range": "Zakres",
+    "clusterPrice_median": "Mediana",
+    "clusterPrice_median_spread": "Mediana ±%",
+    "clusterAnalysis": "Analiza cen",
+    "clusterAnalysisTooltip": "Analizuj ceny klastrów, aby pokazać jakość ofert (efekt poświaty). Uproszczona używa załadowanych danych, Szczegółowa pobiera rzeczywiste dane klastra.",
+    "clusterAnalysis_off": "Wył.",
+    "clusterAnalysis_simplified": "Uproszczona",
+    "clusterAnalysis_detailed": "Szczegółowa",
+    "detailedThreshold": "Próg szczegółowy",
+    "detailedThresholdTooltip": "Maksymalny rozmiar klastra dla trybu szczegółowego. Większe klastry przełączają się na tryb uproszczony, aby uniknąć zbyt wielu zapytań API.",
+    "fewClusters": "Mniej",
+    "manyClusters": "Więcej"
   },
   "curves": {
     "log": {
@@ -74,6 +89,9 @@
   },
   "debug": {
     "title": "Debugowanie",
+    "zoomLevel": "Poziom zoom",
+    "properties": "Nieruchomości",
+    "clusters": "Klastry",
     "activeFactors": "Aktywne czynniki",
     "gridPoints": "Punkty siatki",
     "poisLoaded": "Załadowane POI",
@@ -82,7 +100,10 @@
   "search": {
     "placeholder": "Szukaj miasta...",
     "noResults": "Nie znaleziono wyników",
-    "failed": "Wyszukiwanie nie powiodło się. Spróbuj ponownie."
+    "failed": "Wyszukiwanie nie powiodło się. Spróbuj ponownie.",
+    "locateMe": "Przejdź do mojej lokalizacji",
+    "locationFailed": "Nie udało się pobrać lokalizacji",
+    "noGeolocation": "Geolokalizacja nie jest obsługiwana"
   },
   "hint": {
     "rightClick": "Kliknij prawym na mapie, aby zobaczyć szczegóły"
@@ -366,6 +387,14 @@
     "scoreFilterTooltip": "Filtruj oferty według wyniku mapy cieplnej. Przeciągnij suwaki, aby pokazać tylko oferty w obszarach pasujących do Twoich preferencji.",
     "dataSources": "Źródła danych",
     "dataSourcesActive": "{count} aktywnych",
-    "comingSoon": "Wkrótce"
+    "comingSoon": "Wkrótce",
+    "priceValue": "Ocena ceny",
+    "priceValueTooltip": "Filtruj nieruchomości według ceny w porównaniu do podobnych ofert. Świetne okazje są poniżej mediany, zawyżone powyżej.",
+    "priceValueAll": "Wszystkie",
+    "priceValueGreatDeal": "Świetna okazja",
+    "priceValueGoodDeal": "Dobra cena",
+    "priceValueFair": "Uczciwa cena",
+    "priceValueAboveAvg": "Powyżej średniej",
+    "priceValueOverpriced": "Zawyżona"
   }
 }

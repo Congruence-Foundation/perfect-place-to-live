@@ -12,6 +12,24 @@ export function formatPrice(price: number, currency: string = 'PLN'): string {
 }
 
 /**
+ * Format price compactly for map markers and labels (no currency, shorter format)
+ * 
+ * @param price - The price value to format
+ * @returns Compact price string (e.g., "1.5M", "500k", "999")
+ */
+export function formatCompactPrice(price: number): string {
+  if (price >= 1000000) {
+    const millions = price / 1000000;
+    return millions % 1 === 0 ? `${millions}M` : `${millions.toFixed(1)}M`;
+  }
+  if (price >= 1000) {
+    const thousands = price / 1000;
+    return thousands % 1 === 0 ? `${thousands}k` : `${thousands.toFixed(0)}k`;
+  }
+  return price.toString();
+}
+
+/**
  * Room count enum to display number mapping
  */
 const ROOM_COUNT_MAP: Record<string, string> = {

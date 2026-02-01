@@ -2,8 +2,17 @@ import { Bounds } from './poi';
 import { Factor } from './factors';
 import { POI } from './poi';
 import { DataSource } from '@/lib/errors';
+import { ClusterPriceDisplay } from './property';
 
 export type DistanceCurve = 'linear' | 'log' | 'exp' | 'power';
+
+/**
+ * Cluster price analysis mode
+ * - off: No price analysis on clusters
+ * - simplified: Use nearby loaded properties for analysis (fast)
+ * - detailed: Fetch actual property data from API (accurate, slower)
+ */
+export type ClusterPriceAnalysisMode = 'off' | 'simplified' | 'detailed';
 
 // Re-export DataSource for convenience
 export type { DataSource } from '@/lib/errors';
@@ -22,6 +31,9 @@ export interface HeatmapSettings {
   distanceCurve: DistanceCurve; // distance scoring function
   sensitivity: number; // curve steepness (0.5-3, default 1)
   normalizeToViewport: boolean; // normalize K values to viewport range
+  clusterPriceDisplay: ClusterPriceDisplay; // how to show prices on cluster pins
+  clusterPriceAnalysis: ClusterPriceAnalysisMode; // how to analyze prices for clusters
+  detailedModeThreshold: number; // max cluster count for detailed mode (default 100)
 }
 
 export interface HeatmapRequest {

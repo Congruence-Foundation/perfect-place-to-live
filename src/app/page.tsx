@@ -4,16 +4,18 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import MapContainer, { MapContainerRef } from '@/components/Map/MapContainer';
 import { WeightSliders, CitySearch, HeatmapSettings, ProfileSelector, MapSettings, DebugInfo, AppInfo, LanguageSwitcher, BottomSheet, RefreshButton, RealEstateSidebar, ScoreRangeSlider, DataSourcesPanel, DataSource } from '@/components/Controls';
+import { PriceValueFilter } from '@/components/Controls/filters';
 import { Button } from '@/components/ui/button';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { DEFAULT_FACTORS, applyProfile, FACTOR_PROFILES } from '@/config/factors';
 import { Bounds, Factor } from '@/types';
-import { PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/types/property';
+import { PropertyFilters, DEFAULT_PROPERTY_FILTERS, PriceValueRange, EnrichedProperty, OtodomProperty } from '@/types/property';
 import { useHeatmap, useIsMobile, useNotification, useOtodomProperties } from '@/hooks';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Loader2, ChevronLeft, ChevronRight, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
 import { isViewportCovered, isBoundsTooLarge, expandBounds } from '@/lib/bounds';
 import { filterPropertiesByScore, filterClustersByScore } from '@/lib/score-lookup';
+import { enrichPropertiesWithPriceScore, filterPropertiesByPriceValue, analyzeClusterPrices, enrichPropertiesSimplified, ClusterAnalysisMap } from '@/lib/price-analysis';
 import { Toast } from '@/components/ui/toast';
 
 // Grid buffer used by the API (must match GRID_BUFFER_DEGREES in route.ts)
@@ -28,6 +30,7 @@ export default function Home() {
   const isMobile = useIsMobile();
 
   const [bounds, setBounds] = useState<Bounds | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(7);
   const [factors, setFactors] = useState<Factor[]>(DEFAULT_FACTORS);
   const [selectedProfile, setSelectedProfile] = useState<string | null>('balanced');
   const [mode, setMode] = useState<'realtime' | 'precomputed'>('realtime');
@@ -41,6 +44,9 @@ export default function Home() {
     distanceCurve: 'exp', // exponential for sharp drop-off near POIs
     sensitivity: 2, // 2x sensitivity for more pronounced differences
     normalizeToViewport: false, // absolute scoring by default
+    clusterPriceDisplay: 'median', // show median price on clusters
+    clusterPriceAnalysis: 'simplified', // use simplified analysis by default
+    detailedModeThreshold: 100, // max cluster count for detailed mode
   });
 
   // Real estate state
@@ -48,6 +54,10 @@ export default function Home() {
   const [propertyFilters, setPropertyFilters] = useState<PropertyFilters>(DEFAULT_PROPERTY_FILTERS);
   const [scoreRange, setScoreRange] = useState<[number, number]>([50, 100]);
   const [dataSources, setDataSources] = useState<DataSource[]>(['otodom']);
+  const [priceValueRange, setPriceValueRange] = useState<PriceValueRange>([0, 100]);
+  
+  // Cache for cluster properties fetched from API (for analytics and avoiding re-fetches)
+  const [clusterPropertiesCache, setClusterPropertiesCache] = useState<Map<string, OtodomProperty[]>>(new Map());
 
   // Track bottom sheet height for mobile loading overlay positioning
   // Default to ~7% of viewport height (will be updated by BottomSheet)
@@ -85,8 +95,36 @@ export default function Home() {
   const lastFetchParamsRef = useRef<string>('');
   // Track previous bounds to detect zoom changes
   const prevBoundsRef = useRef<Bounds | null>(null);
+  // Track if geolocation has been attempted
+  const geoLocationAttempted = useRef(false);
 
-  const handleBoundsChange = useCallback((newBounds: Bounds) => {
+  // Request user's geolocation on mount and fly to their location
+  useEffect(() => {
+    if (geoLocationAttempted.current) return;
+    geoLocationAttempted.current = true;
+
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          // Fly to user's location with zoom level 13 (neighborhood level)
+          mapRef.current?.flyTo(latitude, longitude, 13);
+          hasInteracted.current = true;
+        },
+        (error) => {
+          // Silently fail - user denied or geolocation unavailable
+          console.log('Geolocation not available:', error.message);
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: 300000, // Cache for 5 minutes
+        }
+      );
+    }
+  }, []);
+
+  const handleBoundsChange = useCallback((newBounds: Bounds, zoom: number) => {
     // Detect if user zoomed in (viewport got smaller) - treat as interaction
     if (prevBoundsRef.current && !hasInteracted.current) {
       const prevArea = (prevBoundsRef.current.east - prevBoundsRef.current.west) * 
@@ -100,6 +138,7 @@ export default function Home() {
     }
     prevBoundsRef.current = newBounds;
     setBounds(newBounds);
+    setZoomLevel(zoom);
   }, []);
 
   const handleFactorChange = useCallback((factorId: string, updates: Partial<Factor>) => {
@@ -132,6 +171,15 @@ export default function Home() {
 
   const handlePropertyFiltersChange = useCallback((updates: Partial<PropertyFilters>) => {
     setPropertyFilters((prev) => ({ ...prev, ...updates }));
+  }, []);
+
+  // Callback for MapView to report fetched cluster properties (for analytics)
+  const handleClusterPropertiesFetched = useCallback((clusterId: string, clusterProperties: OtodomProperty[]) => {
+    setClusterPropertiesCache(prev => {
+      const next = new Map(prev);
+      next.set(clusterId, clusterProperties);
+      return next;
+    });
   }, []);
 
   const handleRefresh = useCallback(() => {
@@ -244,6 +292,7 @@ export default function Home() {
   useEffect(() => {
     if (!realEstateEnabled || !debouncedBounds) {
       clearProperties();
+      setClusterPropertiesCache(new Map()); // Clear cluster cache when properties are cleared
       return;
     }
 
@@ -252,24 +301,69 @@ export default function Home() {
       return;
     }
 
+    // Clear cluster cache when fetching new properties (clusters will change)
+    setClusterPropertiesCache(new Map());
     fetchProperties(debouncedBounds, debouncedPropertyFilters);
   }, [realEstateEnabled, debouncedBounds, debouncedPropertyFilters, fetchProperties, clearProperties]);
 
   const enabledFactorCount = factors.filter((f) => f.enabled && f.weight !== 0).length;
   const totalPOICount = Object.values(pois).reduce((sum, arr) => sum + arr.length, 0);
 
-  // Filter properties by heatmap score
-  const filteredProperties = useMemo(() => {
-    if (!realEstateEnabled || (scoreRange[0] === 0 && scoreRange[1] === 100)) {
+  // Combine standalone properties with cached cluster properties for analytics
+  const allPropertiesForAnalytics = useMemo(() => {
+    if (clusterPropertiesCache.size === 0) {
       return properties;
     }
+    const clusterProps = Array.from(clusterPropertiesCache.values()).flat();
+    // Deduplicate by ID (standalone properties take precedence)
+    const seen = new Set(properties.map(p => p.id));
+    const uniqueClusterProps = clusterProps.filter(p => !seen.has(p.id));
+    return [...properties, ...uniqueClusterProps];
+  }, [properties, clusterPropertiesCache]);
+
+  // Enrich properties with price analysis (includes cluster properties for better analytics)
+  const enrichedProperties = useMemo<EnrichedProperty[]>(() => {
+    if (!realEstateEnabled || allPropertiesForAnalytics.length === 0 || heatmapPoints.length === 0) {
+      return allPropertiesForAnalytics.map(p => ({ ...p }));
+    }
+    return enrichPropertiesWithPriceScore(
+      allPropertiesForAnalytics,
+      heatmapPoints,
+      heatmapSettings.gridCellSize
+    );
+  }, [allPropertiesForAnalytics, heatmapPoints, realEstateEnabled, heatmapSettings.gridCellSize]);
+
+  // Get only standalone properties (not from clusters) for rendering as markers
+  // Cluster properties are only used for analytics, not for standalone markers
+  const standaloneEnrichedProperties = useMemo<EnrichedProperty[]>(() => {
+    if (clusterPropertiesCache.size === 0) {
+      return enrichedProperties;
+    }
+    // Get IDs of properties that came from the original properties list (not clusters)
+    const standaloneIds = new Set(properties.map(p => p.id));
+    return enrichedProperties.filter(p => standaloneIds.has(p.id));
+  }, [enrichedProperties, properties, clusterPropertiesCache.size]);
+
+  // Filter properties by heatmap score (use standalone properties for rendering)
+  const scoreFilteredProperties = useMemo(() => {
+    if (!realEstateEnabled || (scoreRange[0] === 0 && scoreRange[1] === 100)) {
+      return standaloneEnrichedProperties;
+    }
     return filterPropertiesByScore(
-      properties,
+      standaloneEnrichedProperties,
       heatmapPoints,
       scoreRange,
       heatmapSettings.gridCellSize
     );
-  }, [properties, heatmapPoints, scoreRange, realEstateEnabled, heatmapSettings.gridCellSize]);
+  }, [standaloneEnrichedProperties, heatmapPoints, scoreRange, realEstateEnabled, heatmapSettings.gridCellSize]);
+
+  // Filter properties by price value
+  const filteredProperties = useMemo(() => {
+    if (priceValueRange[0] === 0 && priceValueRange[1] === 100) {
+      return scoreFilteredProperties;
+    }
+    return filterPropertiesByPriceValue(scoreFilteredProperties, priceValueRange);
+  }, [scoreFilteredProperties, priceValueRange]);
 
   // Filter clusters by heatmap score
   const filteredClusters = useMemo(() => {
@@ -283,6 +377,46 @@ export default function Home() {
       heatmapSettings.gridCellSize
     );
   }, [propertyClusters, heatmapPoints, scoreRange, realEstateEnabled, heatmapSettings.gridCellSize]);
+
+  // Calculate cluster price analysis for glow effect
+  const clusterAnalysisData = useMemo<ClusterAnalysisMap>(() => {
+    // Return empty map if analysis is off or no data
+    if (
+      heatmapSettings.clusterPriceAnalysis === 'off' ||
+      !realEstateEnabled ||
+      filteredClusters.length === 0
+    ) {
+      return new Map();
+    }
+
+    // For simplified mode, use enriched properties (which have price analysis)
+    // For detailed mode, we also use enriched properties but with extended search
+    if (heatmapSettings.clusterPriceAnalysis === 'simplified') {
+      // Use enriched properties with existing price analysis
+      return analyzeClusterPrices(filteredClusters, enrichedProperties);
+    }
+
+    // For detailed mode, enrich properties with simplified (extended search) method
+    // This works even when heatmap data is sparse
+    if (heatmapSettings.clusterPriceAnalysis === 'detailed' && heatmapPoints.length > 0) {
+      const detailedEnriched = enrichPropertiesSimplified(
+        properties,
+        heatmapPoints,
+        heatmapSettings.gridCellSize
+      );
+      return analyzeClusterPrices(filteredClusters, detailedEnriched);
+    }
+
+    return new Map();
+  }, [
+    heatmapSettings.clusterPriceAnalysis,
+    heatmapSettings.gridCellSize,
+    realEstateEnabled,
+    filteredClusters,
+    enrichedProperties,
+    properties,
+    heatmapPoints,
+  ]);
 
   // Check if viewport is too large (zoomed out too much) - matches the fetch threshold
   const isZoomedOutTooMuch = bounds ? isBoundsTooLarge(bounds) : false;
@@ -468,6 +602,18 @@ export default function Home() {
                   </div>
                 </div>
               )}
+
+              {/* Price Value Filter (only when real estate is enabled) */}
+              {realEstateEnabled && (
+                <div className="mb-3">
+                  <PriceValueFilter
+                    label={tRealEstate('priceValue')}
+                    tooltip={tRealEstate('priceValueTooltip')}
+                    range={priceValueRange}
+                    onChange={setPriceValueRange}
+                  />
+                </div>
+              )}
               
               {/* Real Estate Filters (only when enabled) */}
               {realEstateEnabled && (
@@ -532,6 +678,12 @@ export default function Home() {
           propertyClusters={filteredClusters}
           showProperties={realEstateEnabled}
           propertyFilters={propertyFilters}
+          clusterPriceDisplay={heatmapSettings.clusterPriceDisplay}
+          clusterPriceAnalysis={heatmapSettings.clusterPriceAnalysis}
+          detailedModeThreshold={heatmapSettings.detailedModeThreshold}
+          clusterAnalysisData={clusterAnalysisData}
+          clusterPropertiesCache={clusterPropertiesCache}
+          onClusterPropertiesFetched={handleClusterPropertiesFetched}
         />
 
         {/* Top Right Controls - Language Switcher and App Info */}
@@ -562,6 +714,9 @@ export default function Home() {
               totalPOICount={totalPOICount}
               error={error}
               isMobile={false}
+              zoomLevel={zoomLevel}
+              propertyCount={filteredProperties.length}
+              clusterCount={filteredClusters.length}
             />
 
             {/* Map Settings - Bottom Right */}
@@ -575,6 +730,7 @@ export default function Home() {
               useOverpassAPI={useOverpassAPI}
               onUseOverpassAPIChange={setUseOverpassAPI}
               isMobile={false}
+              realEstateEnabled={realEstateEnabled}
             />
           </>
         )}
@@ -619,6 +775,8 @@ export default function Home() {
           propertiesError={propertiesError}
           scoreRange={scoreRange}
           onScoreRangeChange={setScoreRange}
+          priceValueRange={priceValueRange}
+          onPriceValueRangeChange={setPriceValueRange}
           floatingControls={
             <>
               {/* Debug Info - Left */}
@@ -628,6 +786,9 @@ export default function Home() {
                 totalPOICount={totalPOICount}
                 error={error}
                 isMobile={true}
+                zoomLevel={zoomLevel}
+                propertyCount={filteredProperties.length}
+                clusterCount={filteredClusters.length}
               />
 
               {/* Refresh/Abort Button - Center */}
@@ -651,6 +812,7 @@ export default function Home() {
                 useOverpassAPI={useOverpassAPI}
                 onUseOverpassAPIChange={setUseOverpassAPI}
                 isMobile={true}
+                realEstateEnabled={realEstateEnabled}
               />
             </>
           }

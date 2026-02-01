@@ -4,9 +4,10 @@ import { useEffect, useState, forwardRef, useImperativeHandle, useRef, useMemo }
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { POLAND_CENTER } from '@/config/factors';
-import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
-import { OtodomProperty, PropertyCluster, PropertyFilters } from '@/types/property';
+import { HeatmapPoint, POI, Factor, Bounds, ClusterPriceAnalysisMode } from '@/types';
+import { PropertyCluster, PropertyFilters, EnrichedProperty, ClusterPriceDisplay, OtodomProperty } from '@/types/property';
 import type { PopupTranslations, FactorTranslations } from './MapView';
+import { ClusterAnalysisMap } from '@/lib/price-analysis';
 
 // Dynamically import the map to avoid SSR issues with Leaflet
 const MapWithNoSSR = dynamic(() => import('./MapView'), {
@@ -25,16 +26,22 @@ export interface MapContainerRef {
 }
 
 interface MapContainerProps {
-  onBoundsChange?: (bounds: { north: number; south: number; east: number; west: number }) => void;
+  onBoundsChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;
   heatmapPoints?: HeatmapPoint[];
   heatmapOpacity?: number;
   pois?: Record<string, POI[]>;
   showPOIs?: boolean;
   factors?: Factor[];
-  properties?: OtodomProperty[];
+  properties?: EnrichedProperty[];
   propertyClusters?: PropertyCluster[];
   showProperties?: boolean;
   propertyFilters?: PropertyFilters;
+  clusterPriceDisplay?: ClusterPriceDisplay;
+  clusterPriceAnalysis?: ClusterPriceAnalysisMode;
+  detailedModeThreshold?: number;
+  clusterAnalysisData?: ClusterAnalysisMap;
+  clusterPropertiesCache?: Map<string, OtodomProperty[]>;
+  onClusterPropertiesFetched?: (clusterId: string, properties: OtodomProperty[]) => void;
 }
 
 const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
@@ -48,6 +55,12 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
   propertyClusters = [],
   showProperties = false,
   propertyFilters,
+  clusterPriceDisplay = 'median',
+  clusterPriceAnalysis = 'simplified',
+  detailedModeThreshold = 100,
+  clusterAnalysisData,
+  clusterPropertiesCache,
+  onClusterPropertiesFetched,
 }, ref) => {
   const [isMounted, setIsMounted] = useState(false);
   const mapViewRef = useRef<MapContainerRef>(null);
@@ -139,6 +152,12 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
       propertyClusters={propertyClusters}
       showProperties={showProperties}
       propertyFilters={propertyFilters}
+      clusterPriceDisplay={clusterPriceDisplay}
+      clusterPriceAnalysis={clusterPriceAnalysis}
+      detailedModeThreshold={detailedModeThreshold}
+      clusterAnalysisData={clusterAnalysisData}
+      clusterPropertiesCache={clusterPropertiesCache}
+      onClusterPropertiesFetched={onClusterPropertiesFetched}
     />
   );
 });

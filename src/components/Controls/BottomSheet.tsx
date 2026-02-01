@@ -6,13 +6,14 @@ import { GripHorizontal, ChevronDown, ChevronUp, SlidersHorizontal, RotateCcw } 
 import { Button } from '@/components/ui/button';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { Factor } from '@/types';
-import { PropertyFilters } from '@/types/property';
+import { PropertyFilters, PriceValueRange } from '@/types/property';
 import { FACTOR_PROFILES } from '@/config/factors';
 import { useSnapPoints } from '@/hooks';
 import ProfileSelector from './ProfileSelector';
 import WeightSliders from './WeightSliders';
 import RealEstateSidebar from './RealEstateSidebar';
 import ScoreRangeSlider from './ScoreRangeSlider';
+import { PriceValueFilter } from './filters';
 
 // Snap points configuration
 const SNAP_CONFIG = {
@@ -39,6 +40,8 @@ interface BottomSheetProps {
   propertiesError?: string | null;
   scoreRange?: [number, number];
   onScoreRangeChange?: (range: [number, number]) => void;
+  priceValueRange?: PriceValueRange;
+  onPriceValueRangeChange?: (range: PriceValueRange) => void;
 }
 
 export default function BottomSheet({
@@ -59,6 +62,8 @@ export default function BottomSheet({
   propertiesError,
   scoreRange,
   onScoreRangeChange,
+  priceValueRange = [0, 100],
+  onPriceValueRangeChange,
 }: BottomSheetProps) {
   const tApp = useTranslations('app');
   const tControls = useTranslations('controls');
@@ -389,6 +394,18 @@ export default function BottomSheet({
                 <span className="text-[10px] text-muted-foreground">{scoreRange[0]}%</span>
                 <span className="text-[10px] text-muted-foreground">{scoreRange[1]}%</span>
               </div>
+            </div>
+          )}
+
+          {/* Price Value Filter (only when real estate is enabled) */}
+          {realEstateEnabled && onPriceValueRangeChange && (
+            <div className="mb-3">
+              <PriceValueFilter
+                label={tRealEstate('priceValue')}
+                tooltip={tRealEstate('priceValueTooltip')}
+                range={priceValueRange}
+                onChange={onPriceValueRangeChange}
+              />
             </div>
           )}
 

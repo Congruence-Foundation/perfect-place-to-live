@@ -13,6 +13,9 @@ interface DebugInfoProps {
   totalPOICount: number;
   error: string | null;
   isMobile?: boolean;
+  zoomLevel?: number;
+  propertyCount?: number;
+  clusterCount?: number;
 }
 
 export default function DebugInfo({
@@ -21,6 +24,9 @@ export default function DebugInfo({
   totalPOICount,
   error,
   isMobile = false,
+  zoomLevel,
+  propertyCount = 0,
+  clusterCount = 0,
 }: DebugInfoProps) {
   const [isOpen, setIsOpen] = useState(false);
   const t = useTranslations('debug');
@@ -44,6 +50,27 @@ export default function DebugInfo({
           </div>
 
           <div className="space-y-2 text-xs">
+            {/* Map Info Section */}
+            {zoomLevel !== undefined && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('zoomLevel')}</span>
+                <span className="font-mono font-medium">{zoomLevel.toFixed(1)}</span>
+              </div>
+            )}
+            {(propertyCount > 0 || clusterCount > 0) && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('properties')}</span>
+                  <span className="font-mono font-medium">{propertyCount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('clusters')}</span>
+                  <span className="font-mono font-medium">{clusterCount.toLocaleString()}</span>
+                </div>
+              </>
+            )}
+            
+            {/* Heatmap Section */}
             <div className="flex justify-between">
               <span className="text-muted-foreground">{t('activeFactors')}</span>
               <span className="font-mono font-medium">{enabledFactorCount}</span>

@@ -4,7 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Loader2, X } from 'lucide-react';
+import { Search, Loader2, X, LocateFixed } from 'lucide-react';
 import { useClickOutside } from '@/hooks';
 
 interface SearchResult {
@@ -32,6 +32,7 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
   const [isOpen, setIsOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -126,6 +127,35 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
     setIsOpen(false);
   };
 
+  const handleLocateMe = useCallback(() => {
+    if (!('geolocation' in navigator)) {
+      setError(t('noGeolocation'));
+      return;
+    }
+
+    setIsLocating(true);
+    setError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        onCitySelect(latitude, longitude);
+        setQuery('');
+        setIsLocating(false);
+      },
+      (err) => {
+        console.log('Geolocation error:', err.message);
+        setError(t('locationFailed'));
+        setIsLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      }
+    );
+  }, [onCitySelect, t]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setIsOpen(false);
@@ -138,10 +168,10 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
       className={`relative transition-all duration-300 ${
         isMobile 
           ? 'w-full' 
-          : isFocused ? 'w-72' : 'w-40'
+          : isFocused ? 'w-72' : 'w-48'
       }`}
     >
-      <div className="relative shadow-lg rounded-full">
+      <div className="relative shadow-lg rounded-full flex items-center">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <Input
           type="text"
@@ -161,23 +191,39 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
             }, 150);
           }}
           onKeyDown={handleKeyDown}
-          className="pl-8 pr-7 bg-background border-0 shadow-none h-8 text-base rounded-full"
+          className="pl-8 pr-16 bg-background border-0 shadow-none h-8 text-base rounded-full"
           style={{ fontSize: '16px' }} // Prevent iOS zoom on focus
         />
-        {query && (
+        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+          {query && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 rounded-full"
+              onClick={handleClear}
+            >
+              {isLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <X className="h-3 w-3" />
+              )}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
-            className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6 p-0 rounded-full"
-            onClick={handleClear}
+            className="h-6 w-6 p-0 rounded-full text-muted-foreground hover:text-foreground"
+            onClick={handleLocateMe}
+            disabled={isLocating}
+            title={t('locateMe')}
           >
-            {isLoading ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
+            {isLocating ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <X className="h-3 w-3" />
+              <LocateFixed className="h-3.5 w-3.5" />
             )}
           </Button>
-        )}
+        </div>
       </div>
 
       {/* Results dropdown */}
