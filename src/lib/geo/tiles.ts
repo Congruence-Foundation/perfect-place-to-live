@@ -5,7 +5,8 @@
 
 import type { Bounds } from '@/types';
 import type { PropertyFilters } from '@/extensions/real-estate/types';
-import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
+import type { Factor } from '@/types/factors';
+import { PROPERTY_TILE_CONFIG, HEATMAP_TILE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 import { getTilesForBounds } from './grid';
 
 /**
@@ -199,4 +200,247 @@ export function separateViewportAndBufferTiles(
   );
 
   return { viewport: viewportTiles, buffer };
+}
+
+// ============================================================================
+// Heatmap Tile Utilities
+// ============================================================================
+
+/**
+ * Fixed zoom level for heatmap tiles
+ * Using zoom 13 provides ~2.4km x 2.4km tiles at Poland's latitude
+ */
+export const HEATMAP_TILE_ZOOM = HEATMAP_TILE_CONFIG.TILE_ZOOM;
+
+/**
+ * Heatmap configuration for cache key generation
+ */
+export interface HeatmapConfig {
+  factors: Factor[];
+  distanceCurve: string;
+  sensitivity: number;
+}
+
+/**
+ * Create a stable hash from heatmap configuration
+ * Used as part of the cache key to differentiate tiles with different settings
+ * 
+ * @param config - Heatmap configuration object
+ * @returns Hash string
+ */
+export function hashHeatmapConfig(config: HeatmapConfig): string {
+  // Only include enabled factors with their weights and maxDistance
+  const enabledFactors = config.factors
+    .filter(f => f.enabled)
+    .map(f => ({
+      id: f.id,
+      weight: f.weight,
+      maxDistance: f.maxDistance,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  // Create a stable, sorted representation
+  const key = JSON.stringify({
+    factors: enabledFactors,
+    distanceCurve: config.distanceCurve,
+    sensitivity: config.sensitivity,
+  });
+
+  // Simple hash function (djb2)
+  let hash = 5381;
+  for (let i = 0; i < key.length; i++) {
+    hash = ((hash << 5) + hash) + key.charCodeAt(i);
+    hash |= 0; // Convert to 32-bit integer
+  }
+
+  return Math.abs(hash).toString(36);
+}
+
+/**
+ * Generate a cache key for a heatmap tile
+ * @param z - Zoom level
+ * @param x - Tile X coordinate
+ * @param y - Tile Y coordinate
+ * @param configHash - Hash of the heatmap configuration
+ * @returns Cache key string
+ */
+export function getHeatmapTileKey(z: number, x: number, y: number, configHash: string): string {
+  return `heatmap-tile:${z}:${x}:${y}:${configHash}`;
+}
+
+/**
+ * Check if the viewport is too large for heatmap tile-based fetching
+ * Returns true if the number of tiles exceeds the maximum allowed
+ * 
+ * @param bounds - Geographic bounds of the viewport
+ * @returns True if viewport is too large
+ */
+export function isHeatmapViewportTooLarge(bounds: Bounds): boolean {
+  const tiles = getTilesForBounds(bounds, HEATMAP_TILE_ZOOM);
+  return tiles.length > HEATMAP_TILE_CONFIG.MAX_VIEWPORT_TILES;
+}
+
+/**
+ * Get heatmap tiles for a viewport with optional radius expansion
+ * 
+ * @param bounds - Geographic bounds of the viewport
+ * @param radius - Number of tile layers to add around the viewport (default: 0)
+ * @returns Object containing viewport tiles, all tiles, and whether viewport is too large
+ */
+export function getHeatmapTilesForBounds(
+  bounds: Bounds,
+  radius: number = 0
+): {
+  viewportTiles: TileCoord[];
+  allTiles: TileCoord[];
+  isTooLarge: boolean;
+} {
+  const viewportTiles = getTilesForBounds(bounds, HEATMAP_TILE_ZOOM);
+
+  if (viewportTiles.length > HEATMAP_TILE_CONFIG.MAX_VIEWPORT_TILES) {
+    return { viewportTiles: [], allTiles: [], isTooLarge: true };
+  }
+
+  const allTiles = getExpandedTilesForRadius(viewportTiles, radius);
+
+  // Check if total tiles exceed hard limit
+  if (allTiles.length > HEATMAP_TILE_CONFIG.MAX_TOTAL_TILES) {
+    // Reduce radius until within limit
+    let reducedRadius = radius;
+    let reducedTiles = allTiles;
+    
+    while (reducedTiles.length > HEATMAP_TILE_CONFIG.MAX_TOTAL_TILES && reducedRadius > 0) {
+      reducedRadius--;
+      reducedTiles = getExpandedTilesForRadius(viewportTiles, reducedRadius);
+    }
+    
+    return { viewportTiles, allTiles: reducedTiles, isTooLarge: false };
+  }
+
+  return { viewportTiles, allTiles, isTooLarge: false };
+}
+
+// ============================================================================
+// POI Tile Utilities (Tile-Aligned POI Caching)
+// ============================================================================
+
+/**
+ * Fixed zoom level for POI tiles
+ * Using same zoom as heatmap tiles for simplicity
+ */
+export const POI_TILE_ZOOM = POI_TILE_CONFIG.TILE_ZOOM;
+
+/**
+ * Generate a cache key for a POI tile
+ * @param z - Zoom level
+ * @param x - Tile X coordinate
+ * @param y - Tile Y coordinate
+ * @param factorId - Factor ID for this POI type
+ * @returns Cache key string
+ */
+export function getPoiTileKey(z: number, x: number, y: number, factorId: string): string {
+  return `poi-tile:${z}:${x}:${y}:${factorId}`;
+}
+
+/**
+ * Calculate how many neighboring tiles are needed for POI buffer
+ * based on max factor distance and tile size
+ * 
+ * @param maxDistanceMeters - Maximum factor distance in meters
+ * @param bufferScale - Multiplier for safety margin (default 2x)
+ * @returns Number of tiles to expand in each direction
+ */
+export function calculatePoiTileRadius(
+  maxDistanceMeters: number,
+  bufferScale: number = POI_TILE_CONFIG.DEFAULT_POI_BUFFER_SCALE
+): number {
+  const tileSizeMeters = POI_TILE_CONFIG.TILE_SIZE_METERS;
+  
+  // Calculate radius: (maxDistance * scale) / tileSize, rounded up
+  const radius = Math.ceil((maxDistanceMeters * bufferScale) / tileSizeMeters);
+  
+  // Cap at reasonable maximum to prevent excessive fetching
+  return Math.min(radius, POI_TILE_CONFIG.MAX_POI_TILE_RADIUS);
+}
+
+/**
+ * Get all POI tiles needed for scoring a set of heatmap tiles
+ * 
+ * @param heatmapTiles - Array of heatmap tile coordinates
+ * @param maxDistanceMeters - Maximum factor distance in meters
+ * @param bufferScale - Multiplier for safety margin
+ * @returns Array of POI tile coordinates
+ */
+export function getPoiTilesForHeatmapTiles(
+  heatmapTiles: TileCoord[],
+  maxDistanceMeters: number,
+  bufferScale: number
+): TileCoord[] {
+  if (heatmapTiles.length === 0) return [];
+  
+  const poiRadius = calculatePoiTileRadius(maxDistanceMeters, bufferScale);
+  
+  // Get bounding box of heatmap tiles
+  const minX = Math.min(...heatmapTiles.map(t => t.x));
+  const maxX = Math.max(...heatmapTiles.map(t => t.x));
+  const minY = Math.min(...heatmapTiles.map(t => t.y));
+  const maxY = Math.max(...heatmapTiles.map(t => t.y));
+  const z = heatmapTiles[0].z;
+  
+  // Expand by POI radius
+  const poiTiles: TileCoord[] = [];
+  const maxTileIndex = Math.pow(2, z) - 1;
+  
+  for (let x = minX - poiRadius; x <= maxX + poiRadius; x++) {
+    for (let y = minY - poiRadius; y <= maxY + poiRadius; y++) {
+      if (x >= 0 && y >= 0 && x <= maxTileIndex && y <= maxTileIndex) {
+        poiTiles.push({ x, y, z });
+      }
+    }
+  }
+  
+  return poiTiles;
+}
+
+/**
+ * Get combined bounds for a set of tiles
+ * 
+ * @param tiles - Array of tile coordinates
+ * @returns Combined geographic bounds
+ */
+export function getCombinedTileBounds(tiles: TileCoord[]): Bounds | null {
+  if (tiles.length === 0) return null;
+  
+  let north = -Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let west = Infinity;
+  
+  for (const tile of tiles) {
+    const bounds = getTileBoundsFromCoord(tile);
+    if (bounds.north > north) north = bounds.north;
+    if (bounds.south < south) south = bounds.south;
+    if (bounds.east > east) east = bounds.east;
+    if (bounds.west < west) west = bounds.west;
+  }
+  
+  return { north, south, east, west };
+}
+
+/**
+ * Get bounds for a single tile coordinate
+ */
+function getTileBoundsFromCoord(tile: TileCoord): Bounds {
+  const { z, x, y } = tile;
+  const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+  
+  const north = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+  const south = (180 / Math.PI) * Math.atan(
+    0.5 * (Math.exp(n - (2 * Math.PI) / Math.pow(2, z)) - Math.exp(-(n - (2 * Math.PI) / Math.pow(2, z))))
+  );
+  
+  const west = (x / Math.pow(2, z)) * 360 - 180;
+  const east = ((x + 1) / Math.pow(2, z)) * 360 - 180;
+  
+  return { north, south, east, west };
 }

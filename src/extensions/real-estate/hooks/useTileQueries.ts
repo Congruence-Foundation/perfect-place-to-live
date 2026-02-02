@@ -22,6 +22,7 @@ import {
 } from '@/lib/geo/tiles';
 import { getTilesForBounds } from '@/lib/geo';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
+import { createTimer, logPerf } from '@/lib/profiling';
 
 /**
  * Response from the tile API
@@ -57,6 +58,7 @@ export interface UseTileQueriesResult {
   tileCount: number;
   viewportTileCount: number;
   loadedTileCount: number;
+  tiles: TileCoord[];
 }
 
 /**
@@ -67,6 +69,7 @@ async function fetchTileProperties(
   filters: PropertyFilters,
   signal?: AbortSignal
 ): Promise<TileResponse> {
+  const stopTimer = createTimer('realestate:tile-fetch');
   const response = await fetch('/api/properties', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -82,7 +85,9 @@ async function fetchTileProperties(
     throw new Error(errorData.message || `HTTP error: ${response.status}`);
   }
 
-  return response.json();
+  const data = await response.json();
+  stopTimer({ tile: `${tile.z}:${tile.x}:${tile.y}`, properties: data.properties?.length || 0, clusters: data.clusters?.length || 0 });
+  return data;
 }
 
 /**
@@ -171,6 +176,7 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
       ];
 
       let loaded = 0;
+      const stopTotalTimer = createTimer('realestate:batch-fetch-total');
 
       try {
         for (let i = 0; i < sortedTiles.length; i += BATCH_SIZE) {
@@ -180,6 +186,7 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
           }
 
           const batch = sortedTiles.slice(i, i + BATCH_SIZE);
+          const stopBatchTimer = createTimer('realestate:batch-fetch');
 
           // Fetch batch in parallel
           const results = await Promise.allSettled(
@@ -193,7 +200,9 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
           );
 
           // Count successful fetches
-          loaded += results.filter(r => r.status === 'fulfilled').length;
+          const successCount = results.filter(r => r.status === 'fulfilled').length;
+          loaded += successCount;
+          stopBatchTimer({ batchIndex: Math.floor(i / BATCH_SIZE), tilesInBatch: batch.length, successful: successCount });
           
           if (currentFetchId === fetchIdRef.current) {
             setLoadedTileCount(loaded);
@@ -207,6 +216,7 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
 
         if (currentFetchId === fetchIdRef.current) {
           setLoadingState('done');
+          stopTotalTimer({ totalTiles: sortedTiles.length, loaded });
         }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
@@ -232,6 +242,7 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
       return { properties: [], clusters: [], isLoading: false };
     }
 
+    const stopCollectTimer = createTimer('realestate:collect-results');
     const allProperties: OtodomProperty[] = [];
     const allClusters: PropertyCluster[] = [];
     const seenPropertyIds = new Set<number>();
@@ -270,6 +281,8 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
       }
     }
 
+    stopCollectTimer({ tiles: allTiles.length, pending: pendingCount, properties: allProperties.length, clusters: allClusters.length });
+
     return {
       properties: allProperties,
       clusters: allClusters,
@@ -286,5 +299,6 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
     tileCount: allTiles.length,
     viewportTileCount: viewportTiles.length,
     loadedTileCount,
+    tiles: allTiles,
   };
 }

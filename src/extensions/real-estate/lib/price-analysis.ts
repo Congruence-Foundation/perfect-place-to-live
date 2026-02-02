@@ -9,6 +9,7 @@ import type {
 } from '../types/property';
 import { distanceInMeters } from '@/lib/geo';
 import { roomCountToNumber } from '@/lib/format';
+import { createTimer } from '@/lib/profiling';
 
 /**
  * Minimum number of properties in a group for valid statistical comparison
@@ -206,9 +207,11 @@ export function enrichPropertiesWithPriceScore(
   gridCellSize: number,
   maxSearchRadius?: number
 ): EnrichedProperty[] {
+  const stopTotalTimer = createTimer('price-analysis:total');
   const searchRadius = maxSearchRadius ?? gridCellSize * 1.5;
   
   // Step 1: Prepare properties with metadata
+  const stopMetadataTimer = createTimer('price-analysis:metadata');
   const propertiesWithMetadata: PropertyWithMetadata[] = [];
   
   for (const property of properties) {
@@ -236,8 +239,10 @@ export function enrichPropertiesWithPriceScore(
       roomRanges,
     });
   }
+  stopMetadataTimer({ total: properties.length, valid: propertiesWithMetadata.length });
 
   // Step 2: Build groups (properties can belong to multiple groups due to overlapping room ranges)
+  const stopGroupsTimer = createTimer('price-analysis:groups');
   const groups = new Map<string, PropertyWithMetadata[]>();
 
   for (const pm of propertiesWithMetadata) {
@@ -250,8 +255,10 @@ export function enrichPropertiesWithPriceScore(
       groups.get(key)!.push(pm);
     }
   }
+  stopGroupsTimer({ groups: groups.size });
 
   // Step 3: Calculate statistics for each group
+  const stopStatsTimer = createTimer('price-analysis:stats');
   const groupStats = new Map<string, GroupStatistics>();
 
   for (const [key, members] of groups) {
@@ -279,8 +286,10 @@ export function enrichPropertiesWithPriceScore(
       groupDescription,
     });
   }
+  stopStatsTimer({ groupsWithStats: groupStats.size });
 
   // Step 4: Calculate price analysis for each property
+  const stopScoresTimer = createTimer('price-analysis:scores');
   const enrichedMap = new Map<number, EnrichedProperty>();
 
   for (const pm of propertiesWithMetadata) {
@@ -329,9 +338,10 @@ export function enrichPropertiesWithPriceScore(
 
     enrichedMap.set(pm.property.id, enriched);
   }
+  stopScoresTimer({ enriched: enrichedMap.size });
 
   // Step 5: Return all properties (enriched where possible, original otherwise)
-  return properties.map(p => {
+  const result = properties.map(p => {
     const enriched = enrichedMap.get(p.id);
     if (enriched) return enriched;
     
@@ -341,6 +351,9 @@ export function enrichPropertiesWithPriceScore(
       priceAnalysis: undefined,
     };
   });
+
+  stopTotalTimer({ properties: properties.length, enriched: enrichedMap.size, groups: groupStats.size });
+  return result;
 }
 
 /**

@@ -68,7 +68,17 @@
     "priceAnalysisRadiusTooltip": "Expand the area used for price comparison. Larger areas provide more accurate analysis but may be slower.",
     "priceAnalysisRadius_0": "Viewport",
     "priceAnalysisRadius_1": "+1 tile",
-    "priceAnalysisRadius_2": "+2 tiles"
+    "priceAnalysisRadius_2": "+2 tiles",
+    "heatmapArea": "Heatmap Area",
+    "heatmapAreaTooltip": "Expand the area used for heatmap calculation. Larger areas gather more POIs for accurate edge calculations but may be slower.",
+    "heatmapArea_0": "Viewport",
+    "heatmapArea_1": "+1 tile",
+    "heatmapArea_2": "+2 tiles",
+    "poiBuffer": "POI Buffer",
+    "poiBufferTooltip": "How far beyond tile boundaries to fetch POIs. Higher values ensure accurate scoring at edges but fetch more data. Based on 2x the maximum factor distance.",
+    "poiBuffer_1": "1x (fast)",
+    "poiBuffer_1_5": "1.5x",
+    "poiBuffer_2": "2x (accurate)"
   },
   "curves": {
     "log": {

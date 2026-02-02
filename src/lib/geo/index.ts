@@ -40,4 +40,17 @@ export {
   isViewportTooLarge,
   getPropertyTilesForBounds,
   separateViewportAndBufferTiles,
+  // Heatmap tile utilities
+  type HeatmapConfig,
+  HEATMAP_TILE_ZOOM,
+  hashHeatmapConfig,
+  getHeatmapTileKey,
+  isHeatmapViewportTooLarge,
+  getHeatmapTilesForBounds,
+  // POI tile utilities
+  POI_TILE_ZOOM,
+  getPoiTileKey,
+  calculatePoiTileRadius,
+  getPoiTilesForHeatmapTiles,
+  getCombinedTileBounds,
 } from './tiles';

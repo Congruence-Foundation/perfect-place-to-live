@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Settings, X, Eye, EyeOff, Database } from 'lucide-react';
+import { Settings, X, Eye, EyeOff, Database, Grid3X3 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -17,8 +17,11 @@ import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { HeatmapSettings } from '@/types';
 import { DistanceCurve } from '@/types';
 import { ExtensionsSettingsPanel } from './ExtensionsSettingsPanel';
+import { useMapStore } from '@/stores/mapStore';
 
 const CURVE_VALUES: DistanceCurve[] = ['log', 'linear', 'exp', 'power'];
+const HEATMAP_RADIUS_VALUES = [0, 1, 2] as const;
+const POI_BUFFER_SCALE_VALUES = [1, 1.5, 2] as const;
 
 interface MapSettingsProps {
   settings: HeatmapSettings;
@@ -46,6 +49,20 @@ export default function MapSettings({
   const [isOpen, setIsOpen] = useState(false);
   const t = useTranslations('settings');
   const tCurves = useTranslations('curves');
+  
+  // Get heatmap tile radius from store
+  const heatmapTileRadius = useMapStore((s) => s.heatmapTileRadius);
+  const setHeatmapTileRadius = useMapStore((s) => s.setHeatmapTileRadius);
+  
+  // Get POI buffer scale from store
+  const poiBufferScale = useMapStore((s) => s.poiBufferScale);
+  const setPoiBufferScale = useMapStore((s) => s.setPoiBufferScale);
+  
+  // Debug: tile borders
+  const showHeatmapTileBorders = useMapStore((s) => s.showHeatmapTileBorders);
+  const setShowHeatmapTileBorders = useMapStore((s) => s.setShowHeatmapTileBorders);
+  const showPropertyTileBorders = useMapStore((s) => s.showPropertyTileBorders);
+  const setShowPropertyTileBorders = useMapStore((s) => s.setShowPropertyTileBorders);
 
   return (
     <div className={`${
@@ -83,30 +100,6 @@ export default function MapSettings({
                 checked={showPOIs}
                 onCheckedChange={onShowPOIsChange}
               />
-            </div>
-
-            {/* Grid Resolution */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <Label className="text-xs">{t('gridResolution')}</Label>
-                  <InfoTooltip>
-                    <p className="text-xs">{t('gridResolutionTooltip')}</p>
-                  </InfoTooltip>
-                </div>
-                <span className="text-xs text-muted-foreground font-medium">{settings.gridCellSize}m</span>
-              </div>
-              <Slider
-                value={[settings.gridCellSize]}
-                onValueChange={([value]) => onSettingsChange({ gridCellSize: value })}
-                min={25}
-                max={300}
-                step={25}
-              />
-              <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>{t('dense')}</span>
-                <span>{t('fast')}</span>
-              </div>
             </div>
 
             {/* Distance Curve - Inline */}
@@ -185,6 +178,56 @@ export default function MapSettings({
               </div>
             </div>
 
+            {/* Heatmap Area */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <Label className="text-xs">{t('heatmapArea')}</Label>
+                <InfoTooltip>
+                  <p className="text-xs">{t('heatmapAreaTooltip')}</p>
+                </InfoTooltip>
+              </div>
+              <Select
+                value={String(heatmapTileRadius)}
+                onValueChange={(value) => setHeatmapTileRadius(Number(value))}
+              >
+                <SelectTrigger className="h-7 text-xs w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" className="z-[1100]">
+                  {HEATMAP_RADIUS_VALUES.map((radiusValue) => (
+                    <SelectItem key={radiusValue} value={String(radiusValue)} className="text-xs">
+                      {t(`heatmapArea_${radiusValue}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* POI Buffer Scale */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <Label className="text-xs">{t('poiBuffer')}</Label>
+                <InfoTooltip>
+                  <p className="text-xs">{t('poiBufferTooltip')}</p>
+                </InfoTooltip>
+              </div>
+              <Select
+                value={String(poiBufferScale)}
+                onValueChange={(value) => setPoiBufferScale(Number(value))}
+              >
+                <SelectTrigger className="h-7 text-xs w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" className="z-[1100]">
+                  {POI_BUFFER_SCALE_VALUES.map((scaleValue) => (
+                    <SelectItem key={scaleValue} value={String(scaleValue)} className="text-xs">
+                      {t(`poiBuffer_${String(scaleValue).replace('.', '_')}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Data Source Toggle - Overpass API (disabled by default) */}
             {onUseOverpassAPIChange && (
               <div className="space-y-2">
@@ -216,6 +259,32 @@ export default function MapSettings({
               settings={settings} 
               onSettingsChange={onSettingsChange} 
             />
+
+            {/* Debug: Tile Borders */}
+            <div className="pt-2 border-t border-dashed">
+              <div className="flex items-center gap-1 mb-2">
+                <Grid3X3 className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground font-medium">Debug</span>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Heatmap tile borders</Label>
+                  <Switch
+                    checked={showHeatmapTileBorders}
+                    onCheckedChange={setShowHeatmapTileBorders}
+                  />
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Property tile borders</Label>
+                  <Switch
+                    checked={showPropertyTileBorders}
+                    onCheckedChange={setShowPropertyTileBorders}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

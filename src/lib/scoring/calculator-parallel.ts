@@ -14,6 +14,7 @@ import type { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/
 import { generateGrid, calculateAdaptiveGridSize } from '@/lib/geo/grid';
 import { normalizeKValues, logKStats } from './calculator';
 import { PERFORMANCE_CONFIG } from '@/constants';
+import { createTimer } from '@/lib/profiling';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
 
@@ -295,13 +296,16 @@ export async function calculateHeatmapParallel(
   normalizeToViewport: boolean = false
 ): Promise<HeatmapPoint[]> {
   const startTime = performance.now();
+  const stopTotalTimer = createTimer('calculator:total');
 
   // Calculate adaptive grid size if not provided
+  const stopGridTimer = createTimer('calculator:grid-gen');
   const effectiveGridSize =
     gridSize || calculateAdaptiveGridSize(bounds, TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE);
 
   // Generate grid points
   const gridPoints = generateGrid(bounds, effectiveGridSize);
+  stopGridTimer({ gridSize: effectiveGridSize, points: gridPoints.length });
 
   // Determine number of workers based on workload
   const numWorkers = Math.min(
@@ -338,10 +342,12 @@ export async function calculateHeatmapParallel(
       `Calculated ${heatmapPoints.length} heatmap points in ${(endTime - startTime).toFixed(2)}ms (single-threaded, grid: ${effectiveGridSize}m)`
     );
     
+    stopTotalTimer({ points: heatmapPoints.length, workers: 1, mode: 'single-threaded' });
     return heatmapPoints;
   }
 
   // Build spatial indexes once in main thread
+  const stopIndexTimer = createTimer('calculator:spatial-index');
   const spatialIndexData: Record<string, { cells: [string, POI[]][]; cellSize: number }> = {};
   for (const factor of enabledFactors) {
     const pois = poiDataObj[factor.id] || [];
@@ -349,17 +355,20 @@ export async function calculateHeatmapParallel(
       spatialIndexData[factor.id] = buildSpatialIndexData(pois);
     }
   }
+  stopIndexTimer({ factors: enabledFactors.length });
 
   // Split points into chunks for parallel processing
   const pointChunks = chunkArray(gridPoints, numWorkers);
 
   try {
     // Run workers in parallel
+    const stopWorkersTimer = createTimer('calculator:workers');
     const workerPromises = pointChunks.map((chunk) =>
       runWorker(chunk, poiDataObj, spatialIndexData, enabledFactors, distanceCurve, sensitivity)
     );
 
     const results = await Promise.all(workerPromises);
+    stopWorkersTimer({ workers: numWorkers, pointsPerWorker: Math.ceil(gridPoints.length / numWorkers) });
 
     // Combine results from all workers
     heatmapPoints = results.flat();
@@ -385,6 +394,7 @@ export async function calculateHeatmapParallel(
       `Calculated ${heatmapPoints.length} heatmap points in ${(endTime - startTime).toFixed(2)}ms (fallback single-threaded, grid: ${effectiveGridSize}m)`
     );
 
+    stopTotalTimer({ points: heatmapPoints.length, workers: 1, mode: 'fallback-single-threaded' });
     return heatmapPoints;
   }
 
@@ -401,5 +411,6 @@ export async function calculateHeatmapParallel(
     `Calculated ${heatmapPoints.length} heatmap points in ${(endTime - startTime).toFixed(2)}ms using ${numWorkers} workers (grid: ${effectiveGridSize}m)`
   );
 
+  stopTotalTimer({ points: heatmapPoints.length, workers: numWorkers, mode: 'parallel' });
   return heatmapPoints;
 }

@@ -31,6 +31,7 @@ import {
   BACKGROUND_FETCH_LIMIT,
   CLICK_FETCH_LIMIT,
 } from '../utils/enrichment';
+import { createTimer } from '@/lib/profiling';
 
 export interface UseRealEstateMarkersOptions {
   /** Leaflet instance */
@@ -154,6 +155,8 @@ export function useRealEstateMarkers({
     if (!L || !map || !layerGroup) return;
 
     const updateMarkers = async () => {
+      const stopUpdateTimer = createTimer('markers:update-total');
+      
       // Hide layer if not enabled
       if (!enabled) {
         // Clean up window properties when clearing markers
@@ -164,6 +167,7 @@ export function useRealEstateMarkers({
         layerGroup.clearLayers();
         propertyMarkersRef.current.clear();
         clusterMarkersRef.current.clear();
+        stopUpdateTimer({ enabled: false });
         return;
       }
 
@@ -172,6 +176,8 @@ export function useRealEstateMarkers({
       const currentPropertyIds = new Set<number>();
 
       // Add or update property markers
+      const stopPropertyMarkersTimer = createTimer('markers:property-markers');
+      let newPropertyMarkers = 0;
       for (const property of properties) {
         currentPropertyIds.add(property.id);
 
@@ -180,6 +186,7 @@ export function useRealEstateMarkers({
           continue;
         }
 
+        newPropertyMarkers++;
         const galleryId = `gallery-${property.id}`;
         const popupContent = generatePropertyPopupHtml(property, galleryId);
 
@@ -211,14 +218,19 @@ export function useRealEstateMarkers({
       }
 
       // Remove stale property markers
+      let removedPropertyMarkers = 0;
       for (const [id, marker] of propertyMarkersRef.current) {
         if (!currentPropertyIds.has(id)) {
           layerGroup.removeLayer(marker);
           propertyMarkersRef.current.delete(id);
+          removedPropertyMarkers++;
         }
       }
+      stopPropertyMarkersTimer({ new: newPropertyMarkers, removed: removedPropertyMarkers, total: propertyMarkersRef.current.size });
 
       // Add cluster markers
+      const stopClusterMarkersTimer = createTimer('markers:cluster-markers');
+      let newClusterMarkers = 0;
       for (const cluster of clusters) {
         const clusterId = `cluster-${cluster.lat.toFixed(6)}-${cluster.lng.toFixed(6)}`;
         currentClusterIds.add(clusterId);
@@ -227,6 +239,8 @@ export function useRealEstateMarkers({
         if (clusterMarkersRef.current.has(clusterId)) {
           continue;
         }
+
+        newClusterMarkers++;
 
         // Determine initial price label and glow
         let initialPriceLabel = '';
@@ -469,15 +483,19 @@ export function useRealEstateMarkers({
       }
 
       // Remove stale cluster markers
+      let removedClusterMarkers = 0;
       for (const [id, marker] of clusterMarkersRef.current) {
         if (!currentClusterIds.has(id)) {
           layerGroup.removeLayer(marker);
           clusterMarkersRef.current.delete(id);
+          removedClusterMarkers++;
           // Clean up window properties when clearing markers
           const windowKey = `__cluster_${id.replace(/[^a-zA-Z0-9]/g, '_')}`;
           delete (window as unknown as Record<string, unknown>)[windowKey];
         }
       }
+      stopClusterMarkersTimer({ new: newClusterMarkers, removed: removedClusterMarkers, total: clusterMarkersRef.current.size });
+      stopUpdateTimer({ properties: propertyMarkersRef.current.size, clusters: clusterMarkersRef.current.size });
     };
 
     updateMarkers();

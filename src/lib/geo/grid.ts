@@ -7,6 +7,8 @@ const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
 
 /**
  * Generate a grid of sample points within the given bounds
+ * Grid points are aligned to a global reference (0,0) to ensure
+ * adjacent tiles have matching grid points at boundaries.
  * @param bounds - The geographic bounds to cover
  * @param cellSize - The distance between grid points in meters
  * @returns Array of points forming the grid
@@ -19,9 +21,14 @@ export function generateGrid(bounds: Bounds, cellSize: number): Point[] {
   const latStep = cellSize / METERS_PER_DEGREE_LAT;
   const lngStep = cellSize / metersPerDegreeLng(centerLat);
 
+  // Align grid to global reference (0,0) to ensure adjacent tiles have matching points
+  // Find the first grid point >= bounds.south that aligns with global grid
+  const startLat = Math.ceil(bounds.south / latStep) * latStep;
+  const startLng = Math.ceil(bounds.west / lngStep) * lngStep;
+
   // Generate grid points
-  for (let lat = bounds.south; lat <= bounds.north; lat += latStep) {
-    for (let lng = bounds.west; lng <= bounds.east; lng += lngStep) {
+  for (let lat = startLat; lat <= bounds.north; lat += latStep) {
+    for (let lng = startLng; lng <= bounds.east; lng += lngStep) {
       points.push({ lat, lng });
     }
   }

@@ -68,7 +68,17 @@
     "priceAnalysisRadiusTooltip": "Rozszerz obszar używany do porównywania cen. Większe obszary zapewniają dokładniejszą analizę, ale mogą być wolniejsze.",
     "priceAnalysisRadius_0": "Widok",
     "priceAnalysisRadius_1": "+1 kafel",
-    "priceAnalysisRadius_2": "+2 kafle"
+    "priceAnalysisRadius_2": "+2 kafle",
+    "heatmapArea": "Obszar mapy",
+    "heatmapAreaTooltip": "Rozszerz obszar używany do obliczeń mapy cieplnej. Większe obszary zbierają więcej POI dla dokładniejszych obliczeń na krawędziach, ale mogą być wolniejsze.",
+    "heatmapArea_0": "Widok",
+    "heatmapArea_1": "+1 kafel",
+    "heatmapArea_2": "+2 kafle",
+    "poiBuffer": "Bufor POI",
+    "poiBufferTooltip": "Jak daleko poza granice kafelka pobierać POI. Wyższe wartości zapewniają dokładniejsze wyniki na krawędziach, ale pobierają więcej danych. Bazuje na 2x maksymalnej odległości czynnika.",
+    "poiBuffer_1": "1x (szybki)",
+    "poiBuffer_1_5": "1.5x",
+    "poiBuffer_2": "2x (dokładny)"
   },
   "curves": {
     "log": {

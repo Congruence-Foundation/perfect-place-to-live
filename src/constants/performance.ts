@@ -33,10 +33,10 @@ export const PERFORMANCE_CONFIG = {
   TARGET_GRID_POINTS: 5000,
   
   /** Minimum cell size in meters for grid calculations */
-  MIN_CELL_SIZE: 100,
+  MIN_CELL_SIZE: 50,
   
   /** Maximum cell size in meters for grid calculations */
-  MAX_CELL_SIZE: 500,
+  MAX_CELL_SIZE: 300,
   
   /** Fallback minimum cell size when viewport is too large */
   FALLBACK_MIN_CELL_SIZE: 50,
@@ -169,4 +169,73 @@ export const PROPERTY_TILE_CONFIG = {
   
   /** Maximum price analysis radius */
   MAX_PRICE_RADIUS: 2,
+} as const;
+
+/**
+ * Heatmap tile configuration for tile-based heatmap caching
+ * Uses fixed zoom level tiles for optimal cache efficiency
+ */
+export const HEATMAP_TILE_CONFIG = {
+  /** Fixed tile zoom level for heatmap (~2.4km x 2.4km tiles at Poland's latitude) */
+  TILE_ZOOM: 13,
+  
+  /** Maximum viewport tiles before showing "zoom in" message */
+  MAX_VIEWPORT_TILES: 36,
+  
+  /** Hard limit on total tiles including radius buffer */
+  MAX_TOTAL_TILES: 64,
+  
+  /** Number of tiles to fetch per batch */
+  BATCH_SIZE: 5,
+  
+  /** Delay between batches in milliseconds */
+  BATCH_DELAY_MS: 1,
+  
+  /** Default heatmap tile radius (number of tile layers around viewport) */
+  DEFAULT_TILE_RADIUS: 0,
+  
+  /** Maximum heatmap tile radius */
+  MAX_TILE_RADIUS: 2,
+  
+  /** Server-side LRU cache maximum entries */
+  SERVER_LRU_MAX: 10000,
+  
+  /** Server-side cache TTL in seconds - 10 minutes */
+  SERVER_TTL_SECONDS: 600,
+  
+  /** Client-side cache stale time (React Query) - 10 minutes */
+  CLIENT_STALE_TIME_MS: 10 * 60 * 1000,
+  
+  /** Client-side cache garbage collection time (React Query) - 1 hour */
+  CLIENT_GC_TIME_MS: 60 * 60 * 1000,
+} as const;
+
+/**
+ * POI tile configuration for tile-aligned POI caching
+ * POIs are cached per world-grid tile for stable cache keys
+ */
+export const POI_TILE_CONFIG = {
+  /** Fixed tile zoom level for POI caching (same as heatmap for simplicity) */
+  TILE_ZOOM: 13,
+  
+  /** Default POI buffer scale multiplier (applied to max factor distance) */
+  DEFAULT_POI_BUFFER_SCALE: 2,
+  
+  /** Minimum POI buffer scale */
+  MIN_POI_BUFFER_SCALE: 1,
+  
+  /** Maximum POI buffer scale */
+  MAX_POI_BUFFER_SCALE: 2,
+  
+  /** Maximum POI tile radius to prevent excessive fetching */
+  MAX_POI_TILE_RADIUS: 10,
+  
+  /** Server-side LRU cache maximum entries for POI tiles */
+  SERVER_LRU_MAX: 1000,
+  
+  /** Server-side cache TTL in seconds - 30 minutes */
+  SERVER_TTL_SECONDS: 1800,
+  
+  /** Approximate tile size in meters at Poland's latitude (~52°) for zoom 13 */
+  TILE_SIZE_METERS: 2400,
 } as const;

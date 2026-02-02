@@ -35,6 +35,10 @@ interface MapContainerProps {
   factors?: Factor[];
   /** Callback when map is ready with Leaflet instance and extension layer */
   onMapReady?: (map: L.Map, L: typeof import('leaflet'), extensionLayer: L.LayerGroup) => void;
+  /** Tile coordinates for canvas bounds (synchronous with heatmapPoints) */
+  heatmapTileCoords?: { z: number; x: number; y: number }[];
+  /** Flag indicating if heatmap data is ready for current tiles */
+  isHeatmapDataReady?: boolean;
 }
 
 const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
@@ -45,6 +49,8 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
   showPOIs = false,
   factors = [],
   onMapReady,
+  heatmapTileCoords = [],
+  isHeatmapDataReady = true,
 }, ref) => {
   const [isMounted, setIsMounted] = useState(false);
   const mapViewRef = useRef<MapViewRef>(null);
@@ -136,6 +142,8 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
       popupTranslations={popupTranslations}
       factorTranslations={factorTranslations}
       onMapReady={onMapReady}
+      heatmapTileCoords={heatmapTileCoords}
+      isHeatmapDataReady={isHeatmapDataReady}
     />
   );
 });

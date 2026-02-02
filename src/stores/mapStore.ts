@@ -4,6 +4,16 @@ import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import type { Bounds, HeatmapPoint, POI, Factor, ClusterPriceAnalysisMode } from '@/types';
 import type { ClusterPriceDisplay } from '@/extensions/real-estate/types';
+import { HEATMAP_TILE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
+
+/**
+ * Tile coordinate for debug rendering
+ */
+export interface DebugTileCoord {
+  z: number;
+  x: number;
+  y: number;
+}
 
 /**
  * Core map store state interface
@@ -19,6 +29,14 @@ export interface MapState {
   clusterPriceDisplay: ClusterPriceDisplay;
   clusterPriceAnalysis: ClusterPriceAnalysisMode;
   detailedModeThreshold: number;
+  heatmapTileRadius: number;
+  poiBufferScale: number;
+  
+  // Debug options
+  showHeatmapTileBorders: boolean;
+  showPropertyTileBorders: boolean;
+  heatmapDebugTiles: DebugTileCoord[];
+  extensionDebugTiles: DebugTileCoord[];
   
   // Map instances (Leaflet)
   mapInstance: L.Map | null;
@@ -47,6 +65,12 @@ export interface MapActions {
   setClusterPriceDisplay: (display: ClusterPriceDisplay) => void;
   setClusterPriceAnalysis: (analysis: ClusterPriceAnalysisMode) => void;
   setDetailedModeThreshold: (threshold: number) => void;
+  setHeatmapTileRadius: (radius: number) => void;
+  setPoiBufferScale: (scale: number) => void;
+  setShowHeatmapTileBorders: (show: boolean) => void;
+  setShowPropertyTileBorders: (show: boolean) => void;
+  setHeatmapDebugTiles: (tiles: DebugTileCoord[]) => void;
+  setExtensionDebugTiles: (tiles: DebugTileCoord[]) => void;
 }
 
 /**
@@ -67,6 +91,12 @@ const initialState: MapState = {
   clusterPriceDisplay: 'median',
   clusterPriceAnalysis: 'simplified',
   detailedModeThreshold: 100,
+  heatmapTileRadius: HEATMAP_TILE_CONFIG.DEFAULT_TILE_RADIUS,
+  poiBufferScale: POI_TILE_CONFIG.DEFAULT_POI_BUFFER_SCALE,
+  showHeatmapTileBorders: false,
+  showPropertyTileBorders: false,
+  heatmapDebugTiles: [],
+  extensionDebugTiles: [],
   mapInstance: null,
   leafletInstance: null,
   extensionLayerGroup: null,
@@ -118,6 +148,12 @@ export const useMapStore = create<MapStore>()(
       setClusterPriceDisplay: (clusterPriceDisplay) => set({ clusterPriceDisplay }, false, 'setClusterPriceDisplay'),
       setClusterPriceAnalysis: (clusterPriceAnalysis) => set({ clusterPriceAnalysis }, false, 'setClusterPriceAnalysis'),
       setDetailedModeThreshold: (detailedModeThreshold) => set({ detailedModeThreshold }, false, 'setDetailedModeThreshold'),
+      setHeatmapTileRadius: (heatmapTileRadius) => set({ heatmapTileRadius }, false, 'setHeatmapTileRadius'),
+      setPoiBufferScale: (poiBufferScale) => set({ poiBufferScale }, false, 'setPoiBufferScale'),
+      setShowHeatmapTileBorders: (showHeatmapTileBorders) => set({ showHeatmapTileBorders }, false, 'setShowHeatmapTileBorders'),
+      setShowPropertyTileBorders: (showPropertyTileBorders) => set({ showPropertyTileBorders }, false, 'setShowPropertyTileBorders'),
+      setHeatmapDebugTiles: (heatmapDebugTiles) => set({ heatmapDebugTiles }, false, 'setHeatmapDebugTiles'),
+      setExtensionDebugTiles: (extensionDebugTiles) => set({ extensionDebugTiles }, false, 'setExtensionDebugTiles'),
     })),
     { name: 'map-store' }
   )

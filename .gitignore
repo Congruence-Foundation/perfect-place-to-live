@@ -50,3 +50,4 @@ osmium-filters.txt
 
 # Cursor
 .cursor/plans/
+.cursor/debug.log

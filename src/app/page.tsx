@@ -3,19 +3,18 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import MapContainer, { MapContainerRef } from '@/components/Map/MapContainer';
-import { WeightSliders, CitySearch, HeatmapSettings, ProfileSelector, MapSettings, DebugInfo, AppInfo, LanguageSwitcher, BottomSheet, RefreshButton, ExtensionsSidebar } from '@/components/Controls';
+import { WeightSliders, CitySearch, ProfileSelector, MapSettings, DebugInfo, AppInfo, LanguageSwitcher, BottomSheet, ExtensionsSidebar, RefreshButton } from '@/components/Controls';
 import { Button } from '@/components/ui/button';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { DEFAULT_FACTORS, applyProfile, FACTOR_PROFILES } from '@/config/factors';
-import { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, DataSource, HeatmapResponse } from '@/types';
-import { useHeatmap, useIsMobile, useNotification } from '@/hooks';
+import { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, DataSource } from '@/types';
+import type { HeatmapSettings } from '@/types';
+import { useHeatmapTiles, useIsMobile, useNotification } from '@/hooks';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Loader2, ChevronLeft, ChevronRight, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
-import { isViewportCovered, isBoundsTooLarge, expandBounds } from '@/lib/geo';
 import { Toast } from '@/components/ui/toast';
 import { useMapStore } from '@/stores/mapStore';
 import { ExtensionControllers } from '@/components/ExtensionControllers';
-import { GRID_BUFFER_DEGREES } from '@/constants/heatmap';
 
 /**
  * Props for HomeContent - data passed from wrapper
@@ -24,21 +23,38 @@ interface HomeContentProps {
   heatmapPoints: HeatmapPoint[];
   pois: Record<string, POI[]>;
   isLoading: boolean;
+  isTooLarge: boolean;
   error: string | null;
-  metadata: HeatmapResponse['metadata'] | null;
+  metadata: {
+    gridSize: number | string;
+    pointCount: number;
+    computeTimeMs: number;
+    factorCount: number;
+    dataSource?: DataSource;
+    poiCounts: Record<string, number>;
+  } | null;
   usedFallback: boolean;
-  fetchHeatmap: (
-    bounds: Bounds,
-    factors: Factor[],
-    gridSize?: number,
-    distanceCurve?: DistanceCurve,
-    sensitivity?: number,
-    normalizeToViewport?: boolean,
-    dataSource?: DataSource
-  ) => Promise<void>;
-  clearHeatmap: () => void;
-  abortFetch: () => void;
   clearFallbackNotification: () => void;
+  tileCount: number;
+  loadedTileCount: number;
+  // Bounds state lifted from parent
+  bounds: Bounds | null;
+  zoomLevel: number;
+  onBoundsChange: (bounds: Bounds, zoom: number) => void;
+  // Settings from parent
+  distanceCurve: DistanceCurve;
+  sensitivity: number;
+  normalizeToViewport: boolean;
+  useOverpassAPI: boolean;
+  onSettingsChange: (settings: { distanceCurve?: DistanceCurve; sensitivity?: number; normalizeToViewport?: boolean }) => void;
+  onUseOverpassAPIChange: (use: boolean) => void;
+  // Actions
+  onAbort: () => void;
+  onRefresh: () => void;
+  // Tiles for canvas bounds (synchronous with heatmapPoints)
+  heatmapTileCoords: { z: number; x: number; y: number }[];
+  // Flag indicating if heatmap data is ready for current tiles
+  isHeatmapDataReady: boolean;
 }
 
 /**
@@ -48,13 +64,26 @@ function HomeContent({
   heatmapPoints,
   pois,
   isLoading,
+  isTooLarge,
   error,
   metadata,
   usedFallback,
-  fetchHeatmap,
-  clearHeatmap,
-  abortFetch,
   clearFallbackNotification,
+  tileCount,
+  loadedTileCount,
+  bounds,
+  zoomLevel,
+  onBoundsChange,
+  distanceCurve,
+  sensitivity,
+  normalizeToViewport,
+  useOverpassAPI,
+  onSettingsChange,
+  onUseOverpassAPIChange,
+  onAbort,
+  onRefresh,
+  heatmapTileCoords,
+  isHeatmapDataReady,
 }: HomeContentProps) {
   const tApp = useTranslations('app');
   const tControls = useTranslations('controls');
@@ -66,21 +95,20 @@ function HomeContent({
   const setMapContext = useMapStore((s) => s.setMapContext);
   const setMapReady = useMapStore((s) => s.setMapReady);
 
-  const [bounds, setBounds] = useState<Bounds | null>(null);
-  const [zoomLevel, setZoomLevel] = useState<number>(7);
+  // bounds and zoomLevel now come from props
   const [factors, setFactors] = useState<Factor[]>(DEFAULT_FACTORS);
   const [selectedProfile, setSelectedProfile] = useState<string | null>('balanced');
   const [mode, setMode] = useState<'realtime' | 'precomputed'>('realtime');
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [isFactorsExpanded, setIsFactorsExpanded] = useState(false);
   const [showPOIs, setShowPOIs] = useState(false);
-  const [showZoomWarning, setShowZoomWarning] = useState(false);
-  const [useOverpassAPI, setUseOverpassAPI] = useState(false);
+  
+  // Local heatmap settings that sync with parent
   const [heatmapSettings, setHeatmapSettings] = useState<HeatmapSettings>({
     gridCellSize: 200,
-    distanceCurve: 'exp',
-    sensitivity: 2,
-    normalizeToViewport: false,
+    distanceCurve: distanceCurve,
+    sensitivity: sensitivity,
+    normalizeToViewport: normalizeToViewport,
     clusterPriceDisplay: 'median',
     clusterPriceAnalysis: 'simplified',
     detailedModeThreshold: 100,
@@ -103,10 +131,6 @@ function HomeContent({
   // Track if user has interacted (searched for a city)
   const hasInteracted = useRef(false);
   
-  // Track the bounds that are currently covered by the heatmap grid (with buffer)
-  const coveredBoundsRef = useRef<Bounds | null>(null);
-  // Track the factors/settings hash to detect changes that require refetch
-  const lastFetchParamsRef = useRef<string>('');
   // Track previous bounds to detect zoom changes
   const prevBoundsRef = useRef<Bounds | null>(null);
   // Track if geolocation has been attempted
@@ -163,6 +187,11 @@ function HomeContent({
     }
   }, [heatmapSettings.gridCellSize, heatmapSettings.clusterPriceDisplay, heatmapSettings.clusterPriceAnalysis, heatmapSettings.detailedModeThreshold, setMapContext]);
 
+  // Update map store when factors change (for tile-based fetching)
+  useEffect(() => {
+    setMapContext({ factors: debouncedFactors });
+  }, [debouncedFactors, setMapContext]);
+
   // Request user's geolocation on mount and fly to their location
   useEffect(() => {
     if (geoLocationAttempted.current) return;
@@ -187,7 +216,7 @@ function HomeContent({
     }
   }, []);
 
-  const handleBoundsChange = useCallback((newBounds: Bounds, zoom: number) => {
+  const handleBoundsChangeInternal = useCallback((newBounds: Bounds, zoom: number) => {
     if (prevBoundsRef.current && !hasInteracted.current) {
       const prevArea = (prevBoundsRef.current.east - prevBoundsRef.current.west) * 
                        (prevBoundsRef.current.north - prevBoundsRef.current.south);
@@ -198,9 +227,9 @@ function HomeContent({
       }
     }
     prevBoundsRef.current = newBounds;
-    setBounds(newBounds);
-    setZoomLevel(zoom);
-  }, []);
+    // Call parent's onBoundsChange to lift state
+    onBoundsChange(newBounds, zoom);
+  }, [onBoundsChange]);
 
   const handleFactorChange = useCallback((factorId: string, updates: Partial<Factor>) => {
     setFactors((prev) =>
@@ -223,30 +252,16 @@ function HomeContent({
 
   const handleSettingsChange = useCallback((updates: Partial<HeatmapSettings>) => {
     setHeatmapSettings((prev) => ({ ...prev, ...updates }));
-    hasInteracted.current = true;
-  }, []);
-
-  const handleRefresh = useCallback(() => {
-    if (bounds && mode === 'realtime') {
-      if (isBoundsTooLarge(bounds)) {
-        setShowZoomWarning(true);
-        setTimeout(() => setShowZoomWarning(false), 3000);
-        return;
-      }
-      
-      hasInteracted.current = true;
-      
-      fetchHeatmap(
-        bounds,
-        factors,
-        heatmapSettings.gridCellSize,
-        heatmapSettings.distanceCurve,
-        heatmapSettings.sensitivity,
-        heatmapSettings.normalizeToViewport,
-        useOverpassAPI ? 'overpass' : 'neon'
-      );
+    // Notify parent of heatmap-related settings changes
+    if (updates.distanceCurve !== undefined || updates.sensitivity !== undefined || updates.normalizeToViewport !== undefined) {
+      onSettingsChange({
+        distanceCurve: updates.distanceCurve,
+        sensitivity: updates.sensitivity,
+        normalizeToViewport: updates.normalizeToViewport,
+      });
     }
-  }, [bounds, factors, heatmapSettings, mode, fetchHeatmap, useOverpassAPI]);
+    hasInteracted.current = true;
+  }, [onSettingsChange]);
 
   const handleCitySelect = useCallback((lat: number, lng: number, cityBounds?: Bounds) => {
     hasInteracted.current = true;
@@ -266,62 +281,11 @@ function HomeContent({
     }
   }, [usedFallback, useOverpassAPI, showNotification, clearFallbackNotification, tControls]);
 
-  // Fetch heatmap when bounds or factors change (debounced)
-  useEffect(() => {
-    if (!debouncedBounds || mode !== 'realtime') return;
-
-    if (!hasInteracted.current) {
-      return;
-    }
-
-    const enabledFactors = debouncedFactors.filter((f) => f.enabled && f.weight !== 0);
-    if (enabledFactors.length === 0) {
-      clearHeatmap();
-      coveredBoundsRef.current = null;
-      lastFetchParamsRef.current = '';
-      return;
-    }
-
-    if (isBoundsTooLarge(debouncedBounds)) {
-      return;
-    }
-
-    const currentParamsHash = JSON.stringify({
-      factors: enabledFactors.map(f => ({ id: f.id, weight: f.weight, maxDistance: f.maxDistance })),
-      gridCellSize: debouncedSettings.gridCellSize,
-      distanceCurve: debouncedSettings.distanceCurve,
-      sensitivity: debouncedSettings.sensitivity,
-      normalizeToViewport: debouncedSettings.normalizeToViewport,
-      dataSource: useOverpassAPI ? 'overpass' : 'neon',
-    });
-
-    if (
-      isViewportCovered(debouncedBounds, coveredBoundsRef.current) &&
-      currentParamsHash === lastFetchParamsRef.current
-    ) {
-      return;
-    }
-
-    const newCoveredBounds = expandBounds(debouncedBounds, GRID_BUFFER_DEGREES);
-
-    coveredBoundsRef.current = newCoveredBounds;
-    lastFetchParamsRef.current = currentParamsHash;
-
-    fetchHeatmap(
-      debouncedBounds,
-      debouncedFactors,
-      debouncedSettings.gridCellSize,
-      debouncedSettings.distanceCurve,
-      debouncedSettings.sensitivity,
-      debouncedSettings.normalizeToViewport,
-      useOverpassAPI ? 'overpass' : 'neon'
-    );
-  }, [debouncedBounds, debouncedFactors, debouncedSettings, mode, fetchHeatmap, clearHeatmap, useOverpassAPI]);
-
   const enabledFactorCount = factors.filter((f) => f.enabled && f.weight !== 0).length;
   const totalPOICount = Object.values(pois).reduce((sum, arr) => sum + arr.length, 0);
 
-  const isZoomedOutTooMuch = bounds ? isBoundsTooLarge(bounds) : false;
+  // Disable refresh button only when viewport has too many tiles
+  const isRefreshDisabled = isTooLarge;
 
   const panelWidth = isPanelOpen && !isMobile ? 320 : 0;
 
@@ -458,13 +422,15 @@ function HomeContent({
       <div className="flex-1 relative">
         <MapContainer
           ref={mapRef}
-          onBoundsChange={handleBoundsChange}
+          onBoundsChange={handleBoundsChangeInternal}
           heatmapPoints={heatmapPoints}
           heatmapOpacity={0.15}
           pois={pois}
           showPOIs={showPOIs}
           factors={factors}
           onMapReady={handleMapReady}
+          heatmapTileCoords={heatmapTileCoords}
+          isHeatmapDataReady={isHeatmapDataReady}
         />
 
         {/* Top Right Controls - Language Switcher and App Info */}
@@ -476,15 +442,15 @@ function HomeContent({
         {/* Desktop: Bottom Controls */}
         {!isMobile && (
           <>
-            {/* Refresh/Abort Button - Bottom Center */}
+            {/* Refresh/Stop Button - Bottom Center */}
             <div className="absolute left-1/2 -translate-x-1/2 bottom-4 z-[1000]">
               <RefreshButton
                 isLoading={isLoading}
-                isZoomedOutTooMuch={isZoomedOutTooMuch}
-                showZoomWarning={showZoomWarning}
-                disabled={!bounds || mode !== 'realtime'}
-                onRefresh={handleRefresh}
-                onAbort={abortFetch}
+                disabled={isRefreshDisabled}
+                loadedTiles={loadedTileCount}
+                totalTiles={tileCount}
+                onRefresh={onRefresh}
+                onAbort={onAbort}
               />
             </div>
 
@@ -507,14 +473,14 @@ function HomeContent({
               mode={mode}
               onModeChange={setMode}
               useOverpassAPI={useOverpassAPI}
-              onUseOverpassAPIChange={setUseOverpassAPI}
+              onUseOverpassAPIChange={onUseOverpassAPIChange}
               isMobile={false}
             />
           </>
         )}
 
         {/* Loading Overlay - centered in visible map area (above bottom sheet on mobile) */}
-        {isLoading && (
+        {isLoading && isMobile && (
           <div 
             className="absolute inset-0 bg-background/30 backdrop-blur-[2px] flex items-center justify-center z-[999]"
             style={isMobile ? { 
@@ -554,14 +520,14 @@ function HomeContent({
                 zoomLevel={zoomLevel}
               />
 
-              {/* Refresh/Abort Button - Center */}
+              {/* Loading Progress or Zoom Warning - Center */}
               <RefreshButton
                 isLoading={isLoading}
-                isZoomedOutTooMuch={isZoomedOutTooMuch}
-                showZoomWarning={showZoomWarning}
-                disabled={!bounds || mode !== 'realtime'}
-                onRefresh={handleRefresh}
-                onAbort={abortFetch}
+                disabled={isRefreshDisabled}
+                loadedTiles={loadedTileCount}
+                totalTiles={tileCount}
+                onRefresh={onRefresh}
+                onAbort={onAbort}
               />
 
               {/* Map Settings - Right */}
@@ -573,7 +539,7 @@ function HomeContent({
                 mode={mode}
                 onModeChange={setMode}
                 useOverpassAPI={useOverpassAPI}
-                onUseOverpassAPIChange={setUseOverpassAPI}
+                onUseOverpassAPIChange={onUseOverpassAPIChange}
                 isMobile={true}
               />
             </>
@@ -587,9 +553,69 @@ function HomeContent({
 /**
  * Main page component.
  * Uses Zustand stores for state management and ExtensionControllers for extension side effects.
+ * Uses tile-based heatmap fetching for efficient caching and incremental loading.
  */
 export default function Home() {
-  const { heatmapPoints, pois, isLoading, error, metadata, usedFallback, fetchHeatmap, clearHeatmap, abortFetch, clearFallbackNotification } = useHeatmap();
+  // Local state for bounds and zoom (lifted from HomeContent)
+  const [bounds, setBounds] = useState<Bounds | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(7);
+  
+  // Get other state from store
+  const factors = useMapStore((s) => s.factors);
+  const heatmapTileRadius = useMapStore((s) => s.heatmapTileRadius);
+  const poiBufferScale = useMapStore((s) => s.poiBufferScale);
+  
+  // Local state for settings
+  const [distanceCurve, setDistanceCurve] = useState<DistanceCurve>('exp');
+  const [sensitivity, setSensitivity] = useState(2);
+  const [normalizeToViewport, setNormalizeToViewport] = useState(false);
+  const [useOverpassAPI, setUseOverpassAPI] = useState(false);
+
+  // Handle bounds change from map
+  const handleBoundsChange = useCallback((newBounds: Bounds, zoom: number) => {
+    setBounds(newBounds);
+    setZoomLevel(zoom);
+  }, []);
+
+  // Use tile-based heatmap fetching
+  const effectiveFactors = factors.length > 0 ? factors : DEFAULT_FACTORS;
+  const {
+    heatmapPoints,
+    pois,
+    isLoading,
+    isTooLarge,
+    error,
+    metadata,
+    usedFallback,
+    clearFallbackNotification,
+    tileCount,
+    loadedTileCount,
+    abort,
+    refresh,
+    tiles: heatmapTileCoords,
+    isDataReady: isHeatmapDataReady,
+  } = useHeatmapTiles({
+    bounds,
+    factors: effectiveFactors,
+    distanceCurve,
+    sensitivity,
+    normalizeToViewport,
+    dataSource: useOverpassAPI ? 'overpass' : 'neon',
+    tileRadius: heatmapTileRadius,
+    poiBufferScale,
+    enabled: bounds !== null && effectiveFactors.filter(f => f.enabled && f.weight !== 0).length > 0,
+  });
+
+  // Callbacks to update settings from HomeContent
+  const handleSettingsFromContent = useCallback((settings: {
+    distanceCurve?: DistanceCurve;
+    sensitivity?: number;
+    normalizeToViewport?: boolean;
+  }) => {
+    if (settings.distanceCurve !== undefined) setDistanceCurve(settings.distanceCurve);
+    if (settings.sensitivity !== undefined) setSensitivity(settings.sensitivity);
+    if (settings.normalizeToViewport !== undefined) setNormalizeToViewport(settings.normalizeToViewport);
+  }, []);
 
   return (
     <>
@@ -600,13 +626,26 @@ export default function Home() {
         heatmapPoints={heatmapPoints}
         pois={pois}
         isLoading={isLoading}
+        isTooLarge={isTooLarge}
         error={error}
         metadata={metadata}
         usedFallback={usedFallback}
-        fetchHeatmap={fetchHeatmap}
-        clearHeatmap={clearHeatmap}
-        abortFetch={abortFetch}
         clearFallbackNotification={clearFallbackNotification}
+        tileCount={tileCount}
+        loadedTileCount={loadedTileCount}
+        bounds={bounds}
+        zoomLevel={zoomLevel}
+        onBoundsChange={handleBoundsChange}
+        distanceCurve={distanceCurve}
+        sensitivity={sensitivity}
+        normalizeToViewport={normalizeToViewport}
+        useOverpassAPI={useOverpassAPI}
+        onSettingsChange={handleSettingsFromContent}
+        onUseOverpassAPIChange={setUseOverpassAPI}
+        onAbort={abort}
+        onRefresh={refresh}
+        heatmapTileCoords={heatmapTileCoords}
+        isHeatmapDataReady={isHeatmapDataReady}
       />
     </>
   );

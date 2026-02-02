@@ -8,8 +8,14 @@
 import { HeatmapPoint, Bounds } from '@/types';
 import { getColorForK } from '@/constants';
 
+// Constants for cell size calculation
+const METERS_PER_DEGREE_LAT = 111320;
+const DEFAULT_CELL_SIZE_METERS = 100;
+
 interface CanvasRenderOptions {
   opacity: number;
+  /** Fixed cell size in meters. If provided, uses consistent sizing regardless of point count */
+  cellSizeMeters?: number;
 }
 
 /**
@@ -52,7 +58,7 @@ export function renderHeatmapToCanvas(
   canvasHeight: number,
   options: CanvasRenderOptions
 ): void {
-  const { opacity } = options;
+  const { opacity, cellSizeMeters } = options;
 
   // Clear canvas with transparent background
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -65,18 +71,31 @@ export function renderHeatmapToCanvas(
   const scaleX = canvasWidth / boundsWidth;
   const scaleY = canvasHeight / boundsHeight;
 
-  // Get unique lat/lng to determine grid dimensions
-  const uniqueLats = [...new Set(points.map(p => p.lat))].sort((a, b) => a - b);
-  const uniqueLngs = [...new Set(points.map(p => p.lng))].sort((a, b) => a - b);
+  let cellWidthDeg: number;
+  let cellHeightDeg: number;
+
+  if (cellSizeMeters) {
+    // Use fixed cell size based on meters - consistent regardless of point count
+    // Calculate center latitude for longitude scaling
+    const centerLat = (bounds.north + bounds.south) / 2;
+    const metersPerDegreeLng = METERS_PER_DEGREE_LAT * Math.cos(centerLat * Math.PI / 180);
+    
+    cellHeightDeg = cellSizeMeters / METERS_PER_DEGREE_LAT;
+    cellWidthDeg = cellSizeMeters / metersPerDegreeLng;
+  } else {
+    // Fallback: Estimate grid dimensions from point count (legacy behavior)
+    const estimatedGridDim = Math.sqrt(points.length);
+    cellWidthDeg = boundsWidth / estimatedGridDim;
+    cellHeightDeg = boundsHeight / estimatedGridDim;
+  }
   
-  // Calculate cell size in pixels - make cells large enough to overlap significantly
-  // This creates a smooth, blended appearance
-  const baseCellWidth = canvasWidth / uniqueLngs.length;
-  const baseCellHeight = canvasHeight / uniqueLats.length;
+  // Convert to pixels with slight overlap for smooth blending at edges
+  let cellWidthPx = Math.ceil(cellWidthDeg * scaleX * 1.2);
+  let cellHeightPx = Math.ceil(cellHeightDeg * scaleY * 1.2);
   
-  // Use 2x size for heavy overlap - this blends adjacent cells
-  const cellWidthPx = Math.ceil(baseCellWidth * 2);
-  const cellHeightPx = Math.ceil(baseCellHeight * 2);
+  // Ensure minimum cell size for visibility
+  cellWidthPx = Math.max(cellWidthPx, 3);
+  cellHeightPx = Math.max(cellHeightPx, 3);
 
   // Draw each point
   for (const point of points) {
@@ -98,7 +117,7 @@ export function renderHeatmapToCanvas(
     );
   }
   
-  // Apply a slight blur to smooth out the grid pattern
+  // Apply blur to smooth out the grid pattern and tile boundaries
   // This is done by drawing the canvas onto itself with a blur filter
   if (ctx.filter !== undefined) {
     const tempCanvas = document.createElement('canvas');
@@ -108,9 +127,9 @@ export function renderHeatmapToCanvas(
     if (tempCtx) {
       // Copy current content
       tempCtx.drawImage(ctx.canvas, 0, 0);
-      // Clear and redraw with blur
+      // Clear and redraw with blur (3px to smooth tile boundaries)
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-      ctx.filter = 'blur(2px)';
+      ctx.filter = 'blur(3px)';
       ctx.drawImage(tempCanvas, 0, 0);
       ctx.filter = 'none';
     }

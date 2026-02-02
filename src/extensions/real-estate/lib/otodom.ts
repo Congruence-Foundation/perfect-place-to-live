@@ -7,6 +7,7 @@ import {
   EstateType,
 } from '../types';
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, snapBoundsForCacheKey } from '@/lib/geo';
+import { createTimer, logPerf } from '@/lib/profiling';
 
 /**
  * Otodom GraphQL API configuration
@@ -304,6 +305,7 @@ async function fetchSingleEstateType(
   signal?: AbortSignal
 ): Promise<{ properties: OtodomProperty[]; clusters: PropertyCluster[] }> {
   const requestBody = buildSearchMapPinsRequest(bounds, filters, estateType);
+  const stopTimer = createTimer('otodom:fetch-single-type');
 
   const response = await fetch(OTODOM_API_URL, {
     method: 'POST',
@@ -319,7 +321,9 @@ async function fetchSingleEstateType(
   }
 
   const data: OtodomSearchMapPinsResponse = await response.json();
-  return transformOtodomResponse(data, estateType);
+  const result = transformOtodomResponse(data, estateType);
+  stopTimer({ estateType, properties: result.properties.length, clusters: result.clusters.length });
+  return result;
 }
 
 /**
@@ -331,22 +335,27 @@ export async function fetchOtodomProperties(
   filters: PropertyFilters,
   signal?: AbortSignal
 ): Promise<PropertyResponse> {
+  const stopTotalTimer = createTimer('otodom:fetch-total');
   const cacheKey = generatePropertyCacheKey(bounds, filters);
   
   // Check cache
   const cached = propertyCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    logPerf('otodom:cache-hit', 0, { cacheKey: cacheKey.substring(0, 50) });
     return { ...cached.data, cached: true };
   }
 
   const estateTypes = filters.estate ?? ['FLAT'];
   
   // Fetch properties for each estate type in parallel
+  const stopFetchTimer = createTimer('otodom:fetch-parallel');
   const results = await Promise.all(
     estateTypes.map(type => fetchSingleEstateType(bounds, filters, type, signal))
   );
+  stopFetchTimer({ estateTypes: estateTypes.length });
 
   // Merge results from all estate types
+  const stopMergeTimer = createTimer('otodom:merge-results');
   const allProperties: OtodomProperty[] = [];
   const allClusters: PropertyCluster[] = [];
   const seenPropertyIds = new Set<number>();
@@ -362,6 +371,7 @@ export async function fetchOtodomProperties(
     // Clusters can be added directly (they represent different areas)
     allClusters.push(...result.clusters);
   }
+  stopMergeTimer({ properties: allProperties.length, clusters: allClusters.length });
 
   // Calculate total count from properties + sum of cluster counts
   const clusterTotal = allClusters.reduce((sum, c) => sum + c.count, 0);
@@ -386,6 +396,7 @@ export async function fetchOtodomProperties(
     toDelete.forEach(([key]) => propertyCache.delete(key));
   }
 
+  stopTotalTimer({ properties: allProperties.length, clusters: allClusters.length, estateTypes: estateTypes.length });
   return result;
 }
 

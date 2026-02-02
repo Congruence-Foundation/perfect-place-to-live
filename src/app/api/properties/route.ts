@@ -5,6 +5,7 @@ import { isValidBounds, tileToBounds } from '@/lib/geo';
 import { hashFilters } from '@/lib/geo/tiles';
 import { getCachedTile, setCachedTile, generateTileCacheKey, type TileCacheEntry } from '@/lib/tile-cache';
 import { errorResponse } from '@/lib/api-utils';
+import { createTimer, logPerf } from '@/lib/profiling';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,6 +32,7 @@ interface ExtendedPropertyRequest extends PropertyRequest {
  * Tile-based requests use LRU + Redis caching for better performance
  */
 export async function POST(request: NextRequest) {
+  const stopTotalTimer = createTimer('properties-api:total');
   try {
     const body: ExtendedPropertyRequest = await request.json();
     const { bounds: requestBounds, tile, filters: requestFilters } = body;
@@ -59,13 +61,17 @@ export async function POST(request: NextRequest) {
       isTileRequest = true;
 
       // Check cache for tile requests
+      const stopCacheTimer = createTimer('properties-api:cache-check');
       const cached = await getCachedTile(cacheKey);
       if (cached) {
+        stopCacheTimer({ hit: true, tile: `${tile.z}:${tile.x}:${tile.y}` });
+        stopTotalTimer({ cached: true, tile: `${tile.z}:${tile.x}:${tile.y}` });
         return NextResponse.json({
           ...cached,
           cached: true,
         });
       }
+      stopCacheTimer({ hit: false, tile: `${tile.z}:${tile.x}:${tile.y}` });
     }
 
     // Validate bounds
@@ -74,7 +80,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch properties from Otodom
+    const stopFetchTimer = createTimer('properties-api:otodom-fetch');
     const result = await fetchOtodomProperties(bounds, filters);
+    stopFetchTimer({ properties: result.properties.length, clusters: result.clusters?.length || 0 });
 
     // Cache tile requests
     if (isTileRequest && cacheKey) {
@@ -89,6 +97,7 @@ export async function POST(request: NextRequest) {
       setCachedTile(cacheKey, cacheEntry);
     }
 
+    stopTotalTimer({ cached: false, properties: result.properties.length, clusters: result.clusters?.length || 0 });
     return NextResponse.json({
       ...result,
       cached: false,

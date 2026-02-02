@@ -6,6 +6,7 @@ import { POI_COLORS, getColorForK, Z_INDEX } from '@/constants';
 import { formatDistance } from '@/lib/utils';
 import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/scoring';
 import { renderHeatmapToCanvas } from '@/hooks/useCanvasRenderer';
+import { useMapStore } from '@/stores/mapStore';
 
 // Popup translations interface
 export interface PopupTranslations {
@@ -137,6 +138,10 @@ interface MapViewProps {
   factorTranslations?: FactorTranslations;
   /** Callback when map is ready with Leaflet instance */
   onMapReady?: (map: L.Map, L: typeof import('leaflet'), extensionLayer: L.LayerGroup) => void;
+  /** Tile coordinates for canvas bounds (synchronous with heatmapPoints) */
+  heatmapTileCoords?: { z: number; x: number; y: number }[];
+  /** Flag indicating if heatmap data is ready for current tiles */
+  isHeatmapDataReady?: boolean;
 }
 
 // Default translations (English)
@@ -309,6 +314,8 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   popupTranslations = defaultPopupTranslations,
   factorTranslations = {},
   onMapReady,
+  heatmapTileCoords = [],
+  isHeatmapDataReady = true,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -319,8 +326,15 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   const canvasOverlayRef = useRef<L.ImageOverlay | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
+  const tileBorderLayerRef = useRef<L.LayerGroup | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const initializingRef = useRef(false);
+  
+  // Read debug tile state from store
+  const showHeatmapTileBorders = useMapStore((s) => s.showHeatmapTileBorders);
+  const showPropertyTileBorders = useMapStore((s) => s.showPropertyTileBorders);
+  const heatmapTiles = useMapStore((s) => s.heatmapDebugTiles);
+  const propertyTiles = useMapStore((s) => s.extensionDebugTiles);
   
   // Track previous heatmap data to avoid unnecessary re-renders
   const prevHeatmapHashRef = useRef<string>('');
@@ -485,6 +499,10 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     return () => {
       if (mapInstanceRef.current) {
         try {
+          // Remove overlay before destroying map
+          if (canvasOverlayRef.current) {
+            canvasOverlayRef.current.remove();
+          }
           mapInstanceRef.current.remove();
         } catch {
           // Ignore cleanup errors
@@ -509,17 +527,26 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   // Update heatmap overlay
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
+    
+    // Skip rendering if data is not ready for current tiles
+    // This prevents the "rough edges" flash when tiles change but data hasn't arrived
+    if (!isHeatmapDataReady) {
+      return;
+    }
 
     // Create a hash of the heatmap data to detect actual changes
-    // Using length + sample of points for efficiency
+    // Using length + sample of points + tiles for efficiency
     const createHash = () => {
       if (heatmapPoints.length === 0) return 'empty';
       const sample = heatmapPoints.slice(0, 10).map(p => `${p.lat.toFixed(5)},${p.lng.toFixed(5)},${p.value.toFixed(3)}`).join('|');
-      return `${heatmapPoints.length}:${heatmapOpacity}:${sample}`;
+      const tilesHash = heatmapTileCoords.map(t => `${t.z}:${t.x}:${t.y}`).sort().join(',');
+      return `${heatmapPoints.length}:${heatmapOpacity}:${tilesHash}:${sample}`;
     };
     
     const currentHash = createHash();
-    if (currentHash === prevHeatmapHashRef.current) {
+    const hashChanged = currentHash !== prevHeatmapHashRef.current;
+    
+    if (!hashChanged) {
       return; // Data hasn't changed, skip re-render
     }
     prevHeatmapHashRef.current = currentHash;
@@ -533,29 +560,58 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           gridLayerRef.current.clearLayers();
         }
 
-        if (heatmapPoints.length === 0) return;
+        // If no points, remove existing overlay and return
+        if (heatmapPoints.length === 0) {
+          if (canvasOverlayRef.current) {
+            canvasOverlayRef.current.remove();
+            canvasOverlayRef.current = null;
+          }
+          if (blobUrlRef.current) {
+            URL.revokeObjectURL(blobUrlRef.current);
+            blobUrlRef.current = null;
+          }
+          return;
+        }
 
+        // Calculate bounds from tiles (stable) instead of points (changes with pruning)
+        // This prevents re-rendering when panning within the same tile set
+        // Use heatmapTileCoords prop (synchronous with points) instead of store (async)
         let minLat = Infinity, maxLat = -Infinity;
         let minLng = Infinity, maxLng = -Infinity;
         
-        for (const point of heatmapPoints) {
-          if (point.lat < minLat) minLat = point.lat;
-          if (point.lat > maxLat) maxLat = point.lat;
-          if (point.lng < minLng) minLng = point.lng;
-          if (point.lng > maxLng) maxLng = point.lng;
+        if (heatmapTileCoords.length > 0) {
+          // Use tile bounds for stable canvas sizing
+          for (const tile of heatmapTileCoords) {
+            const n = Math.pow(2, tile.z);
+            const tileSouth = Math.atan(Math.sinh(Math.PI * (1 - 2 * (tile.y + 1) / n))) * 180 / Math.PI;
+            const tileNorth = Math.atan(Math.sinh(Math.PI * (1 - 2 * tile.y / n))) * 180 / Math.PI;
+            const tileWest = tile.x / n * 360 - 180;
+            const tileEast = (tile.x + 1) / n * 360 - 180;
+            
+            if (tileSouth < minLat) minLat = tileSouth;
+            if (tileNorth > maxLat) maxLat = tileNorth;
+            if (tileWest < minLng) minLng = tileWest;
+            if (tileEast > maxLng) maxLng = tileEast;
+          }
+        } else {
+          // Fallback to point bounds if no tiles available
+          for (const point of heatmapPoints) {
+            if (point.lat < minLat) minLat = point.lat;
+            if (point.lat > maxLat) maxLat = point.lat;
+            if (point.lng < minLng) minLng = point.lng;
+            if (point.lng > maxLng) maxLng = point.lng;
+          }
         }
         
-        const uniqueLats = new Set(heatmapPoints.map(p => p.lat)).size;
-        const uniqueLngs = new Set(heatmapPoints.map(p => p.lng)).size;
+        const latRange = maxLat - minLat;
+        const lngRange = maxLng - minLng;
         
-        const latSpacing = uniqueLats > 1 ? (maxLat - minLat) / (uniqueLats - 1) : DEFAULT_GRID_SPACING;
-        const lngSpacing = uniqueLngs > 1 ? (maxLng - minLng) / (uniqueLngs - 1) : DEFAULT_GRID_SPACING;
-        
+        // Use tile bounds directly (no padding needed since tiles already cover the area)
         const bounds: Bounds = {
-          north: maxLat + latSpacing / 2,
-          south: minLat - latSpacing / 2,
-          east: maxLng + lngSpacing / 2,
-          west: minLng - lngSpacing / 2,
+          north: maxLat,
+          south: minLat,
+          east: maxLng,
+          west: minLng,
         };
         currentBoundsRef.current = bounds;
 
@@ -563,9 +619,21 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           offscreenCanvasRef.current = document.createElement('canvas');
         }
 
+        // Calculate canvas dimensions based on geographic area and fixed cell size
+        // Use 100m cells, convert to degrees at center latitude
+        const CELL_SIZE_METERS = 100;
+        const METERS_PER_DEGREE_LAT = 111320;
+        const centerLat = (maxLat + minLat) / 2;
+        const metersPerDegreeLng = METERS_PER_DEGREE_LAT * Math.cos(centerLat * Math.PI / 180);
+        
+        // Calculate how many cells fit in the bounds
+        const cellsLng = Math.ceil((lngRange * metersPerDegreeLng) / CELL_SIZE_METERS);
+        const cellsLat = Math.ceil((latRange * METERS_PER_DEGREE_LAT) / CELL_SIZE_METERS);
+        
+        // Use fixed pixels per cell for consistent rendering
         const pixelsPerCell = CANVAS_PIXELS_PER_CELL;
-        const canvasWidth = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, uniqueLngs * pixelsPerCell));
-        const canvasHeight = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, uniqueLats * pixelsPerCell));
+        const canvasWidth = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, cellsLng * pixelsPerCell));
+        const canvasHeight = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, cellsLat * pixelsPerCell));
         
         const canvas = offscreenCanvasRef.current;
         canvas.width = canvasWidth;
@@ -576,6 +644,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
         renderHeatmapToCanvas(ctx, heatmapPoints, bounds, canvas.width, canvas.height, {
           opacity: heatmapOpacity,
+          cellSizeMeters: 100, // Fixed cell size for consistent rendering across tiles
         });
 
         const overlayBounds: L.LatLngBoundsExpression = [
@@ -586,30 +655,54 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         canvas.toBlob((blob) => {
           if (!blob || !mapInstanceRef.current) return;
           
-          if (blobUrlRef.current) {
-            URL.revokeObjectURL(blobUrlRef.current);
-          }
-          
           const url = URL.createObjectURL(blob);
+          const oldUrl = blobUrlRef.current;
+          const oldOverlay = canvasOverlayRef.current;
           blobUrlRef.current = url;
 
-          if (canvasOverlayRef.current) {
-            canvasOverlayRef.current.setUrl(url);
-            canvasOverlayRef.current.setBounds(L.latLngBounds(overlayBounds));
-          } else {
-            let pane = mapInstanceRef.current!.getPane('heatmapPane');
-            if (!pane) {
-              mapInstanceRef.current!.createPane('heatmapPane');
-              pane = mapInstanceRef.current!.getPane('heatmapPane');
-              if (pane) pane.style.zIndex = String(Z_INDEX.MAP_HEATMAP_PANE);
-            }
+          // Create pane if needed
+          let pane = mapInstanceRef.current!.getPane('heatmapPane');
+          if (!pane) {
+            mapInstanceRef.current!.createPane('heatmapPane');
+            pane = mapInstanceRef.current!.getPane('heatmapPane');
+            if (pane) pane.style.zIndex = String(Z_INDEX.MAP_HEATMAP_PANE);
+          }
+          
+          // Pre-load the new image first
+          const tempImg = new Image();
+          tempImg.onload = () => {
+            if (!mapInstanceRef.current) return;
             
-            canvasOverlayRef.current = L.imageOverlay(url, overlayBounds, {
+            // Image is now cached - create new overlay (will load instantly)
+            const newOverlay = L.imageOverlay(url, overlayBounds, {
               opacity: 1,
               interactive: false,
               pane: 'heatmapPane',
-            }).addTo(mapInstanceRef.current!);
-          }
+            });
+            
+            // Add new overlay to map first (old one stays visible underneath)
+            newOverlay.addTo(mapInstanceRef.current!);
+            
+            // Update ref BEFORE scheduling removal
+            // This ensures rapid updates don't remove the wrong overlay
+            canvasOverlayRef.current = newOverlay;
+            
+            // Remove old overlay after new one is painted
+            // Double rAF ensures browser has composited the new overlay
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                // Only remove if oldOverlay is not the current one
+                // (protects against race conditions with rapid updates)
+                if (oldOverlay && oldOverlay !== canvasOverlayRef.current) {
+                  oldOverlay.remove();
+                }
+                if (oldUrl) {
+                  URL.revokeObjectURL(oldUrl);
+                }
+              });
+            });
+          };
+          tempImg.src = url;
         }, 'image/png');
 
       } catch (error) {
@@ -618,35 +711,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     };
 
     updateGrid();
-  }, [mapReady, heatmapPoints, heatmapOpacity]);
-
-  // Sync canvas overlay with map view
-  useEffect(() => {
-    if (!mapReady || !mapInstanceRef.current) return;
-    
-    const map = mapInstanceRef.current;
-    
-    const handleViewChange = () => {
-      if (canvasOverlayRef.current && map) {
-        try {
-          const currentBounds = canvasOverlayRef.current.getBounds();
-          if (currentBounds) {
-            canvasOverlayRef.current.setBounds(currentBounds);
-          }
-        } catch {
-          // Ignore errors
-        }
-      }
-    };
-    
-    map.on('zoomend', handleViewChange);
-    map.on('moveend', handleViewChange);
-    
-    return () => {
-      map.off('zoomend', handleViewChange);
-      map.off('moveend', handleViewChange);
-    };
-  }, [mapReady]);
+  }, [mapReady, heatmapPoints, heatmapOpacity, heatmapTileCoords, isHeatmapDataReady]);
 
   // Update POI markers
   useEffect(() => {
@@ -692,6 +757,103 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
     updatePOIs();
   }, [mapReady, pois, showPOIs, factors]);
+
+  // Render tile borders for debugging
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current) return;
+
+    const renderTileBorders = async () => {
+      try {
+        const L = (await import('leaflet')).default;
+        const map = mapInstanceRef.current;
+        if (!map) return;
+
+        // Create or clear tile border layer
+        if (!tileBorderLayerRef.current) {
+          tileBorderLayerRef.current = L.layerGroup().addTo(map);
+        }
+        tileBorderLayerRef.current.clearLayers();
+
+        // Helper to convert tile coords to bounds
+        const tileToBounds = (z: number, x: number, y: number) => {
+          const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+          const north = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+          const south = (180 / Math.PI) * Math.atan(
+            0.5 * (Math.exp(n - (2 * Math.PI) / Math.pow(2, z)) - Math.exp(-(n - (2 * Math.PI) / Math.pow(2, z))))
+          );
+          const west = (x / Math.pow(2, z)) * 360 - 180;
+          const east = ((x + 1) / Math.pow(2, z)) * 360 - 180;
+          return { north, south, east, west };
+        };
+
+        // Render heatmap tile borders (blue)
+        if (showHeatmapTileBorders && heatmapTiles.length > 0) {
+          for (const tile of heatmapTiles) {
+            const bounds = tileToBounds(tile.z, tile.x, tile.y);
+            const rect = L.rectangle(
+              [[bounds.south, bounds.west], [bounds.north, bounds.east]],
+              {
+                color: '#3b82f6',
+                weight: 2,
+                fill: false,
+                dashArray: '5, 5',
+                interactive: false,
+              }
+            );
+            rect.addTo(tileBorderLayerRef.current!);
+            
+            // Add tile label at center
+            const center = [(bounds.north + bounds.south) / 2, (bounds.east + bounds.west) / 2] as [number, number];
+            const label = L.marker(center, {
+              icon: L.divIcon({
+                className: '',
+                html: `<div style="background: rgba(59, 130, 246, 0.85); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-family: monospace; white-space: nowrap; transform: translate(-50%, -100%);">H ${tile.z}/${tile.x}/${tile.y}</div>`,
+                iconSize: [0, 0],
+                iconAnchor: [0, 0],
+              }),
+              interactive: false,
+            });
+            label.addTo(tileBorderLayerRef.current!);
+          }
+        }
+
+        // Render property tile borders (orange)
+        if (showPropertyTileBorders && propertyTiles.length > 0) {
+          for (const tile of propertyTiles) {
+            const bounds = tileToBounds(tile.z, tile.x, tile.y);
+            const rect = L.rectangle(
+              [[bounds.south, bounds.west], [bounds.north, bounds.east]],
+              {
+                color: '#f97316',
+                weight: 2,
+                fill: false,
+                dashArray: '3, 3',
+                interactive: false,
+              }
+            );
+            rect.addTo(tileBorderLayerRef.current!);
+            
+            // Add tile label (offset below heatmap label)
+            const center = [(bounds.north + bounds.south) / 2, (bounds.east + bounds.west) / 2] as [number, number];
+            const label = L.marker(center, {
+              icon: L.divIcon({
+                className: '',
+                html: `<div style="background: rgba(249, 115, 22, 0.85); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-family: monospace; white-space: nowrap; transform: translate(-50%, 5px);">P ${tile.z}/${tile.x}/${tile.y}</div>`,
+                iconSize: [0, 0],
+                iconAnchor: [0, 0],
+              }),
+              interactive: false,
+            });
+            label.addTo(tileBorderLayerRef.current!);
+          }
+        }
+      } catch (error) {
+        console.error('Error rendering tile borders:', error);
+      }
+    };
+
+    renderTileBorders();
+  }, [mapReady, showHeatmapTileBorders, showPropertyTileBorders, heatmapTiles, propertyTiles]);
 
   return (
     <div 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useMapStore } from '@/stores/mapStore';
 import { useRealEstateStore } from './store';
@@ -15,6 +15,7 @@ import {
   filterPropertiesByScore,
   filterClustersByScore,
 } from './lib';
+import { createTimer, logPerf, isProfilingEnabled } from '@/lib/profiling';
 
 /**
  * RealEstateController - Self-contained controller for the real estate extension
@@ -29,7 +30,7 @@ import {
  */
 export function RealEstateController() {
   // Get map state
-  const { bounds, zoom, heatmapPoints, gridCellSize, clusterPriceDisplay, clusterPriceAnalysis, detailedModeThreshold } = useMapStore(
+  const { bounds, zoom, heatmapPoints, gridCellSize, clusterPriceDisplay, clusterPriceAnalysis, detailedModeThreshold, map, leaflet, layerGroup, isMapReady, setExtensionDebugTiles } = useMapStore(
     useShallow((s) => ({
       bounds: s.bounds,
       zoom: s.zoom,
@@ -38,15 +39,11 @@ export function RealEstateController() {
       clusterPriceDisplay: s.clusterPriceDisplay,
       clusterPriceAnalysis: s.clusterPriceAnalysis,
       detailedModeThreshold: s.detailedModeThreshold,
-    }))
-  );
-  
-  const { map, L, layerGroup, isMapReady } = useMapStore(
-    useShallow((s) => ({
       map: s.mapInstance,
-      L: s.leafletInstance,
+      leaflet: s.leafletInstance,
       layerGroup: s.extensionLayerGroup,
       isMapReady: s.isMapReady,
+      setExtensionDebugTiles: s.setExtensionDebugTiles,
     }))
   );
   
@@ -94,6 +91,7 @@ export function RealEstateController() {
     isLoading,
     isTooLarge,
     error,
+    tiles: propertyTiles,
   } = useTileQueries({
     bounds,
     zoom,
@@ -114,6 +112,11 @@ export function RealEstateController() {
   useEffect(() => {
     setError(error);
   }, [error, setError]);
+
+  // Sync property tiles to store for debug rendering
+  useEffect(() => {
+    setExtensionDebugTiles(propertyTiles);
+  }, [propertyTiles, setExtensionDebugTiles]);
 
   // Update raw data in store when tile data changes
   useEffect(() => {
@@ -151,7 +154,10 @@ export function RealEstateController() {
     if (!enabled || allPropertiesForAnalytics.length === 0 || heatmapPoints.length === 0) {
       return allPropertiesForAnalytics.map(p => ({ ...p }));
     }
-    return enrichPropertiesWithPriceScore(allPropertiesForAnalytics, heatmapPoints, gridCellSize);
+    const stopTimer = createTimer('realestate:enrichment');
+    const result = enrichPropertiesWithPriceScore(allPropertiesForAnalytics, heatmapPoints, gridCellSize);
+    stopTimer({ properties: allPropertiesForAnalytics.length, heatmapPoints: heatmapPoints.length });
+    return result;
   }, [enabled, allPropertiesForAnalytics, heatmapPoints, gridCellSize]);
 
   // Get only standalone properties for rendering as markers
@@ -169,7 +175,10 @@ export function RealEstateController() {
     if (!enabled || (scoreRange[0] === 0 && scoreRange[1] === 100)) {
       return standaloneEnrichedProperties;
     }
-    return filterPropertiesByScore(standaloneEnrichedProperties, heatmapPoints, scoreRange, gridCellSize);
+    const stopTimer = createTimer('realestate:score-filter');
+    const result = filterPropertiesByScore(standaloneEnrichedProperties, heatmapPoints, scoreRange, gridCellSize);
+    stopTimer({ before: standaloneEnrichedProperties.length, after: result.length });
+    return result;
   }, [enabled, standaloneEnrichedProperties, heatmapPoints, scoreRange, gridCellSize]);
 
   // Filter properties by price value
@@ -194,13 +203,19 @@ export function RealEstateController() {
       return new Map();
     }
 
+    const stopTimer = createTimer('realestate:cluster-analysis');
+
     if (clusterPriceAnalysis === 'simplified') {
-      return analyzeClusterPrices(filteredClusters, enrichedProperties);
+      const result = analyzeClusterPrices(filteredClusters, enrichedProperties);
+      stopTimer({ mode: 'simplified', clusters: filteredClusters.length, properties: enrichedProperties.length });
+      return result;
     }
 
     if (clusterPriceAnalysis === 'detailed' && heatmapPoints.length > 0) {
       const detailedEnriched = enrichPropertiesSimplified(allPropertiesForAnalytics, heatmapPoints, gridCellSize);
-      return analyzeClusterPrices(filteredClusters, detailedEnriched);
+      const result = analyzeClusterPrices(filteredClusters, detailedEnriched);
+      stopTimer({ mode: 'detailed', clusters: filteredClusters.length, properties: detailedEnriched.length });
+      return result;
     }
 
     return new Map();
@@ -218,7 +233,7 @@ export function RealEstateController() {
   // ============================================
   // Only render markers when map is ready
   useRealEstateMarkers({
-    L: isMapReady ? L : null,
+    L: isMapReady ? leaflet : null,
     map: isMapReady ? map : null,
     layerGroup: isMapReady ? layerGroup : null,
     properties: filteredProperties,
