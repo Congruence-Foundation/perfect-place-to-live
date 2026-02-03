@@ -1,9 +1,7 @@
 import type { HeatmapPoint } from '@/types';
 import type { OtodomProperty, EnrichedProperty } from '../types';
 import { enrichPropertiesSimplified } from '../lib';
-
-// Default grid cell size for enrichment calculations
-const DEFAULT_GRID_CELL_SIZE = 200;
+import { UI_CONFIG } from '@/constants/performance';
 
 // Constants for cluster operations
 // This radius is used for UI-level cluster analysis and price comparison.
@@ -27,7 +25,7 @@ export function enrichClusterProperties(
   fetchedProperties: OtodomProperty[],
   existingEnrichedProperties: EnrichedProperty[],
   heatmapPoints: HeatmapPoint[],
-  gridCellSize: number = DEFAULT_GRID_CELL_SIZE
+  gridCellSize: number = UI_CONFIG.DEFAULT_GRID_CELL_SIZE
 ): EnrichedProperty[] {
   // Create a map of already-enriched properties by ID for quick lookup
   const enrichedPropsMap = new Map<number, EnrichedProperty>();

@@ -6,8 +6,8 @@ import { formatCompactPrice } from '@/lib/format';
 export const CLUSTER_ICON_SIZE = 36;
 export const CLUSTER_ICON_WITH_LABEL_HEIGHT = 54;
 
-// Price analysis badge configuration
-export const PRICE_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
+// Price analysis badge configuration with proper typing
+export const PRICE_BADGE_COLORS: Record<Exclude<PriceCategory, 'no_data'>, { bg: string; text: string }> = {
   great_deal: { bg: '#f0fdf4', text: '#16a34a' },
   good_deal: { bg: '#f0fdf4', text: '#059669' },
   fair: { bg: '#f8fafc', text: '#64748b' },
@@ -15,7 +15,7 @@ export const PRICE_BADGE_COLORS: Record<string, { bg: string; text: string }> = 
   overpriced: { bg: '#fef2f2', text: '#dc2626' },
 };
 
-export const PRICE_BADGE_LABELS: Record<string, string> = {
+export const PRICE_BADGE_LABELS: Record<Exclude<PriceCategory, 'no_data'>, string> = {
   great_deal: 'Great Deal',
   good_deal: 'Good Deal',
   fair: 'Fair Price',

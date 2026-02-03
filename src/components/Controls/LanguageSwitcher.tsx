@@ -4,11 +4,8 @@ import { useLocale } from 'next-intl';
 import { Globe } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { useClickOutside } from '@/hooks';
-
-const LOCALES = [
-  { code: 'en', label: 'English', flag: '🇬🇧' },
-  { code: 'pl', label: 'Polski', flag: '🇵🇱' },
-] as const;
+import { TIME_CONSTANTS } from '@/constants/performance';
+import { SUPPORTED_LOCALES, LOCALE_METADATA } from '@/i18n/routing';
 
 export default function LanguageSwitcher() {
   const locale = useLocale();
@@ -19,11 +16,11 @@ export default function LanguageSwitcher() {
   useClickOutside(containerRef, () => setIsOpen(false));
 
   const switchLocale = (newLocale: string) => {
-    document.cookie = `locale=${newLocale};path=/;max-age=31536000`;
+    document.cookie = `locale=${newLocale};path=/;max-age=${TIME_CONSTANTS.LOCALE_COOKIE_MAX_AGE}`;
     window.location.reload();
   };
 
-  const currentLocale = LOCALES.find(l => l.code === locale);
+  const currentLocaleMetadata = LOCALE_METADATA[locale as typeof SUPPORTED_LOCALES[number]];
 
   return (
     <div ref={containerRef} className="relative">
@@ -34,27 +31,30 @@ export default function LanguageSwitcher() {
             ? 'bg-primary text-primary-foreground'
             : 'bg-background/95 backdrop-blur-sm hover:bg-muted border'
         }`}
-        title={currentLocale?.label || 'Language'}
+        title={currentLocaleMetadata?.label || 'Language'}
       >
         <Globe className={`h-4 w-4 ${isOpen ? '' : 'text-muted-foreground'}`} />
       </button>
       
       {isOpen && (
         <div className="absolute top-full right-0 mt-2 bg-background/95 backdrop-blur-sm rounded-xl shadow-lg border p-1 w-32 animate-in fade-in slide-in-from-top-2 duration-200 z-[1100]">
-          {LOCALES.map((loc) => (
-            <button
-              key={loc.code}
-              onClick={() => switchLocale(loc.code)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
-                locale === loc.code 
-                  ? 'bg-muted font-medium' 
-                  : 'hover:bg-muted'
-              }`}
-            >
-              <span>{loc.flag}</span>
-              <span>{loc.label}</span>
-            </button>
-          ))}
+          {SUPPORTED_LOCALES.map((localeCode) => {
+            const metadata = LOCALE_METADATA[localeCode];
+            return (
+              <button
+                key={localeCode}
+                onClick={() => switchLocale(localeCode)}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
+                  locale === localeCode 
+                    ? 'bg-muted font-medium' 
+                    : 'hover:bg-muted'
+                }`}
+              >
+                <span>{metadata.flag}</span>
+                <span>{metadata.label}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

@@ -32,9 +32,6 @@ export interface CacheConfig {
   ttlSeconds: number;
 }
 
-// Keep old name as alias for backwards compatibility
-export type TwoLevelCacheConfig = CacheConfig;
-
 /**
  * Cache instance interface
  */

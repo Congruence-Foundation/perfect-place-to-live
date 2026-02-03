@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { UI_CONFIG } from '@/constants/performance';
 
 export interface Notification {
   id: string;
   message: string;
-  duration?: number; // in ms, default 3000
+  duration?: number; // in ms
 }
 
 interface UseNotificationReturn {
@@ -26,7 +27,7 @@ export function useNotification(): UseNotificationReturn {
     setNotification(null);
   }, []);
 
-  const showNotification = useCallback((message: string, duration = 3000) => {
+  const showNotification = useCallback((message: string, duration = UI_CONFIG.NOTIFICATION_DURATION_MS) => {
     // Clear any existing notification
     if (timerRef.current) {
       clearTimeout(timerRef.current);

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { encode } from '@msgpack/msgpack';
 import { fetchPoisWithFallback, DataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
-import { DEFAULT_FACTORS } from '@/config/factors';
+import { DEFAULT_FACTORS, getEnabledFactors } from '@/config/factors';
 import { Factor, POI } from '@/types';
-import { tileToBounds, expandBounds, isValidBounds } from '@/lib/geo';
+import { tileToBounds, expandBounds, isValidBounds, filterPoisToBounds } from '@/lib/geo';
 import { getHeatmapTileKey, hashHeatmapConfig } from '@/lib/geo/tiles';
 import { getCachedHeatmapTile, setCachedHeatmapTile } from '@/lib/heatmap-tile-cache';
 import { errorResponse } from '@/lib/api-utils';
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     // Use provided factors or defaults
     const factors: Factor[] = requestFactors || DEFAULT_FACTORS;
-    const enabledFactors = factors.filter((f) => f.enabled && f.weight !== 0);
+    const enabledFactors = getEnabledFactors(factors);
 
     if (enabledFactors.length === 0) {
       return errorResponse(new Error('No enabled factors'), 400);
@@ -140,16 +140,7 @@ export async function POST(request: NextRequest) {
     const endTime = performance.now();
 
     // Filter POIs to tile bounds (with buffer for edge display)
-    const poisByFactor: Record<string, POI[]> = {};
-    poiData.forEach((pois, factorId) => {
-      poisByFactor[factorId] = pois.filter(
-        (poi) =>
-          poi.lat >= poiBounds.south &&
-          poi.lat <= poiBounds.north &&
-          poi.lng >= poiBounds.west &&
-          poi.lng <= poiBounds.east
-      );
-    });
+    const poisByFactor = filterPoisToBounds(poiData, poiBounds);
 
     const metadata = {
       gridSize,

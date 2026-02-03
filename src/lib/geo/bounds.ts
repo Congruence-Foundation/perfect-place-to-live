@@ -1,4 +1,6 @@
-import type { Bounds } from '@/types';
+import type { Bounds, POI } from '@/types';
+import { tileToBounds } from './grid';
+import type { TileCoord } from './tiles';
 
 /**
  * Snap bounds to a grid for cache key generation
@@ -69,13 +71,49 @@ export function isPointInBounds(lat: number, lng: number, bounds: Bounds): boole
 }
 
 /**
- * Create a coordinate key string for deduplication
+ * Calculate combined bounds that covers all tiles
  * 
- * @param lat - Latitude
- * @param lng - Longitude
- * @param precision - Number of decimal places (default: 6, ~0.1m precision)
- * @returns Coordinate key string in format "lat:lng"
+ * @param tiles - Array of tile coordinates
+ * @returns Combined bounds covering all tiles
  */
-export function createCoordKey(lat: number, lng: number, precision: number = 6): string {
-  return `${lat.toFixed(precision)}:${lng.toFixed(precision)}`;
+export function getCombinedBounds(tiles: TileCoord[]): Bounds {
+  let north = -Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let west = Infinity;
+
+  for (const tile of tiles) {
+    const bounds = tileToBounds(tile.z, tile.x, tile.y);
+    if (bounds.north > north) north = bounds.north;
+    if (bounds.south < south) south = bounds.south;
+    if (bounds.east > east) east = bounds.east;
+    if (bounds.west < west) west = bounds.west;
+  }
+
+  return { north, south, east, west };
+}
+
+/**
+ * Filter POIs from a Map to only those within bounds
+ * Converts Map<string, POI[]> to Record<string, POI[]>
+ * 
+ * @param poiData - Map of factor ID to POI array
+ * @param bounds - Geographic bounds to filter by
+ * @returns Record of factor ID to filtered POI array
+ */
+export function filterPoisToBounds(
+  poiData: Map<string, POI[]>,
+  bounds: Bounds
+): Record<string, POI[]> {
+  const result: Record<string, POI[]> = {};
+  poiData.forEach((pois, factorId) => {
+    result[factorId] = pois.filter(
+      (poi) =>
+        poi.lat >= bounds.south &&
+        poi.lat <= bounds.north &&
+        poi.lng >= bounds.west &&
+        poi.lng <= bounds.east
+    );
+  });
+  return result;
 }

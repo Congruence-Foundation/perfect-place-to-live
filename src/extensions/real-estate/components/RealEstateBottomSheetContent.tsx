@@ -1,9 +1,10 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { InfoTooltip } from '@/components/ui/info-tooltip';
-import { RealEstateSidebar, ScoreRangeSlider } from '@/components/Controls';
+import { RealEstateSidebar } from '@/components/Controls';
 import PriceValueFilter from './filters/PriceValueFilter';
+import { TransactionTypeButtons, DEFAULT_RENT_PRICE, DEFAULT_SELL_PRICE } from './TransactionTypeButtons';
+import { ScoreRangeSection } from './ScoreRangeSection';
 import { useRealEstateExtension } from '../hooks';
 
 /**
@@ -19,71 +20,34 @@ export function RealEstateBottomSheetContent() {
   return (
     <>
       {/* Transaction Type Buttons */}
-      <div className="flex gap-1 mb-3">
-        <button
-          onClick={() => realEstate.setEnabled(false)}
-          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-            !realEstate.enabled
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-          }`}
-        >
-          {tRealEstate('none')}
-        </button>
-        <button
-          onClick={() => {
-            realEstate.setEnabled(true);
-            realEstate.setFilters({ 
-              transaction: 'RENT',
-              priceMin: 1000,
-              priceMax: 10000
-            });
-          }}
-          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-            realEstate.enabled && realEstate.filters.transaction === 'RENT'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-          }`}
-        >
-          {tRealEstate('rent')}
-        </button>
-        <button
-          onClick={() => {
-            realEstate.setEnabled(true);
-            realEstate.setFilters({ 
-              transaction: 'SELL',
-              priceMin: 100000,
-              priceMax: 2000000
-            });
-          }}
-          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-            realEstate.enabled && realEstate.filters.transaction === 'SELL'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-          }`}
-        >
-          {tRealEstate('sell')}
-        </button>
-      </div>
+      <TransactionTypeButtons
+        enabled={realEstate.enabled}
+        transaction={realEstate.filters.transaction}
+        onDisable={() => realEstate.setEnabled(false)}
+        onSelectRent={() => {
+          realEstate.setEnabled(true);
+          realEstate.setFilters({ 
+            transaction: 'RENT',
+            priceMin: DEFAULT_RENT_PRICE.min,
+            priceMax: DEFAULT_RENT_PRICE.max
+          });
+        }}
+        onSelectSell={() => {
+          realEstate.setEnabled(true);
+          realEstate.setFilters({ 
+            transaction: 'SELL',
+            priceMin: DEFAULT_SELL_PRICE.min,
+            priceMax: DEFAULT_SELL_PRICE.max
+          });
+        }}
+      />
 
       {/* Score Range Slider (only when real estate is enabled) */}
       {realEstate.enabled && (
-        <div className="mb-3">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs text-muted-foreground">{tRealEstate('scoreFilter')}</span>
-            <InfoTooltip>
-              <p className="text-xs">{tRealEstate('scoreFilterTooltip')}</p>
-            </InfoTooltip>
-          </div>
-          <ScoreRangeSlider
-            value={realEstate.scoreRange}
-            onChange={realEstate.setScoreRange}
-          />
-          <div className="flex justify-between mt-1">
-            <span className="text-[10px] text-muted-foreground">{realEstate.scoreRange[0]}%</span>
-            <span className="text-[10px] text-muted-foreground">{realEstate.scoreRange[1]}%</span>
-          </div>
-        </div>
+        <ScoreRangeSection
+          scoreRange={realEstate.scoreRange}
+          onScoreRangeChange={realEstate.setScoreRange}
+        />
       )}
 
       {/* Price Value Filter (only when real estate is enabled) */}
@@ -105,6 +69,7 @@ export function RealEstateBottomSheetContent() {
           onFiltersChange={realEstate.setFilters}
           propertyCount={realEstate.totalCount}
           isLoading={realEstate.isLoading}
+          isBelowMinZoom={realEstate.isBelowMinZoom}
           error={realEstate.error}
         />
       )}

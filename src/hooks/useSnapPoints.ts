@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { UI_CONFIG } from '@/constants/performance';
 
 /**
  * Snap point configuration
@@ -35,7 +36,7 @@ const DEFAULT_SNAP_CONFIG: SnapPointConfig = {
  * Safe window height getter for SSR
  */
 function getWindowHeight(): number {
-  if (typeof window === 'undefined') return 800;
+  if (typeof window === 'undefined') return UI_CONFIG.SSR_FALLBACK_WINDOW_HEIGHT;
   return window.innerHeight;
 }
 
@@ -57,7 +58,7 @@ function calculateSnapHeights(config: SnapPointConfig): SnapHeights {
 export function useSnapPoints(config: SnapPointConfig = DEFAULT_SNAP_CONFIG) {
   const [height, setHeight] = useState(() => {
     if (typeof window === 'undefined') {
-      return (config.collapsedPercent / 100) * 800;
+      return (config.collapsedPercent / 100) * UI_CONFIG.SSR_FALLBACK_WINDOW_HEIGHT;
     }
     return (config.collapsedPercent / 100) * window.innerHeight;
   });

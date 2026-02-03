@@ -18,7 +18,8 @@ export {
   isValidBounds,
   expandBounds,
   isPointInBounds,
-  createCoordKey,
+  getCombinedBounds,
+  filterPoisToBounds,
 } from './bounds';
 
 // Grid generation and tile utilities
@@ -33,8 +34,8 @@ export {
 // Property tile utilities
 export {
   type TileCoord,
+  getTileKeyString,
   PROPERTY_TILE_ZOOM,
-  getTileKey,
   getExpandedTilesForRadius,
   hashFilters,
   // Heatmap tile utilities
@@ -43,7 +44,6 @@ export {
   hashHeatmapConfig,
   getHeatmapTileKey,
   // POI tile utilities
-  POI_TILE_ZOOM,
   getPoiTileKey,
   calculatePoiTileRadius,
   getPoiTilesForHeatmapTiles,

@@ -16,8 +16,7 @@ export type { ClusterPriceAnalysis, ClusterAnalysisMap } from './price-analysis'
 export {
   generatePropertyMarkerHtml,
   getPropertyMarkerClassName,
-  getPriceCategoryBorderColor,
 } from './property-markers';
 
 // Score lookup
-export { filterPropertiesByScore, filterClustersByScore } from './score-lookup';
+export { filterPropertiesByScore, filterClustersByScore, findNearestHeatmapPoint } from './score-lookup';

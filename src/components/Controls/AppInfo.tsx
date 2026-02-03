@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { Info, X } from 'lucide-react';
+import { Info } from 'lucide-react';
+import { PanelHeader } from '@/components/ui/panel-header';
 
 const STORAGE_KEY = 'location-finder-info-seen';
 
@@ -51,16 +52,7 @@ export default function AppInfo({ isMobile = false }: AppInfoProps) {
         <div className={`absolute top-10 right-0 z-[1000] bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 animate-in fade-in slide-in-from-top-2 duration-200 ${
           isMobile ? 'w-[calc(100vw-2rem)] max-w-72' : 'w-64'
         }`}>
-          {/* Header */}
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-semibold">{t('title')}</span>
-            <button
-              onClick={handleClose}
-              className="w-6 h-6 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
-            >
-              <X className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
-          </div>
+          <PanelHeader title={t('title')} onClose={handleClose} />
 
           <ol className="space-y-2 text-xs text-muted-foreground list-none">
             <li className="flex gap-2">

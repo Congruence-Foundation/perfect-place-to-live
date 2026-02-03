@@ -1,9 +1,7 @@
 'use client';
 
-import { useCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { PriceValueRange } from '../types';
-import type { ExtensionDebugSection, ExtensionSettingsSection } from '@/extensions/types';
 import { useRealEstateStore } from '../store';
 import type { DataSource } from '../config';
 
@@ -32,10 +30,6 @@ export interface UseRealEstateExtensionReturn {
   setScoreRange: (range: [number, number]) => void;
   setPriceValueRange: (range: PriceValueRange) => void;
   setDataSources: (sources: DataSource[]) => void;
-  
-  // Extension interface methods
-  getDebugSections: () => ExtensionDebugSection[];
-  getSettingsSections: () => ExtensionSettingsSection[];
 }
 
 /**
@@ -89,72 +83,6 @@ export function useRealEstateExtension(): UseRealEstateExtensionReturn {
     }))
   );
 
-  // Get debug sections for the debug panel - pure function
-  const getDebugSections = useCallback((): ExtensionDebugSection[] => {
-    if (!enabled) return [];
-    
-    return [{
-      id: 'real-estate-debug',
-      title: 'Real Estate',
-      items: [
-        {
-          id: 'property-count',
-          label: 'Properties',
-          value: properties.length,
-          showOnlyWhenEnabled: true,
-        },
-        {
-          id: 'cluster-count',
-          label: 'Clusters',
-          value: clusters.length,
-          showOnlyWhenEnabled: true,
-        },
-        {
-          id: 'total-count',
-          label: 'Total Available',
-          value: totalCount,
-          showOnlyWhenEnabled: true,
-        },
-        {
-          id: 'cache-size',
-          label: 'Cached Clusters',
-          value: clusterPropertiesCache.size,
-          showOnlyWhenEnabled: true,
-        },
-      ],
-    }];
-  }, [enabled, properties.length, clusters.length, totalCount, clusterPropertiesCache.size]);
-
-  // Get settings sections for the settings panel - pure function
-  const getSettingsSections = useCallback((): ExtensionSettingsSection[] => {
-    if (!enabled) return [];
-    
-    return [{
-      id: 'real-estate-settings',
-      title: 'Real Estate',
-      collapsible: true,
-      defaultExpanded: true,
-      items: [
-        {
-          id: 'score-range',
-          label: 'Score Filter',
-          tooltip: 'Filter properties by location quality score',
-          type: 'custom',
-          value: scoreRange,
-          onChange: (value) => setScoreRange(value as [number, number]),
-        },
-        {
-          id: 'price-value-range',
-          label: 'Price Value Filter',
-          tooltip: 'Filter properties by price value category',
-          type: 'custom',
-          value: priceValueRange,
-          onChange: (value) => setPriceValueRange(value as PriceValueRange),
-        },
-      ],
-    }];
-  }, [enabled, scoreRange, priceValueRange, setScoreRange, setPriceValueRange]);
-
   return {
     enabled,
     filters,
@@ -172,7 +100,5 @@ export function useRealEstateExtension(): UseRealEstateExtensionReturn {
     setScoreRange,
     setPriceValueRange,
     setDataSources,
-    getDebugSections,
-    getSettingsSections,
   };
 }

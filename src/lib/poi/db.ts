@@ -3,6 +3,8 @@ import type { Bounds, POI } from '@/types';
 import { createTimer } from '@/lib/profiling';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { tileToBounds } from '@/lib/geo/grid';
+import { isPointInBounds, getCombinedBounds } from '@/lib/geo/bounds';
+import { getTileKeyString } from '@/lib/geo/tiles';
 
 /**
  * Create a Neon SQL client
@@ -131,26 +133,6 @@ export async function getPOIsForTilesBatched(
 }
 
 /**
- * Calculate combined bounds that covers all tiles
- */
-function getCombinedBounds(tiles: TileCoord[]): Bounds {
-  let north = -Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let west = Infinity;
-
-  for (const tile of tiles) {
-    const bounds = tileToBounds(tile.z, tile.x, tile.y);
-    if (bounds.north > north) north = bounds.north;
-    if (bounds.south < south) south = bounds.south;
-    if (bounds.east > east) east = bounds.east;
-    if (bounds.west < west) west = bounds.west;
-  }
-
-  return { north, south, east, west };
-}
-
-/**
  * Distribute POIs from a combined query to their respective tiles
  * Each POI is assigned to the tile that contains its coordinates
  */
@@ -162,14 +144,14 @@ function distributePOIsToTiles(
   // Pre-compute tile bounds for efficient lookup
   const tileBoundsMap = new Map<string, Bounds>();
   for (const tile of tiles) {
-    const key = `${tile.z}:${tile.x}:${tile.y}`;
+    const key = getTileKeyString(tile);
     tileBoundsMap.set(key, tileToBounds(tile.z, tile.x, tile.y));
   }
 
   // Initialize result map with empty arrays for each tile and factor
   const result = new Map<string, Record<string, POI[]>>();
   for (const tile of tiles) {
-    const key = `${tile.z}:${tile.x}:${tile.y}`;
+    const key = getTileKeyString(tile);
     const factorMap: Record<string, POI[]> = {};
     for (const factorId of factorIds) {
       factorMap[factorId] = [];
@@ -194,16 +176,4 @@ function distributePOIsToTiles(
   }
 
   return result;
-}
-
-/**
- * Check if a point is within bounds (inclusive)
- */
-function isPointInBounds(lat: number, lng: number, bounds: Bounds): boolean {
-  return (
-    lat >= bounds.south &&
-    lat <= bounds.north &&
-    lng >= bounds.west &&
-    lng <= bounds.east
-  );
 }

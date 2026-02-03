@@ -2,9 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
-import { getExtensionRegistry } from '@/extensions/registry';
-// Import init to ensure extensions are registered
-import '@/extensions/init';
+import { getExtensions } from '@/extensions/utils';
 
 /**
  * ExtensionsSidebar Component
@@ -15,8 +13,7 @@ import '@/extensions/init';
  */
 export default function ExtensionsSidebar() {
   const tControls = useTranslations('controls');
-  const registry = getExtensionRegistry();
-  const extensions = registry.getAll();
+  const extensions = getExtensions();
 
   return (
     <div className="px-5 py-4">

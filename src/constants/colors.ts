@@ -39,6 +39,16 @@ export const POI_COLORS: Record<string, string> = {
 export const DEFAULT_FALLBACK_COLOR = '#6b7280';
 
 /**
+ * Debug visualization colors
+ */
+export const DEBUG_COLORS = {
+  /** Heatmap tile border color (blue) */
+  HEATMAP_TILE_BORDER: '#3b82f6',
+  /** Property tile border color (orange) */
+  PROPERTY_TILE_BORDER: '#f97316',
+} as const;
+
+/**
  * Color interpolation for K values
  * Uses ABSOLUTE K values (not normalized) so colors are consistent
  * K is 0-1 where 0 = excellent, 1 = poor

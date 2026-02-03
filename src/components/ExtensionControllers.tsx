@@ -1,8 +1,6 @@
 'use client';
 
-import { getExtensionRegistry } from '@/extensions/registry';
-// Import init to ensure extensions are registered
-import '@/extensions/init';
+import { useExtensionComponents } from '@/extensions/utils';
 
 /**
  * ExtensionControllers - Renders all extension controller components
@@ -17,18 +15,5 @@ import '@/extensions/init';
  * This keeps extensions fully self-contained and decoupled from the core.
  */
 export function ExtensionControllers() {
-  const registry = getExtensionRegistry();
-  const extensions = registry.getAll();
-  
-  return (
-    <>
-      {extensions.map((extension) => {
-        const Controller = extension.Controller;
-        if (!Controller) return null;
-        return <Controller key={extension.id} />;
-      })}
-    </>
-  );
+  return useExtensionComponents('Controller');
 }
-
-export default ExtensionControllers;

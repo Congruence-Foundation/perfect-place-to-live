@@ -2,18 +2,9 @@
 
 import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
-import type { Bounds, HeatmapPoint, POI, Factor, ClusterPriceAnalysisMode } from '@/types';
+import type { Bounds, HeatmapPoint, Factor, ClusterPriceAnalysisMode, TileCoordinates } from '@/types';
 import type { ClusterPriceDisplay } from '@/extensions/real-estate/types';
-import { HEATMAP_TILE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
-
-/**
- * Tile coordinate for debug rendering
- */
-export interface DebugTileCoord {
-  z: number;
-  x: number;
-  y: number;
-}
+import { HEATMAP_TILE_CONFIG, POI_TILE_CONFIG, UI_CONFIG } from '@/constants/performance';
 
 /**
  * Core map store state interface
@@ -23,7 +14,6 @@ export interface MapState {
   bounds: Bounds | null;
   zoom: number;
   heatmapPoints: HeatmapPoint[];
-  pois: Record<string, POI[]>;
   factors: Factor[];
   gridCellSize: number;
   clusterPriceDisplay: ClusterPriceDisplay;
@@ -35,8 +25,8 @@ export interface MapState {
   // Debug options
   showHeatmapTileBorders: boolean;
   showPropertyTileBorders: boolean;
-  heatmapDebugTiles: DebugTileCoord[];
-  extensionDebugTiles: DebugTileCoord[];
+  heatmapDebugTiles: TileCoordinates[];
+  extensionDebugTiles: TileCoordinates[];
   
   // Map instances (Leaflet)
   mapInstance: L.Map | null;
@@ -55,22 +45,13 @@ export interface MapActions {
   // Map ready
   setMapReady: (map: L.Map, L: typeof import('leaflet'), layerGroup: L.LayerGroup) => void;
   
-  // Individual setters
-  setBounds: (bounds: Bounds | null) => void;
-  setZoom: (zoom: number) => void;
-  setHeatmapPoints: (points: HeatmapPoint[]) => void;
-  setPois: (pois: Record<string, POI[]>) => void;
-  setFactors: (factors: Factor[]) => void;
-  setGridCellSize: (size: number) => void;
-  setClusterPriceDisplay: (display: ClusterPriceDisplay) => void;
-  setClusterPriceAnalysis: (analysis: ClusterPriceAnalysisMode) => void;
-  setDetailedModeThreshold: (threshold: number) => void;
+  // Individual setters (only those actually used)
   setHeatmapTileRadius: (radius: number) => void;
   setPoiBufferScale: (scale: number) => void;
   setShowHeatmapTileBorders: (show: boolean) => void;
   setShowPropertyTileBorders: (show: boolean) => void;
-  setHeatmapDebugTiles: (tiles: DebugTileCoord[]) => void;
-  setExtensionDebugTiles: (tiles: DebugTileCoord[]) => void;
+  setHeatmapDebugTiles: (tiles: TileCoordinates[]) => void;
+  setExtensionDebugTiles: (tiles: TileCoordinates[]) => void;
 }
 
 /**
@@ -83,14 +64,13 @@ export type MapStore = MapState & MapActions;
  */
 const initialState: MapState = {
   bounds: null,
-  zoom: 7,
+  zoom: UI_CONFIG.DEFAULT_INITIAL_ZOOM,
   heatmapPoints: [],
-  pois: {},
   factors: [],
-  gridCellSize: 200,
+  gridCellSize: UI_CONFIG.DEFAULT_GRID_CELL_SIZE,
   clusterPriceDisplay: 'median',
   clusterPriceAnalysis: 'simplified',
-  detailedModeThreshold: 100,
+  detailedModeThreshold: UI_CONFIG.DEFAULT_DETAILED_MODE_THRESHOLD,
   heatmapTileRadius: HEATMAP_TILE_CONFIG.DEFAULT_TILE_RADIUS,
   poiBufferScale: POI_TILE_CONFIG.DEFAULT_POI_BUFFER_SCALE,
   showHeatmapTileBorders: false,
@@ -138,16 +118,7 @@ export const useMapStore = create<MapStore>()(
         'setMapReady'
       ),
       
-      // Individual setters
-      setBounds: (bounds) => set({ bounds }, false, 'setBounds'),
-      setZoom: (zoom) => set({ zoom }, false, 'setZoom'),
-      setHeatmapPoints: (heatmapPoints) => set({ heatmapPoints }, false, 'setHeatmapPoints'),
-      setPois: (pois) => set({ pois }, false, 'setPois'),
-      setFactors: (factors) => set({ factors }, false, 'setFactors'),
-      setGridCellSize: (gridCellSize) => set({ gridCellSize }, false, 'setGridCellSize'),
-      setClusterPriceDisplay: (clusterPriceDisplay) => set({ clusterPriceDisplay }, false, 'setClusterPriceDisplay'),
-      setClusterPriceAnalysis: (clusterPriceAnalysis) => set({ clusterPriceAnalysis }, false, 'setClusterPriceAnalysis'),
-      setDetailedModeThreshold: (detailedModeThreshold) => set({ detailedModeThreshold }, false, 'setDetailedModeThreshold'),
+      // Individual setters (only those actually used)
       setHeatmapTileRadius: (heatmapTileRadius) => set({ heatmapTileRadius }, false, 'setHeatmapTileRadius'),
       setPoiBufferScale: (poiBufferScale) => set({ poiBufferScale }, false, 'setPoiBufferScale'),
       setShowHeatmapTileBorders: (showHeatmapTileBorders) => set({ showHeatmapTileBorders }, false, 'setShowHeatmapTileBorders'),

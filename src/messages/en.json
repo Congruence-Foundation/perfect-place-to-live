@@ -9,9 +9,7 @@
     "active": "{count} active",
     "reset": "Reset",
     "refresh": "Refresh",
-    "stop": "Stop",
     "calculating": "Calculating...",
-    "zoomIn": "Zoom in to calculate",
     "zoomInFirst": "Zoom in first",
     "fallbackNotice": "Using Overpass API for this area",
     "extensions": "Real Estate",
@@ -29,10 +27,6 @@
     "title": "Settings",
     "showPOIs": "Show POIs",
     "showPOIsTooltip": "Display points of interest (cafes, parks, etc.) on the map as markers.",
-    "gridResolution": "Grid Resolution",
-    "gridResolutionTooltip": "Distance between sample points. Smaller values give more detail but take longer to compute.",
-    "dense": "Dense",
-    "fast": "Fast",
     "curve": "Curve",
     "curveTooltip": "Controls how distance affects the score. Determines sensitivity to distance changes.",
     "sensitivity": "Sensitivity",
@@ -41,13 +35,6 @@
     "aggressive": "Aggressive",
     "relativeMode": "Relative Mode",
     "relativeModeTooltip": "When enabled, colors show relative differences within the current view, highlighting the best/worst areas even if they're all similar.",
-    "computation": "Computation",
-    "computationTooltip": "Real-time calculates on-demand with custom weights. Cached uses pre-computed tiles for faster loading.",
-    "realtime": "Real-time",
-    "cached": "Cached",
-    "cachedNotAvailable": "Cached tiles not available yet",
-    "dataSource": "Data Source",
-    "dataSourceTooltip": "Neon DB is faster (pre-cached data). Overpass API fetches real-time data from OpenStreetMap but is slower.",
     "useOverpass": "Use Overpass API",
     "useOverpassTooltip": "Enable to always fetch real-time data from OpenStreetMap. When disabled, the app uses fast cached data but will automatically fall back to Overpass if no data is available for the area.",
     "clusterPrice": "Cluster Price",
@@ -121,9 +108,6 @@
     "locateMe": "Go to my location",
     "locationFailed": "Could not get location",
     "noGeolocation": "Geolocation not supported"
-  },
-  "hint": {
-    "rightClick": "Right-click on map for location details"
   },
   "categories": {
     "essential": "Essential",
@@ -216,7 +200,7 @@
     "city_center": "City/Town Access",
     "city_downtown": "City Downtown"
   },
-    "popup": {
+  "popup": {
     "excellent": "Excellent",
     "good": "Good",
     "average": "Average",
@@ -302,13 +286,6 @@
     "building=construction": "Buildings under construction",
     "place=city": "Cities",
     "place=town": "Towns"
-  },
-  "realEstatePopup": {
-    "priceNegotiable": "Price negotiable",
-    "noListingsFound": "No listings found in this area",
-    "loadingError": "Error loading listings",
-    "loading": "Loading...",
-    "showMore": "Show more"
   },
   "realEstate": {
     "title": "Real Estate",

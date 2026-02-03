@@ -1,7 +1,7 @@
 import { Bounds } from './poi';
 import { Factor } from './factors';
 import { POI } from './poi';
-import { DataSource } from '@/lib/errors';
+import { POIDataSource, DataSource } from '@/lib/errors';
 import type { ClusterPriceDisplay } from '@/extensions/real-estate/types';
 
 export type DistanceCurve = 'linear' | 'log' | 'exp' | 'power';
@@ -14,8 +14,8 @@ export type DistanceCurve = 'linear' | 'log' | 'exp' | 'power';
  */
 export type ClusterPriceAnalysisMode = 'off' | 'simplified' | 'detailed';
 
-// Re-export DataSource for convenience
-export type { DataSource } from '@/lib/errors';
+// Re-export DataSource types for convenience
+export type { POIDataSource, DataSource } from '@/lib/errors';
 
 export interface HeatmapPoint {
   lat: number;
@@ -46,24 +46,17 @@ export interface HeatmapRequest {
   dataSource?: DataSource;
 }
 
-export interface HeatmapResponse {
-  points: HeatmapPoint[];
-  pois: Record<string, POI[]>;
-  metadata: {
-    gridSize: number | string;
-    pointCount: number;
-    computeTimeMs: number;
-    factorCount: number;
-    dataSource?: DataSource;
-    poiCounts: Record<string, number>;
-  };
-}
-
 export interface TileCoordinates {
   z: number;
   x: number;
   y: number;
 }
+
+/**
+ * Alias for TileCoordinates for backward compatibility
+ * @deprecated Use TileCoordinates instead
+ */
+export type TileCoord = TileCoordinates;
 
 export interface PrecomputedTile {
   coordinates: TileCoordinates;

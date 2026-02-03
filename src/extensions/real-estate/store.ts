@@ -108,10 +108,6 @@ const initialState: RealEstateState = {
   cacheVersion: 0,
 };
 
-// Request management (outside store to avoid serialization issues)
-let abortController: AbortController | null = null;
-let requestId = 0;
-
 /**
  * Real estate extension store using Zustand
  * 
@@ -199,10 +195,6 @@ export const useRealEstateStore = create<RealEstateStore>()(
       
       // Clear all properties
       clearProperties: () => {
-        if (abortController) {
-          abortController.abort();
-        }
-        requestId++;
         set(
           {
             rawProperties: [],

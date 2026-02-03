@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { encode } from '@msgpack/msgpack';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
-import { DEFAULT_FACTORS } from '@/config/factors';
+import { DEFAULT_FACTORS, getEnabledFactors } from '@/config/factors';
 import type { Factor, POI, HeatmapPoint, Bounds } from '@/types';
 import { tileToBounds, isValidBounds } from '@/lib/geo';
 import { 
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     const acceptsMsgpack = request.headers.get('Accept') === 'application/msgpack';
     const dataSource: DataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
     const factors: Factor[] = requestFactors || DEFAULT_FACTORS;
-    const enabledFactors = factors.filter(f => f.enabled && f.weight !== 0);
+    const enabledFactors = getEnabledFactors(factors);
 
     if (enabledFactors.length === 0) {
       return errorResponse(new Error('No enabled factors'), 400);

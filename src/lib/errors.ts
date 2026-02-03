@@ -2,7 +2,17 @@
  * Custom error classes for consistent error handling across the application
  */
 
-export type DataSource = 'neon' | 'overpass';
+/**
+ * Data source for POI fetching
+ * - neon: PostgreSQL database (fast, pre-cached)
+ * - overpass: Overpass API (real-time, slower)
+ */
+export type POIDataSource = 'neon' | 'overpass';
+
+/**
+ * @deprecated Use POIDataSource instead
+ */
+export type DataSource = POIDataSource;
 
 /**
  * Error thrown when POI fetching fails
@@ -10,7 +20,7 @@ export type DataSource = 'neon' | 'overpass';
 export class POIFetchError extends Error {
   constructor(
     message: string,
-    public readonly source: DataSource,
+    public readonly source: POIDataSource,
     public readonly cause?: Error
   ) {
     super(message);

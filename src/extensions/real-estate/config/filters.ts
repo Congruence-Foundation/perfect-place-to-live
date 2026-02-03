@@ -20,8 +20,15 @@ import type {
 
 /**
  * Available data sources for property listings
+ * - otodom: Otodom.pl property listings
+ * - gratka: Gratka.pl property listings
  */
-export type DataSource = 'otodom' | 'gratka';
+export type PropertyDataSource = 'otodom' | 'gratka';
+
+/**
+ * @deprecated Use PropertyDataSource instead
+ */
+export type DataSource = PropertyDataSource;
 
 // ============================================================================
 // Filter Option Types
@@ -162,73 +169,3 @@ export const OWNER_TYPE_OPTIONS: TranslatableFilterOption<OwnerType>[] = [
   { value: 'DEVELOPER', labelKey: 'ownerDeveloper' },
   { value: 'AGENCY', labelKey: 'ownerAgency' },
 ];
-
-// ============================================================================
-// Data Source Filter Capabilities
-// ============================================================================
-
-export type FilterCapability =
-  | 'rooms'
-  | 'area'
-  | 'price'
-  | 'pricePerMeter'
-  | 'buildYear'
-  | 'market'
-  | 'ownerType'
-  | 'listingAge'
-  | 'floors'
-  | 'floorsInBuilding'
-  | 'flatBuildingType'
-  | 'houseBuildingType'
-  | 'terrainArea'
-  | 'bungalow'
-  | 'buildingMaterial'
-  | 'extras'
-  | 'description';
-
-export interface DataSourceFilterConfig {
-  name: string;
-  available: boolean;
-  supports: FilterCapability[];
-}
-
-/**
- * Filter capabilities per data source
- * This allows different data sources to support different filter options
- */
-export const DATA_SOURCE_FILTERS: Record<DataSource, DataSourceFilterConfig> = {
-  otodom: {
-    name: 'Otodom',
-    available: true,
-    supports: [
-      'rooms',
-      'area',
-      'price',
-      'pricePerMeter',
-      'buildYear',
-      'market',
-      'ownerType',
-      'listingAge',
-      'floors',
-      'floorsInBuilding',
-      'flatBuildingType',
-      'houseBuildingType',
-      'terrainArea',
-      'bungalow',
-      'buildingMaterial',
-      'extras',
-      'description',
-    ],
-  },
-  gratka: {
-    name: 'Gratka',
-    available: false,
-    supports: [
-      'rooms',
-      'area',
-      'price',
-      'buildYear',
-      'market',
-    ],
-  },
-};

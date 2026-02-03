@@ -16,12 +16,9 @@ export {
   LISTING_AGE_OPTIONS,
   MARKET_OPTIONS,
   OWNER_TYPE_OPTIONS,
-  DATA_SOURCE_FILTERS,
 } from './filters';
 
 export type {
   FilterOption,
   TranslatableFilterOption,
-  FilterCapability,
-  DataSourceFilterConfig,
 } from './filters';

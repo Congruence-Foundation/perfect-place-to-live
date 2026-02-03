@@ -3,7 +3,7 @@
  * Uses fixed zoom level tiles for optimal cache efficiency
  */
 
-import type { Bounds } from '@/types';
+import type { Bounds, TileCoordinates } from '@/types';
 import type { PropertyFilters } from '@/extensions/real-estate/types';
 import type { Factor } from '@/types/factors';
 import { PROPERTY_TILE_CONFIG, HEATMAP_TILE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
@@ -11,12 +11,19 @@ import { getTilesForBounds } from './grid';
 import { djb2Hash } from '@/lib/utils';
 
 /**
- * Tile coordinate type
+ * Tile coordinate type - re-exported from @/types for convenience
  */
-export interface TileCoord {
-  x: number;
-  y: number;
-  z: number;
+export type TileCoord = TileCoordinates;
+
+/**
+ * Generate a string key from tile coordinates
+ * Used for cache keys and deduplication
+ * 
+ * @param tile - Tile coordinates
+ * @returns String key in format "z:x:y"
+ */
+export function getTileKeyString(tile: TileCoord): string {
+  return `${tile.z}:${tile.x}:${tile.y}`;
 }
 
 /**
@@ -24,18 +31,6 @@ export interface TileCoord {
  * Using zoom 13 provides ~2.4km x 2.4km tiles at Poland's latitude
  */
 export const PROPERTY_TILE_ZOOM = PROPERTY_TILE_CONFIG.TILE_ZOOM;
-
-/**
- * Generate a cache key for a property tile
- * @param z - Zoom level
- * @param x - Tile X coordinate
- * @param y - Tile Y coordinate
- * @param filterHash - Hash of the property filters
- * @returns Cache key string
- */
-export function getTileKey(z: number, x: number, y: number, filterHash: string): string {
-  return `prop-tile:${z}:${x}:${y}:${filterHash}`;
-}
 
 /**
  * Expand a set of tiles by a radius in all directions

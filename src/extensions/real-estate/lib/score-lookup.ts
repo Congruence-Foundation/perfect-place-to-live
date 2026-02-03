@@ -1,6 +1,7 @@
 import type { HeatmapPoint } from '@/types/heatmap';
 import type { OtodomProperty, PropertyCluster } from '../types/property';
 import { distanceInMeters } from '@/lib/geo';
+import { UI_CONFIG } from '@/constants/performance';
 
 /**
  * Interface for items that have geographic coordinates
@@ -8,6 +9,39 @@ import { distanceInMeters } from '@/lib/geo';
 interface GeoLocated {
   lat: number;
   lng: number;
+}
+
+/**
+ * Find the nearest heatmap point to a given location within a search radius.
+ * 
+ * @param lat - Latitude of the location
+ * @param lng - Longitude of the location
+ * @param heatmapPoints - Array of heatmap points with scores
+ * @param searchRadius - Maximum search radius in meters
+ * @returns The nearest heatmap point or null if none found within radius
+ */
+export function findNearestHeatmapPoint(
+  lat: number,
+  lng: number,
+  heatmapPoints: HeatmapPoint[],
+  searchRadius: number
+): HeatmapPoint | null {
+  if (!heatmapPoints || heatmapPoints.length === 0) {
+    return null;
+  }
+
+  let nearestPoint: HeatmapPoint | null = null;
+  let nearestDistance = Infinity;
+
+  for (const point of heatmapPoints) {
+    const distance = distanceInMeters(lat, lng, point.lat, point.lng);
+    if (distance < nearestDistance && distance <= searchRadius) {
+      nearestDistance = distance;
+      nearestPoint = point;
+    }
+  }
+
+  return nearestPoint;
 }
 
 /**
@@ -26,25 +60,8 @@ function getScoreForLocation(
   heatmapPoints: HeatmapPoint[],
   gridCellSize: number
 ): number | null {
-  if (!heatmapPoints || heatmapPoints.length === 0) {
-    return null;
-  }
-
-  // Search radius is 1.5x the grid cell size to ensure we find a point
-  const searchRadius = gridCellSize * 1.5;
-  
-  let nearestPoint: HeatmapPoint | null = null;
-  let nearestDistance = Infinity;
-
-  for (const point of heatmapPoints) {
-    const distance = distanceInMeters(lat, lng, point.lat, point.lng);
-    
-    if (distance < nearestDistance && distance <= searchRadius) {
-      nearestDistance = distance;
-      nearestPoint = point;
-    }
-  }
-
+  const searchRadius = gridCellSize * UI_CONFIG.SEARCH_RADIUS_MULTIPLIER;
+  const nearestPoint = findNearestHeatmapPoint(lat, lng, heatmapPoints, searchRadius);
   return nearestPoint ? nearestPoint.value : null;
 }
 

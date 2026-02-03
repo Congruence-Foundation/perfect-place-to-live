@@ -2,7 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
+import { PROPERTY_TILE_CONFIG, FETCH_CONFIG, UI_CONFIG } from '@/constants/performance';
 
 function makeQueryClient() {
   return new QueryClient({
@@ -10,13 +10,15 @@ function makeQueryClient() {
       queries: {
         staleTime: PROPERTY_TILE_CONFIG.CLIENT_STALE_TIME_MS,
         gcTime: PROPERTY_TILE_CONFIG.CLIENT_GC_TIME_MS,
-        retry: 2,
+        retry: FETCH_CONFIG.QUERY_RETRY_COUNT,
         refetchOnWindowFocus: false,
       },
     },
   });
 }
 
+// Singleton QueryClient for browser to prevent creating multiple clients
+// during React's strict mode double-rendering
 let browserQueryClient: QueryClient | undefined = undefined;
 
 function getQueryClient() {
@@ -35,7 +37,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider delayDuration={300}>
+      <TooltipProvider delayDuration={UI_CONFIG.TOOLTIP_DELAY_MS}>
         {children}
       </TooltipProvider>
     </QueryClientProvider>

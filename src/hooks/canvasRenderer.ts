@@ -7,10 +7,8 @@
 
 import { HeatmapPoint, Bounds } from '@/types';
 import { getColorForK } from '@/constants';
-
-// Constants for cell size calculation
-const METERS_PER_DEGREE_LAT = 111320;
-const DEFAULT_CELL_SIZE_METERS = 100;
+import { METERS_PER_DEGREE_LAT } from '@/lib/geo';
+import { CANVAS_CONFIG } from '@/constants/performance';
 
 interface CanvasRenderOptions {
   opacity: number;
@@ -90,12 +88,12 @@ export function renderHeatmapToCanvas(
   }
   
   // Convert to pixels with slight overlap for smooth blending at edges
-  let cellWidthPx = Math.ceil(cellWidthDeg * scaleX * 1.2);
-  let cellHeightPx = Math.ceil(cellHeightDeg * scaleY * 1.2);
+  let cellWidthPx = Math.ceil(cellWidthDeg * scaleX * CANVAS_CONFIG.CELL_OVERLAP_MULTIPLIER);
+  let cellHeightPx = Math.ceil(cellHeightDeg * scaleY * CANVAS_CONFIG.CELL_OVERLAP_MULTIPLIER);
   
   // Ensure minimum cell size for visibility
-  cellWidthPx = Math.max(cellWidthPx, 3);
-  cellHeightPx = Math.max(cellHeightPx, 3);
+  cellWidthPx = Math.max(cellWidthPx, CANVAS_CONFIG.MIN_CELL_SIZE_PX);
+  cellHeightPx = Math.max(cellHeightPx, CANVAS_CONFIG.MIN_CELL_SIZE_PX);
 
   // Draw each point
   for (const point of points) {
@@ -127,9 +125,9 @@ export function renderHeatmapToCanvas(
     if (tempCtx) {
       // Copy current content
       tempCtx.drawImage(ctx.canvas, 0, 0);
-      // Clear and redraw with blur (3px to smooth tile boundaries)
+      // Clear and redraw with blur to smooth tile boundaries
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-      ctx.filter = 'blur(3px)';
+      ctx.filter = `blur(${CANVAS_CONFIG.TILE_BOUNDARY_BLUR_PX}px)`;
       ctx.drawImage(tempCanvas, 0, 0);
       ctx.filter = 'none';
     }

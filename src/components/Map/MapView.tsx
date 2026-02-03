@@ -169,7 +169,6 @@ const MAP_INIT_DELAY_MS = 100;
 const CANVAS_PIXELS_PER_CELL = 4;
 const CANVAS_MAX_DIMENSION = 4096;
 const CANVAS_MIN_DIMENSION = 256;
-const DEFAULT_GRID_SPACING = 0.002;
 
 // POI marker styling
 const POI_MARKER_RADIUS = 6;
@@ -330,6 +329,9 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   const [mapReady, setMapReady] = useState(false);
   const initializingRef = useRef(false);
   
+  // Cleanup function for long press handlers
+  const longPressCleanupRef = useRef<(() => void) | null>(null);
+  
   // Read debug tile state from store
   const showHeatmapTileBorders = useMapStore((s) => s.showHeatmapTileBorders);
   const showPropertyTileBorders = useMapStore((s) => s.showPropertyTileBorders);
@@ -480,11 +482,21 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           handleMapClick({ latlng } as L.LeafletMouseEvent);
         };
 
+        // Store cleanup functions for long press handlers
+        let cleanupTouchLongPress: (() => void) | undefined;
+        let cleanupMouseLongPress: (() => void) | undefined;
+
         const mapContainer = containerRef.current;
         if (mapContainer) {
-          setupTouchLongPress(mapContainer, map, onLongPress);
-          setupMouseLongPress(mapContainer, map, onLongPress);
+          cleanupTouchLongPress = setupTouchLongPress(mapContainer, map, onLongPress);
+          cleanupMouseLongPress = setupMouseLongPress(mapContainer, map, onLongPress);
         }
+
+        // Store cleanup functions in refs for use in cleanup
+        longPressCleanupRef.current = () => {
+          cleanupTouchLongPress?.();
+          cleanupMouseLongPress?.();
+        };
 
         setTimeout(() => {
           handleBoundsChange();
@@ -505,6 +517,12 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     initMap();
 
     return () => {
+      // Clean up long press event listeners
+      if (longPressCleanupRef.current) {
+        longPressCleanupRef.current();
+        longPressCleanupRef.current = null;
+      }
+      
       if (mapInstanceRef.current) {
         try {
           // Remove overlay before destroying map

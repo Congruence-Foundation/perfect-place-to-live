@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Settings, X, Eye, EyeOff, Database, Grid3X3 } from 'lucide-react';
+import { Settings, Eye, EyeOff, Database, Grid3X3 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
+import { PanelHeader } from '@/components/ui/panel-header';
 import { HeatmapSettings } from '@/types';
 import { DistanceCurve } from '@/types';
 import { ExtensionsSettingsPanel } from './ExtensionsSettingsPanel';
@@ -69,16 +70,7 @@ export default function MapSettings({
         <div className={`absolute bottom-12 right-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-64 animate-in fade-in slide-in-from-bottom-2 duration-200 ${
           isMobile ? 'max-h-[50vh] overflow-y-auto' : ''
         }`}>
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-semibold">{t('title')}</span>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="w-6 h-6 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
-            >
-              <X className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
-          </div>
+          <PanelHeader title={t('title')} onClose={() => setIsOpen(false)} className="mb-4" />
 
           <div className="space-y-4">
             {/* Show POIs */}

@@ -5,15 +5,6 @@
 import { DataSource } from '@/lib/errors';
 
 export const PERFORMANCE_CONFIG = {
-  /** Maximum POIs to process in a single batch */
-  MAX_BATCH_SIZE: 1000,
-  
-  /** Delay between Overpass API calls (ms) */
-  OVERPASS_DELAY_MS: 5000,
-  
-  /** Canvas rendering chunk size */
-  CANVAS_CHUNK_SIZE: 10000,
-  
   /** Default data source for POI fetching */
   DEFAULT_DATA_SOURCE: 'neon' as DataSource,
   
@@ -258,4 +249,101 @@ export const CACHE_CONFIG = {
   
   /** Fraction of entries to evict when memory cache is full */
   EVICTION_RATIO: 0.1,
+} as const;
+
+/**
+ * UI-related configuration constants
+ */
+export const UI_CONFIG = {
+  /** Default grid cell size in meters */
+  DEFAULT_GRID_CELL_SIZE: 200,
+  
+  /** Default threshold for detailed mode (max cluster count) */
+  DEFAULT_DETAILED_MODE_THRESHOLD: 100,
+  
+  /** Default zoom level for fly-to operations */
+  DEFAULT_FLY_TO_ZOOM: 13,
+  
+  /** Debounce delay for bounds changes (ms) */
+  BOUNDS_DEBOUNCE_MS: 500,
+  
+  /** Debounce delay for factor changes (ms) */
+  FACTORS_DEBOUNCE_MS: 300,
+  
+  /** Debounce delay for settings changes (ms) */
+  SETTINGS_DEBOUNCE_MS: 300,
+  
+  /** Duration for notification display (ms) */
+  NOTIFICATION_DURATION_MS: 3000,
+  
+  /** Geolocation timeout (ms) */
+  GEOLOCATION_TIMEOUT_MS: 10000,
+  
+  /** Geolocation max age (ms) */
+  GEOLOCATION_MAX_AGE_MS: 300000,
+  
+  /** Default heatmap opacity */
+  DEFAULT_HEATMAP_OPACITY: 0.15,
+  
+  /** Search radius multiplier for heatmap point lookup */
+  SEARCH_RADIUS_MULTIPLIER: 1.5,
+  
+  /** Tooltip delay duration (ms) */
+  TOOLTIP_DELAY_MS: 300,
+  
+  /** Default initial zoom level */
+  DEFAULT_INITIAL_ZOOM: 7,
+  
+  /** SSR fallback window height (px) */
+  SSR_FALLBACK_WINDOW_HEIGHT: 800,
+  
+  /** Panel width for desktop sidebar (px) */
+  PANEL_WIDTH: 320,
+  
+  /** Panel animation duration (ms) */
+  PANEL_ANIMATION_DURATION_MS: 350,
+} as const;
+
+/**
+ * Time constants for common durations
+ */
+export const TIME_CONSTANTS = {
+  /** Seconds per minute */
+  SECONDS_PER_MINUTE: 60,
+  /** Seconds per hour */
+  SECONDS_PER_HOUR: 3600,
+  /** Seconds per day */
+  SECONDS_PER_DAY: 86400,
+  /** Cookie max age for locale preference (1 year in seconds) */
+  LOCALE_COOKIE_MAX_AGE: 31536000,
+} as const;
+
+/**
+ * Fetch and network configuration
+ */
+export const FETCH_CONFIG = {
+  /** Heatmap fetch timeout (ms) */
+  HEATMAP_FETCH_TIMEOUT_MS: 30000,
+  /** Query client retry count */
+  QUERY_RETRY_COUNT: 2,
+} as const;
+
+/**
+ * Canvas rendering configuration
+ */
+export const CANVAS_CONFIG = {
+  /** Cell overlap multiplier for smooth blending */
+  CELL_OVERLAP_MULTIPLIER: 1.2,
+  /** Minimum cell size in pixels */
+  MIN_CELL_SIZE_PX: 3,
+  /** Tile boundary blur in pixels */
+  TILE_BOUNDARY_BLUR_PX: 3,
+} as const;
+
+/**
+ * Coordinate precision configuration
+ */
+export const COORDINATE_CONFIG = {
+  /** Decimal places for coordinate deduplication (~0.1m precision) */
+  DEDUP_PRECISION: 6,
 } as const;

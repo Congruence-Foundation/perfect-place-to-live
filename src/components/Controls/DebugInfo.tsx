@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { Bug, X, AlertCircle } from 'lucide-react';
+import { Bug, AlertCircle } from 'lucide-react';
 import { ExtensionsDebugPanel } from './ExtensionsDebugPanel';
+import { PanelHeader } from '@/components/ui/panel-header';
 
 interface L2CacheStatus {
   type: 'redis' | 'memory';
@@ -76,16 +77,7 @@ export default function DebugInfo({
       {/* Expanded Panel - Absolutely positioned above the button */}
       {isOpen && (
         <div className="absolute bottom-12 left-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-56 animate-in fade-in slide-in-from-bottom-2 duration-200">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-semibold">{t('title')}</span>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="w-6 h-6 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
-            >
-              <X className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
-          </div>
+          <PanelHeader title={t('title')} onClose={() => setIsOpen(false)} />
 
           <div className="space-y-2 text-xs">
             {/* Map Info Section */}
@@ -95,9 +87,6 @@ export default function DebugInfo({
                 <span className="font-mono font-medium">{zoomLevel.toFixed(1)}</span>
               </div>
             )}
-            
-            {/* Extension Debug Panels - Self-contained */}
-            <ExtensionsDebugPanel />
             
             {/* Heatmap Section */}
             <div className="flex justify-between">
@@ -126,6 +115,9 @@ export default function DebugInfo({
                 <span className="truncate">{error}</span>
               </div>
             )}
+            
+            {/* Extension Debug Panels - Self-contained (rendered at the end) */}
+            <ExtensionsDebugPanel />
             
             {/* Cache Section */}
             {(l2Status || l1CacheStats) && (

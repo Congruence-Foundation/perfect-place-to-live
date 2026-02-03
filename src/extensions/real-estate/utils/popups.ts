@@ -1,6 +1,13 @@
 import type { OtodomProperty, EnrichedProperty } from '../types';
 import { formatPrice, roomCountToNumber } from '@/lib/format';
-import { generatePriceAnalysisBadgeHtml, PRICE_BADGE_COLORS, PRICE_BADGE_LABELS } from './markers';
+import { generatePriceAnalysisBadgeHtml } from './markers';
+
+/**
+ * Type guard to check if a property is enriched with price analysis
+ */
+function isEnrichedProperty(property: OtodomProperty | EnrichedProperty): property is EnrichedProperty {
+  return 'priceAnalysis' in property;
+}
 
 /**
  * Generate popup HTML for a single property
@@ -74,23 +81,10 @@ export function generatePropertyPopupHtml(
   // Format rooms display
   const roomsDisplay = property.roomsNumber ? roomCountToNumber(property.roomsNumber) : null;
 
-  // Generate price analysis badge HTML
-  const priceAnalysis = property.priceAnalysis;
-  let priceAnalysisBadgeHtml = '';
-  if (priceAnalysis && priceAnalysis.priceCategory !== 'no_data') {
-    const badgeColors = PRICE_BADGE_COLORS[priceAnalysis.priceCategory] || PRICE_BADGE_COLORS.fair;
-    const badgeLabel = PRICE_BADGE_LABELS[priceAnalysis.priceCategory] || 'Fair';
-    const percentSign = priceAnalysis.percentFromMedian >= 0 ? '+' : '';
-    
-    priceAnalysisBadgeHtml = `
-      <div style="margin-bottom: 6px; padding: 6px 8px; background: ${badgeColors.bg}; border-radius: 4px;">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span style="font-size: 10px; color: ${badgeColors.text};">${badgeLabel} · vs ${priceAnalysis.groupSize} similar</span>
-          <span style="font-weight: 600; color: ${badgeColors.text}; font-size: 11px;">${percentSign}${priceAnalysis.percentFromMedian}%</span>
-        </div>
-      </div>
-    `;
-  }
+  // Generate price analysis badge HTML using shared utility
+  const priceAnalysisBadgeHtml = property.priceAnalysis 
+    ? generatePriceAnalysisBadgeHtml(property.priceAnalysis)
+    : '';
 
   return `
     <div style="min-width: 220px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
@@ -155,9 +149,10 @@ export function generateClusterPropertyPopupHtml(
   // Disable next button when we've reached the end of fetched properties
   const isAtEnd = currentIndex >= fetchedCount - 1;
 
-  // Generate price analysis badge HTML for cluster popup
-  const enrichedProp = property as EnrichedProperty;
-  const clusterPriceAnalysisBadgeHtml = generatePriceAnalysisBadgeHtml(enrichedProp.priceAnalysis);
+  // Generate price analysis badge HTML for cluster popup (only if enriched)
+  const clusterPriceAnalysisBadgeHtml = isEnrichedProperty(property) 
+    ? generatePriceAnalysisBadgeHtml(property.priceAnalysis)
+    : '';
 
   const imageHtml = property.images.length > 0 ? `
     <div style="position: relative; background: #f3f4f6; border-radius: 8px 8px 0 0; overflow: hidden;">

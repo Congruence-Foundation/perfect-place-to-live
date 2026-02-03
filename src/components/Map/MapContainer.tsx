@@ -99,6 +99,9 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
     railways: tFactors('railways'),
     cemeteries: tFactors('cemeteries'),
     construction: tFactors('construction'),
+    train_stations: tFactors('train_stations'),
+    city_center: tFactors('city_center'),
+    city_downtown: tFactors('city_downtown'),
   }), [tFactors]);
 
   useEffect(() => {

@@ -380,6 +380,17 @@ export function applyProfile(profileId: string): Factor[] {
   });
 }
 
+/**
+ * Filter factors to only those that are enabled and have non-zero weight
+ * Used for heatmap calculations to skip disabled factors
+ * 
+ * @param factors - Array of factors to filter
+ * @returns Array of enabled factors with non-zero weight
+ */
+export function getEnabledFactors(factors: Factor[]): Factor[] {
+  return factors.filter(f => f.enabled && f.weight !== 0);
+}
+
 export const POLAND_BOUNDS = {
   north: 54.9,
   south: 49.0,

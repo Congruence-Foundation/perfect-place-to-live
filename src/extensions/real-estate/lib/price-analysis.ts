@@ -7,9 +7,10 @@ import type {
   PriceCategory,
   PropertyCluster,
 } from '../types/property';
-import { distanceInMeters } from '@/lib/geo';
 import { roomCountToNumber } from '@/lib/format';
 import { createTimer } from '@/lib/profiling';
+import { findNearestHeatmapPoint } from './score-lookup';
+import { distanceInMeters } from '@/lib/geo';
 
 /**
  * Minimum number of properties in a group for valid statistical comparison
@@ -70,21 +71,8 @@ function getLocationQuality(
   heatmapPoints: HeatmapPoint[],
   searchRadius: number
 ): number | null {
-  if (!heatmapPoints || heatmapPoints.length === 0) {
-    return null;
-  }
-
-  let nearestPoint: HeatmapPoint | null = null;
-  let nearestDistance = Infinity;
-
-  for (const point of heatmapPoints) {
-    const distance = distanceInMeters(lat, lng, point.lat, point.lng);
-    if (distance < nearestDistance && distance <= searchRadius) {
-      nearestDistance = distance;
-      nearestPoint = point;
-    }
-  }
-
+  const nearestPoint = findNearestHeatmapPoint(lat, lng, heatmapPoints, searchRadius);
+  
   if (!nearestPoint) {
     return null;
   }

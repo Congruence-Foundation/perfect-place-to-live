@@ -21,7 +21,7 @@ import {
   HEATMAP_TILE_ZOOM,
 } from '@/lib/geo/tiles';
 import { getTilesForBounds, tileToBounds } from '@/lib/geo';
-import { HEATMAP_TILE_CONFIG } from '@/constants/performance';
+import { HEATMAP_TILE_CONFIG, FETCH_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
 import { useMapStore } from '@/stores/mapStore';
 
@@ -111,9 +111,9 @@ async function fetchHeatmapBatch(
   viewportBounds: Bounds,
   signal?: AbortSignal
 ): Promise<BatchHeatmapResponse> {
-  // Create a timeout signal that aborts after 30 seconds
+  // Create a timeout signal that aborts after configured timeout
   const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => timeoutController.abort(), 30000);
+  const timeoutId = setTimeout(() => timeoutController.abort(), FETCH_CONFIG.HEATMAP_FETCH_TIMEOUT_MS);
   
   // Combine the external signal with the timeout signal
   const combinedSignal = signal 
@@ -431,12 +431,10 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
       }
       
       // Remove points outside combined bounds
-      let prunedCount = 0;
       for (const [key, point] of accumulatedPointsRef.current) {
         if (point.lat < minLat || point.lat > maxLat || 
             point.lng < minLng || point.lng > maxLng) {
           accumulatedPointsRef.current.delete(key);
-          prunedCount++;
         }
       }
       

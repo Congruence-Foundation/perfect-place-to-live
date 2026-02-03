@@ -13,7 +13,6 @@ export { default as ExtensionsSidebar } from './ExtensionsSidebar';
 export { default as ExtensionsBottomSheet } from './ExtensionsBottomSheet';
 export { ExtensionsDebugPanel } from './ExtensionsDebugPanel';
 export { ExtensionsSettingsPanel } from './ExtensionsSettingsPanel';
-export type { HeatmapSettings } from '@/types';
 
 // Reusable filter components
 export { RangeInput, ToggleButtonGroup, FilterSelect } from './filters';

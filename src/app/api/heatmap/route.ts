@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { encode } from '@msgpack/msgpack';
 import { fetchPoisWithFallback, DataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
-import { DEFAULT_FACTORS } from '@/config/factors';
+import { DEFAULT_FACTORS, getEnabledFactors } from '@/config/factors';
 import { Factor, POI, HeatmapRequest } from '@/types';
-import { estimateGridSize, calculateAdaptiveGridSize, expandBounds, isValidBounds } from '@/lib/geo';
+import { estimateGridSize, calculateAdaptiveGridSize, expandBounds, isValidBounds, filterPoisToBounds } from '@/lib/geo';
 import { errorResponse } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG } from '@/constants/performance';
 
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     // Use provided factors or defaults
     const factors: Factor[] = requestFactors || DEFAULT_FACTORS;
-    const enabledFactors = factors.filter((f) => f.enabled && f.weight !== 0);
+    const enabledFactors = getEnabledFactors(factors);
 
     if (enabledFactors.length === 0) {
       return errorResponse(new Error('No enabled factors'), 400);
@@ -114,16 +114,7 @@ export async function POST(request: NextRequest) {
     // Convert POI data to plain object for response
     // Use expanded poiBounds (not viewport bounds) so POIs extend beyond visible area
     // This prevents POIs from disappearing at edges when panning
-    const poisByFactor: Record<string, POI[]> = {};
-    poiData.forEach((pois, factorId) => {
-      poisByFactor[factorId] = pois.filter(
-        (poi) =>
-          poi.lat >= poiBounds.south &&
-          poi.lat <= poiBounds.north &&
-          poi.lng >= poiBounds.west &&
-          poi.lng <= poiBounds.east
-      );
-    });
+    const poisByFactor = filterPoisToBounds(poiData, poiBounds);
 
     const responseData = {
       points: heatmapPoints,

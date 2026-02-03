@@ -9,9 +9,7 @@
     "active": "{count} aktywnych",
     "reset": "Resetuj",
     "refresh": "Odśwież",
-    "stop": "Zatrzymaj",
     "calculating": "Obliczanie...",
-    "zoomIn": "Przybliż, aby obliczyć",
     "zoomInFirst": "Najpierw przybliż",
     "fallbackNotice": "Używam Overpass API dla tego obszaru",
     "extensions": "Nieruchomości",
@@ -29,10 +27,6 @@
     "title": "Ustawienia",
     "showPOIs": "Pokaż POI",
     "showPOIsTooltip": "Wyświetl punkty zainteresowania (kawiarnie, parki itp.) na mapie jako znaczniki.",
-    "gridResolution": "Rozdzielczość siatki",
-    "gridResolutionTooltip": "Odległość między punktami próbkowania. Mniejsze wartości dają więcej szczegółów, ale obliczenia trwają dłużej.",
-    "dense": "Gęsta",
-    "fast": "Szybka",
     "curve": "Krzywa",
     "curveTooltip": "Kontroluje wpływ odległości na wynik. Określa czułość na zmiany odległości.",
     "sensitivity": "Czułość",
@@ -41,13 +35,6 @@
     "aggressive": "Agresywna",
     "relativeMode": "Tryb względny",
     "relativeModeTooltip": "Po włączeniu kolory pokazują względne różnice w bieżącym widoku, podkreślając najlepsze/najgorsze obszary, nawet jeśli są podobne.",
-    "computation": "Obliczenia",
-    "computationTooltip": "Czas rzeczywisty oblicza na żądanie z niestandardowymi wagami. Pamięć podręczna używa wstępnie obliczonych kafelków dla szybszego ładowania.",
-    "realtime": "Na żywo",
-    "cached": "Cache",
-    "cachedNotAvailable": "Kafelki z pamięci podręcznej nie są jeszcze dostępne",
-    "dataSource": "Źródło danych",
-    "dataSourceTooltip": "Neon DB jest szybszy (dane w cache). Overpass API pobiera dane w czasie rzeczywistym z OpenStreetMap, ale jest wolniejszy.",
     "useOverpass": "Użyj Overpass API",
     "useOverpassTooltip": "Włącz, aby zawsze pobierać dane w czasie rzeczywistym z OpenStreetMap. Gdy wyłączone, aplikacja używa szybkich danych z cache, ale automatycznie przełączy się na Overpass, jeśli brak danych dla danego obszaru.",
     "clusterPrice": "Cena klastra",
@@ -121,9 +108,6 @@
     "locateMe": "Przejdź do mojej lokalizacji",
     "locationFailed": "Nie udało się pobrać lokalizacji",
     "noGeolocation": "Geolokalizacja nie jest obsługiwana"
-  },
-  "hint": {
-    "rightClick": "Kliknij prawym na mapie, aby zobaczyć szczegóły"
   },
   "categories": {
     "essential": "Podstawowe",
@@ -216,7 +200,7 @@
     "city_center": "Dostęp do miasta",
     "city_downtown": "Centrum miasta"
   },
-    "popup": {
+  "popup": {
     "excellent": "Doskonały",
     "good": "Dobry",
     "average": "Przeciętny",
@@ -302,13 +286,6 @@
     "building=construction": "Budynki w budowie",
     "place=city": "Miasta",
     "place=town": "Miasteczka"
-  },
-  "realEstatePopup": {
-    "priceNegotiable": "Cena do negocjacji",
-    "noListingsFound": "Nie znaleziono ofert w tym obszarze",
-    "loadingError": "Błąd ładowania ofert",
-    "loading": "Ładowanie...",
-    "showMore": "Pokaż więcej"
   },
   "realEstate": {
     "title": "Nieruchomości",

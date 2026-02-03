@@ -1,10 +1,10 @@
 'use client';
 
-import * as React from 'react';
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import { Label } from '@/components/ui/label';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import type { PriceValueFilter as PriceValueFilterType } from '../../types/property';
+import { PRICE_CATEGORY_COLORS } from '../../lib';
 import { cn } from '@/lib/utils';
 
 interface PriceValueFilterOption {
@@ -15,12 +15,12 @@ interface PriceValueFilterOption {
 }
 
 const PRICE_VALUE_OPTIONS: PriceValueFilterOption[] = [
-  { value: 'all', label: 'All', color: '#6b7280', position: 0 },
-  { value: 'great_deal', label: 'Great', color: '#16a34a', position: 20 },
-  { value: 'good_deal', label: 'Good', color: '#22c55e', position: 40 },
-  { value: 'fair', label: 'Fair', color: '#3b82f6', position: 60 },
-  { value: 'above_avg', label: 'Above', color: '#f97316', position: 80 },
-  { value: 'overpriced', label: 'Over', color: '#ef4444', position: 100 },
+  { value: 'all', label: 'All', color: PRICE_CATEGORY_COLORS.no_data, position: 0 },
+  { value: 'great_deal', label: 'Great', color: PRICE_CATEGORY_COLORS.great_deal, position: 20 },
+  { value: 'good_deal', label: 'Good', color: PRICE_CATEGORY_COLORS.good_deal, position: 40 },
+  { value: 'fair', label: 'Fair', color: PRICE_CATEGORY_COLORS.fair, position: 60 },
+  { value: 'above_avg', label: 'Above', color: PRICE_CATEGORY_COLORS.above_avg, position: 80 },
+  { value: 'overpriced', label: 'Over', color: PRICE_CATEGORY_COLORS.overpriced, position: 100 },
 ];
 
 // Get label for current range
@@ -57,11 +57,6 @@ function getRangeColor(range: [number, number]): string {
     Math.abs(curr.position - midpoint) < Math.abs(prev.position - midpoint) ? curr : prev
   );
   return closest.color;
-}
-
-export interface PriceValueRange {
-  min: number; // 0-100
-  max: number; // 0-100
 }
 
 interface PriceValueFilterProps {

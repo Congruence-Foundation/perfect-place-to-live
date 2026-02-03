@@ -15,6 +15,7 @@ import { Loader2, ChevronLeft, ChevronRight, SlidersHorizontal, ChevronDown, Rot
 import { Toast } from '@/components/ui/toast';
 import { useMapStore } from '@/stores/mapStore';
 import { ExtensionControllers } from '@/components/ExtensionControllers';
+import { UI_CONFIG } from '@/constants/performance';
 
 /**
  * Props for HomeContent - data passed from wrapper
@@ -104,13 +105,13 @@ function HomeContent({
   
   // Local heatmap settings that sync with parent
   const [heatmapSettings, setHeatmapSettings] = useState<HeatmapSettings>({
-    gridCellSize: 200,
+    gridCellSize: UI_CONFIG.DEFAULT_GRID_CELL_SIZE,
     distanceCurve: distanceCurve,
     sensitivity: sensitivity,
     normalizeToViewport: normalizeToViewport,
     clusterPriceDisplay: 'median',
     clusterPriceAnalysis: 'simplified',
-    detailedModeThreshold: 100,
+    detailedModeThreshold: UI_CONFIG.DEFAULT_DETAILED_MODE_THRESHOLD,
   });
 
   // Track bottom sheet height for mobile loading overlay positioning
@@ -123,9 +124,9 @@ function HomeContent({
   const { notification, showNotification } = useNotification();
 
   // Debounce bounds and factors to avoid too many API calls
-  const debouncedBounds = useDebounce(bounds, 500);
-  const debouncedFactors = useDebounce(factors, 300);
-  const debouncedSettings = useDebounce(heatmapSettings, 300);
+  const debouncedBounds = useDebounce(bounds, UI_CONFIG.BOUNDS_DEBOUNCE_MS);
+  const debouncedFactors = useDebounce(factors, UI_CONFIG.FACTORS_DEBOUNCE_MS);
+  const debouncedSettings = useDebounce(heatmapSettings, UI_CONFIG.SETTINGS_DEBOUNCE_MS);
 
   // Track if user has interacted (searched for a city)
   const hasInteracted = useRef(false);
@@ -137,7 +138,7 @@ function HomeContent({
   // Track previous context values to avoid unnecessary updates
   const prevContextRef = useRef<string>('');
   // Track previous heatmap data to avoid unnecessary store updates
-  const prevHeatmapRef = useRef<{ points: HeatmapPoint[]; pois: Record<string, POI[]> }>({ points: [], pois: {} });
+  const prevHeatmapRef = useRef<{ points: HeatmapPoint[] }>({ points: [] });
   // Track previous settings to avoid unnecessary store updates
   const prevSettingsRef = useRef<string>('');
 
@@ -161,11 +162,11 @@ function HomeContent({
   // Update map store when heatmap data changes (with reference check)
   useEffect(() => {
     // Only update if the actual data changed (not just reference)
-    if (heatmapPoints !== prevHeatmapRef.current.points || pois !== prevHeatmapRef.current.pois) {
-      prevHeatmapRef.current = { points: heatmapPoints, pois };
-      setMapContext({ heatmapPoints, pois });
+    if (heatmapPoints !== prevHeatmapRef.current.points) {
+      prevHeatmapRef.current = { points: heatmapPoints };
+      setMapContext({ heatmapPoints });
     }
-  }, [heatmapPoints, pois, setMapContext]);
+  }, [heatmapPoints, setMapContext]);
 
   // Update map store when settings change (with hash check)
   useEffect(() => {
@@ -200,7 +201,7 @@ function HomeContent({
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
-          mapRef.current?.flyTo(latitude, longitude, 13);
+          mapRef.current?.flyTo(latitude, longitude, UI_CONFIG.DEFAULT_FLY_TO_ZOOM);
           hasInteracted.current = true;
         },
         () => {
@@ -208,8 +209,8 @@ function HomeContent({
         },
         {
           enableHighAccuracy: false,
-          timeout: 10000,
-          maximumAge: 300000,
+          timeout: UI_CONFIG.GEOLOCATION_TIMEOUT_MS,
+          maximumAge: UI_CONFIG.GEOLOCATION_MAX_AGE_MS,
         }
       );
     }
@@ -268,14 +269,14 @@ function HomeContent({
     if (cityBounds) {
       mapRef.current?.fitBounds(cityBounds);
     } else {
-      mapRef.current?.flyTo(lat, lng, 13);
+      mapRef.current?.flyTo(lat, lng, UI_CONFIG.DEFAULT_FLY_TO_ZOOM);
     }
   }, []);
 
   // Show notification when fallback to Overpass occurs
   useEffect(() => {
     if (usedFallback && !useOverpassAPI) {
-      showNotification(tControls('fallbackNotice'), 3000);
+      showNotification(tControls('fallbackNotice'), UI_CONFIG.NOTIFICATION_DURATION_MS);
       clearFallbackNotification();
     }
   }, [usedFallback, useOverpassAPI, showNotification, clearFallbackNotification, tControls]);
