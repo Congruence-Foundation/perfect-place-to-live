@@ -158,16 +158,3 @@ export const useMapStore = create<MapStore>()(
     { name: 'map-store' }
   )
 );
-
-/**
- * Selector hooks for common use cases
- */
-export const useMapBounds = () => useMapStore((s) => s.bounds);
-export const useMapZoom = () => useMapStore((s) => s.zoom);
-export const useHeatmapPoints = () => useMapStore((s) => s.heatmapPoints);
-export const useMapInstances = () => useMapStore((s) => ({
-  map: s.mapInstance,
-  L: s.leafletInstance,
-  layerGroup: s.extensionLayerGroup,
-  isReady: s.isMapReady,
-}));

@@ -13,21 +13,148 @@
  * - name?: string
  */
 
-import type { Bounds, POI } from '@/types';
+import type { Bounds, POI, FactorDef } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { getPOIsFromDB, getPOIsForTilesBatched as getPOIsForTilesBatchedDB } from './db';
 import { fetchAllPOIsCombined, fetchPOIsForTilesBatched as fetchPOIsForTilesBatchedOverpass } from './overpass';
 import { POIFetchError, DataSource } from '@/lib/errors';
 import { createTimer } from '@/lib/profiling';
+import { cacheGet, cacheSet } from '@/lib/cache';
+import { generatePOICacheKey } from './overpass';
+import { PERFORMANCE_CONFIG } from '@/constants/performance';
 
 export type { DataSource } from '@/lib/errors';
 
+const { POI_CACHE_TTL_SECONDS } = PERFORMANCE_CONFIG;
+
 /**
- * Factor definition for POI fetching
+ * Result of POI fetching with fallback
  */
-interface FactorDef {
-  id: string;
-  osmTags: string[];
+export interface FetchPoisWithFallbackResult {
+  poiData: Map<string, POI[]>;
+  actualDataSource: DataSource;
+}
+
+/**
+ * Fetches POIs with automatic fallback from Neon to Overpass.
+ * 
+ * This function handles:
+ * 1. Checking cache for Neon source
+ * 2. Fetching uncached POIs
+ * 3. Falling back to Overpass if Neon returns empty or errors
+ * 4. Caching results
+ * 
+ * @param factors - Array of factor definitions with IDs and OSM tags
+ * @param bounds - Geographic bounding box for POI fetching
+ * @param preferredSource - Preferred data source (default: 'neon')
+ * @param existingPoiData - Optional existing POI data to merge with
+ * @returns POI data map and the actual data source used
+ */
+export async function fetchPoisWithFallback(
+  factors: FactorDef[],
+  bounds: Bounds,
+  preferredSource: DataSource = 'neon',
+  existingPoiData?: Map<string, POI[]>
+): Promise<FetchPoisWithFallbackResult> {
+  const poiData = existingPoiData ? new Map(existingPoiData) : new Map<string, POI[]>();
+  const uncachedFactors: FactorDef[] = [];
+  let actualDataSource: DataSource = preferredSource;
+
+  // Check cache first for Neon source
+  if (preferredSource === 'neon') {
+    for (const factor of factors) {
+      const cacheKey = generatePOICacheKey(factor.id, bounds);
+      const cached = await cacheGet<POI[]>(cacheKey);
+      
+      if (cached) {
+        poiData.set(factor.id, cached);
+      } else {
+        uncachedFactors.push(factor);
+      }
+    }
+  } else {
+    // For Overpass, always fetch fresh data
+    uncachedFactors.push(...factors);
+  }
+
+  // Fetch uncached POIs
+  if (uncachedFactors.length > 0) {
+    try {
+      const fetchedPOIs = await fetchPOIs(uncachedFactors, bounds, actualDataSource);
+      
+      // Check if Neon returned empty results - might need to fallback to Overpass
+      const totalPOIs = Object.values(fetchedPOIs).reduce((sum, pois) => sum + pois.length, 0);
+      
+      if (actualDataSource === 'neon' && totalPOIs === 0) {
+        // No data in Neon DB for this area - try Overpass as fallback
+        console.log('No POIs found in Neon DB, falling back to Overpass API...');
+        actualDataSource = 'overpass';
+        
+        try {
+          const overpassPOIs = await fetchPOIs(uncachedFactors, bounds, 'overpass');
+          
+          // Store Overpass results
+          for (const [factorId, pois] of Object.entries(overpassPOIs)) {
+            poiData.set(factorId, pois);
+            // Cache the results for future requests
+            const cacheKey = generatePOICacheKey(factorId, bounds);
+            await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
+          }
+        } catch (overpassError) {
+          console.error('Overpass fallback also failed:', overpassError);
+          // Initialize empty arrays for failed factors
+          for (const factor of uncachedFactors) {
+            if (!poiData.has(factor.id)) {
+              poiData.set(factor.id, []);
+            }
+          }
+        }
+      } else {
+        // Store in cache and add to poiData
+        for (const [factorId, pois] of Object.entries(fetchedPOIs)) {
+          poiData.set(factorId, pois);
+          // Cache the results (useful for both sources)
+          const cacheKey = generatePOICacheKey(factorId, bounds);
+          await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching POIs from ${actualDataSource}:`, error);
+      
+      // If Neon failed, try Overpass as fallback
+      if (actualDataSource === 'neon') {
+        console.log('Neon DB error, falling back to Overpass API...');
+        actualDataSource = 'overpass';
+        
+        try {
+          const overpassPOIs = await fetchPOIs(uncachedFactors, bounds, 'overpass');
+          
+          for (const [factorId, pois] of Object.entries(overpassPOIs)) {
+            poiData.set(factorId, pois);
+            const cacheKey = generatePOICacheKey(factorId, bounds);
+            await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
+          }
+        } catch (overpassError) {
+          console.error('Overpass fallback also failed:', overpassError);
+          // Initialize empty arrays for failed factors
+          for (const factor of uncachedFactors) {
+            if (!poiData.has(factor.id)) {
+              poiData.set(factor.id, []);
+            }
+          }
+        }
+      } else {
+        // Initialize empty arrays for failed factors
+        for (const factor of uncachedFactors) {
+          if (!poiData.has(factor.id)) {
+            poiData.set(factor.id, []);
+          }
+        }
+      }
+    }
+  }
+
+  return { poiData, actualDataSource };
 }
 
 /**

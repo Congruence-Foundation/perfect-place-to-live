@@ -66,10 +66,3 @@ export function getExtensionRegistry(): ExtensionRegistry {
 export function registerExtension(extension: MapExtension): void {
   getExtensionRegistry().register(extension);
 }
-
-/**
- * Unregister an extension from the global registry
- */
-export function unregisterExtension(extensionId: string): void {
-  getExtensionRegistry().unregister(extensionId);
-}

@@ -13,7 +13,7 @@
  */
 
 import { LRUCache } from 'lru-cache';
-import type { POI, Bounds } from '@/types';
+import type { POI, Bounds, FactorDef } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { getPoiTileKey } from '@/lib/geo/tiles';
 import { fetchPOIsBatched, type DataSource } from '@/lib/poi';
@@ -24,14 +24,6 @@ import { createTimer } from '@/lib/profiling';
 // ============================================================================
 // Types
 // ============================================================================
-
-/**
- * Factor definition for POI fetching
- */
-interface FactorDef {
-  id: string;
-  osmTags: string[];
-}
 
 /**
  * Cache check result for a single tile+factor combination
@@ -394,13 +386,6 @@ export function filterPoisToViewport(
 // ============================================================================
 // Cache Management
 // ============================================================================
-
-/**
- * Clear the POI tile cache (useful for testing)
- */
-export function clearPoiTileCache(): void {
-  poiTileLRU.clear();
-}
 
 /**
  * Get cache statistics

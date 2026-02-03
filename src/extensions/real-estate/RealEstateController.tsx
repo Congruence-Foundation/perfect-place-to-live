@@ -15,7 +15,7 @@ import {
   filterPropertiesByScore,
   filterClustersByScore,
 } from './lib';
-import { createTimer, logPerf, isProfilingEnabled } from '@/lib/profiling';
+import { createTimer } from '@/lib/profiling';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
 
 /**

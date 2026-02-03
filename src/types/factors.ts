@@ -9,3 +9,12 @@ export interface Factor {
   category: 'essential' | 'lifestyle' | 'environment';
   defaultWeight: number; // Store original default for reset
 }
+
+/**
+ * Minimal factor definition for POI fetching
+ * Used when only id and osmTags are needed
+ */
+export interface FactorDef {
+  id: string;
+  osmTags: string[];
+}

@@ -52,38 +52,30 @@ export function expandBounds(bounds: Bounds, buffer: number): Bounds {
 }
 
 /**
- * Check if a viewport is fully contained within covered bounds
- * Used to determine if existing heatmap data covers the current view
+ * Check if a point is within bounds (inclusive)
  * 
- * @param viewport - The current viewport bounds
- * @param coveredBounds - The bounds that are currently covered by data
- * @returns true if viewport is fully within coveredBounds
+ * @param lat - Latitude of the point
+ * @param lng - Longitude of the point
+ * @param bounds - Geographic bounds to check against
+ * @returns true if point is within bounds
  */
-export function isViewportCovered(viewport: Bounds, coveredBounds: Bounds | null): boolean {
-  if (!coveredBounds) return false;
+export function isPointInBounds(lat: number, lng: number, bounds: Bounds): boolean {
   return (
-    viewport.north <= coveredBounds.north &&
-    viewport.south >= coveredBounds.south &&
-    viewport.east <= coveredBounds.east &&
-    viewport.west >= coveredBounds.west
+    lat >= bounds.south &&
+    lat <= bounds.north &&
+    lng >= bounds.west &&
+    lng <= bounds.east
   );
 }
 
 /**
- * Check if bounds exceed a maximum size threshold
- * Used to prevent fetching data for very large viewports
+ * Create a coordinate key string for deduplication
  * 
- * @param bounds - The geographic bounds
- * @param maxLatRange - Maximum allowed latitude range (default: 0.5)
- * @param maxLngRange - Maximum allowed longitude range (default: 0.75)
- * @returns true if bounds exceed the threshold
+ * @param lat - Latitude
+ * @param lng - Longitude
+ * @param precision - Number of decimal places (default: 6, ~0.1m precision)
+ * @returns Coordinate key string in format "lat:lng"
  */
-export function isBoundsTooLarge(
-  bounds: Bounds,
-  maxLatRange: number = 0.5,
-  maxLngRange: number = 0.75
-): boolean {
-  const latRange = bounds.north - bounds.south;
-  const lngRange = bounds.east - bounds.west;
-  return latRange > maxLatRange || lngRange > maxLngRange;
+export function createCoordKey(lat: number, lng: number, precision: number = 6): string {
+  return `${lat.toFixed(precision)}:${lng.toFixed(precision)}`;
 }

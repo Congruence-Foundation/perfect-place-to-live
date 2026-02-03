@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { encode } from '@msgpack/msgpack';
-import { generatePOICacheKey, fetchPOIs, DataSource } from '@/lib/poi';
+import { fetchPoisWithFallback, DataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
-import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS } from '@/config/factors';
 import { Factor, POI } from '@/types';
 import { tileToBounds, expandBounds, isValidBounds } from '@/lib/geo';
 import { getHeatmapTileKey, hashHeatmapConfig } from '@/lib/geo/tiles';
 import { getCachedHeatmapTile, setCachedHeatmapTile } from '@/lib/heatmap-tile-cache';
 import { errorResponse } from '@/lib/api-utils';
-import { PERFORMANCE_CONFIG, HEATMAP_TILE_CONFIG } from '@/constants/performance';
+import { PERFORMANCE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const { 
   POI_BUFFER_DEGREES,
-  POI_CACHE_TTL_SECONDS,
   DEFAULT_DATA_SOURCE,
   TARGET_GRID_POINTS,
   MIN_CELL_SIZE,
@@ -120,96 +118,13 @@ export async function POST(request: NextRequest) {
     const tileWidthMeters = 4800; // Approximate at Poland's latitude
     const gridSize = Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, tileWidthMeters / Math.sqrt(TARGET_GRID_POINTS / 4)));
 
-    // Fetch POIs
-    const poiData = new Map<string, POI[]>();
-    const uncachedFactors: { id: string; osmTags: string[] }[] = [];
-    let actualDataSource: DataSource = dataSource;
-
-    if (dataSource === 'neon') {
-      // Check cache first for Neon
-      for (const factor of enabledFactors) {
-        const poiCacheKey = generatePOICacheKey(factor.id, poiBounds);
-        const cachedPOIs = await cacheGet<POI[]>(poiCacheKey);
-        
-        if (cachedPOIs) {
-          poiData.set(factor.id, cachedPOIs);
-        } else {
-          uncachedFactors.push({ id: factor.id, osmTags: factor.osmTags });
-        }
-      }
-    } else {
-      for (const factor of enabledFactors) {
-        uncachedFactors.push({ id: factor.id, osmTags: factor.osmTags });
-      }
-    }
-
-    // Fetch uncached POIs
-    if (uncachedFactors.length > 0) {
-      try {
-        const fetchedPOIs = await fetchPOIs(uncachedFactors, poiBounds, actualDataSource);
-        
-        const totalPOIs = Object.values(fetchedPOIs).reduce((sum, pois) => sum + pois.length, 0);
-        
-        if (actualDataSource === 'neon' && totalPOIs === 0) {
-          // Fallback to Overpass
-          console.log('No POIs found in Neon DB for tile, falling back to Overpass API...');
-          actualDataSource = 'overpass';
-          
-          try {
-            const overpassPOIs = await fetchPOIs(uncachedFactors, poiBounds, 'overpass');
-            
-            for (const [factorId, pois] of Object.entries(overpassPOIs)) {
-              poiData.set(factorId, pois);
-              const poiCacheKey = generatePOICacheKey(factorId, poiBounds);
-              await cacheSet(poiCacheKey, pois, POI_CACHE_TTL_SECONDS);
-            }
-          } catch (overpassError) {
-            console.error('Overpass fallback failed:', overpassError);
-            for (const factor of uncachedFactors) {
-              if (!poiData.has(factor.id)) {
-                poiData.set(factor.id, []);
-              }
-            }
-          }
-        } else {
-          for (const [factorId, pois] of Object.entries(fetchedPOIs)) {
-            poiData.set(factorId, pois);
-            const poiCacheKey = generatePOICacheKey(factorId, poiBounds);
-            await cacheSet(poiCacheKey, pois, POI_CACHE_TTL_SECONDS);
-          }
-        }
-      } catch (error) {
-        console.error(`Error fetching POIs from ${actualDataSource}:`, error);
-        
-        if (actualDataSource === 'neon') {
-          console.log('Neon DB error, falling back to Overpass API...');
-          actualDataSource = 'overpass';
-          
-          try {
-            const overpassPOIs = await fetchPOIs(uncachedFactors, poiBounds, 'overpass');
-            
-            for (const [factorId, pois] of Object.entries(overpassPOIs)) {
-              poiData.set(factorId, pois);
-              const poiCacheKey = generatePOICacheKey(factorId, poiBounds);
-              await cacheSet(poiCacheKey, pois, POI_CACHE_TTL_SECONDS);
-            }
-          } catch (overpassError) {
-            console.error('Overpass fallback failed:', overpassError);
-            for (const factor of uncachedFactors) {
-              if (!poiData.has(factor.id)) {
-                poiData.set(factor.id, []);
-              }
-            }
-          }
-        } else {
-          for (const factor of uncachedFactors) {
-            if (!poiData.has(factor.id)) {
-              poiData.set(factor.id, []);
-            }
-          }
-        }
-      }
-    }
+    // Fetch POIs with automatic fallback from Neon to Overpass
+    const factorDefs = enabledFactors.map(f => ({ id: f.id, osmTags: f.osmTags }));
+    const { poiData, actualDataSource } = await fetchPoisWithFallback(
+      factorDefs,
+      poiBounds,
+      dataSource
+    );
 
     // Calculate heatmap for this tile
     const heatmapPoints = await calculateHeatmapParallel(

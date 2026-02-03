@@ -8,6 +8,7 @@ import type { PropertyFilters } from '@/extensions/real-estate/types';
 import type { Factor } from '@/types/factors';
 import { PROPERTY_TILE_CONFIG, HEATMAP_TILE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 import { getTilesForBounds } from './grid';
+import { djb2Hash } from '@/lib/utils';
 
 /**
  * Tile coordinate type
@@ -109,97 +110,7 @@ export function hashFilters(filters: PropertyFilters): string {
     isBungalow: filters.isBungalow,
   });
 
-  // Simple hash function (djb2)
-  let hash = 5381;
-  for (let i = 0; i < key.length; i++) {
-    hash = ((hash << 5) + hash) + key.charCodeAt(i);
-    hash |= 0; // Convert to 32-bit integer
-  }
-
-  return Math.abs(hash).toString(36);
-}
-
-/**
- * Check if the viewport is too large for tile-based fetching
- * Returns true if the number of tiles exceeds the maximum allowed
- * 
- * @param bounds - Geographic bounds of the viewport
- * @param tileZoom - Zoom level for tiles (defaults to PROPERTY_TILE_ZOOM)
- * @returns True if viewport is too large
- */
-export function isViewportTooLarge(
-  bounds: Bounds,
-  tileZoom: number = PROPERTY_TILE_ZOOM
-): boolean {
-  const tiles = getTilesForBounds(bounds, tileZoom);
-  return tiles.length > PROPERTY_TILE_CONFIG.MAX_VIEWPORT_TILES;
-}
-
-/**
- * Get property tiles for a viewport with optional radius expansion
- * 
- * @param bounds - Geographic bounds of the viewport
- * @param radius - Number of tile layers to add around the viewport (default: 0)
- * @returns Object containing viewport tiles, all tiles, and whether viewport is too large
- */
-export function getPropertyTilesForBounds(
-  bounds: Bounds,
-  radius: number = 0
-): {
-  viewportTiles: TileCoord[];
-  allTiles: TileCoord[];
-  isTooLarge: boolean;
-} {
-  const tileZoom = PROPERTY_TILE_ZOOM;
-  const viewportTiles = getTilesForBounds(bounds, tileZoom);
-
-  if (viewportTiles.length > PROPERTY_TILE_CONFIG.MAX_VIEWPORT_TILES) {
-    return { viewportTiles: [], allTiles: [], isTooLarge: true };
-  }
-
-  const allTiles = getExpandedTilesForRadius(viewportTiles, radius);
-
-  // Check if total tiles exceed hard limit
-  if (allTiles.length > PROPERTY_TILE_CONFIG.MAX_TOTAL_TILES) {
-    // Reduce radius until within limit
-    let reducedRadius = radius;
-    let reducedTiles = allTiles;
-    
-    while (reducedTiles.length > PROPERTY_TILE_CONFIG.MAX_TOTAL_TILES && reducedRadius > 0) {
-      reducedRadius--;
-      reducedTiles = getExpandedTilesForRadius(viewportTiles, reducedRadius);
-    }
-    
-    return { viewportTiles, allTiles: reducedTiles, isTooLarge: false };
-  }
-
-  return { viewportTiles, allTiles, isTooLarge: false };
-}
-
-/**
- * Separate viewport tiles from buffer tiles
- * Useful for prioritizing viewport tiles in batched fetching
- * 
- * @param viewportTiles - Tiles within the viewport
- * @param allTiles - All tiles including buffer
- * @returns Object with viewport and buffer tiles separated
- */
-export function separateViewportAndBufferTiles(
-  viewportTiles: TileCoord[],
-  allTiles: TileCoord[]
-): {
-  viewport: TileCoord[];
-  buffer: TileCoord[];
-} {
-  const viewportSet = new Set(
-    viewportTiles.map(t => `${t.z}:${t.x}:${t.y}`)
-  );
-
-  const buffer = allTiles.filter(
-    t => !viewportSet.has(`${t.z}:${t.x}:${t.y}`)
-  );
-
-  return { viewport: viewportTiles, buffer };
+  return djb2Hash(key);
 }
 
 // ============================================================================
@@ -246,14 +157,7 @@ export function hashHeatmapConfig(config: HeatmapConfig): string {
     sensitivity: config.sensitivity,
   });
 
-  // Simple hash function (djb2)
-  let hash = 5381;
-  for (let i = 0; i < key.length; i++) {
-    hash = ((hash << 5) + hash) + key.charCodeAt(i);
-    hash |= 0; // Convert to 32-bit integer
-  }
-
-  return Math.abs(hash).toString(36);
+  return djb2Hash(key);
 }
 
 /**
@@ -266,58 +170,6 @@ export function hashHeatmapConfig(config: HeatmapConfig): string {
  */
 export function getHeatmapTileKey(z: number, x: number, y: number, configHash: string): string {
   return `heatmap-tile:${z}:${x}:${y}:${configHash}`;
-}
-
-/**
- * Check if the viewport is too large for heatmap tile-based fetching
- * Returns true if the number of tiles exceeds the maximum allowed
- * 
- * @param bounds - Geographic bounds of the viewport
- * @returns True if viewport is too large
- */
-export function isHeatmapViewportTooLarge(bounds: Bounds): boolean {
-  const tiles = getTilesForBounds(bounds, HEATMAP_TILE_ZOOM);
-  return tiles.length > HEATMAP_TILE_CONFIG.MAX_VIEWPORT_TILES;
-}
-
-/**
- * Get heatmap tiles for a viewport with optional radius expansion
- * 
- * @param bounds - Geographic bounds of the viewport
- * @param radius - Number of tile layers to add around the viewport (default: 0)
- * @returns Object containing viewport tiles, all tiles, and whether viewport is too large
- */
-export function getHeatmapTilesForBounds(
-  bounds: Bounds,
-  radius: number = 0
-): {
-  viewportTiles: TileCoord[];
-  allTiles: TileCoord[];
-  isTooLarge: boolean;
-} {
-  const viewportTiles = getTilesForBounds(bounds, HEATMAP_TILE_ZOOM);
-
-  if (viewportTiles.length > HEATMAP_TILE_CONFIG.MAX_VIEWPORT_TILES) {
-    return { viewportTiles: [], allTiles: [], isTooLarge: true };
-  }
-
-  const allTiles = getExpandedTilesForRadius(viewportTiles, radius);
-
-  // Check if total tiles exceed hard limit
-  if (allTiles.length > HEATMAP_TILE_CONFIG.MAX_TOTAL_TILES) {
-    // Reduce radius until within limit
-    let reducedRadius = radius;
-    let reducedTiles = allTiles;
-    
-    while (reducedTiles.length > HEATMAP_TILE_CONFIG.MAX_TOTAL_TILES && reducedRadius > 0) {
-      reducedRadius--;
-      reducedTiles = getExpandedTilesForRadius(viewportTiles, reducedRadius);
-    }
-    
-    return { viewportTiles, allTiles: reducedTiles, isTooLarge: false };
-  }
-
-  return { viewportTiles, allTiles, isTooLarge: false };
 }
 
 // ============================================================================
@@ -400,47 +252,4 @@ export function getPoiTilesForHeatmapTiles(
   }
   
   return poiTiles;
-}
-
-/**
- * Get combined bounds for a set of tiles
- * 
- * @param tiles - Array of tile coordinates
- * @returns Combined geographic bounds
- */
-export function getCombinedTileBounds(tiles: TileCoord[]): Bounds | null {
-  if (tiles.length === 0) return null;
-  
-  let north = -Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let west = Infinity;
-  
-  for (const tile of tiles) {
-    const bounds = getTileBoundsFromCoord(tile);
-    if (bounds.north > north) north = bounds.north;
-    if (bounds.south < south) south = bounds.south;
-    if (bounds.east > east) east = bounds.east;
-    if (bounds.west < west) west = bounds.west;
-  }
-  
-  return { north, south, east, west };
-}
-
-/**
- * Get bounds for a single tile coordinate
- */
-function getTileBoundsFromCoord(tile: TileCoord): Bounds {
-  const { z, x, y } = tile;
-  const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
-  
-  const north = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-  const south = (180 / Math.PI) * Math.atan(
-    0.5 * (Math.exp(n - (2 * Math.PI) / Math.pow(2, z)) - Math.exp(-(n - (2 * Math.PI) / Math.pow(2, z))))
-  );
-  
-  const west = (x / Math.pow(2, z)) * 360 - 180;
-  const east = ((x + 1) / Math.pow(2, z)) * 360 - 180;
-  
-  return { north, south, east, west };
 }

@@ -28,8 +28,6 @@ interface MapSettingsProps {
   onSettingsChange: (settings: Partial<HeatmapSettings>) => void;
   showPOIs: boolean;
   onShowPOIsChange: (show: boolean) => void;
-  mode: 'realtime' | 'precomputed';
-  onModeChange: (mode: 'realtime' | 'precomputed') => void;
   useOverpassAPI?: boolean;
   onUseOverpassAPIChange?: (use: boolean) => void;
   isMobile?: boolean;
@@ -40,8 +38,6 @@ export default function MapSettings({
   onSettingsChange,
   showPOIs,
   onShowPOIsChange,
-  mode,
-  onModeChange,
   useOverpassAPI = false,
   onUseOverpassAPIChange,
   isMobile = false,

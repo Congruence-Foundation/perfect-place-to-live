@@ -98,7 +98,6 @@ function HomeContent({
   // bounds and zoomLevel now come from props
   const [factors, setFactors] = useState<Factor[]>(DEFAULT_FACTORS);
   const [selectedProfile, setSelectedProfile] = useState<string | null>('balanced');
-  const [mode, setMode] = useState<'realtime' | 'precomputed'>('realtime');
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [isFactorsExpanded, setIsFactorsExpanded] = useState(false);
   const [showPOIs, setShowPOIs] = useState(false);
@@ -448,8 +447,6 @@ function HomeContent({
                 isLoading={isLoading}
                 disabled={isRefreshDisabled}
                 disabledReason={isTooLarge ? 'tooLarge' : null}
-                loadedTiles={loadedTileCount}
-                totalTiles={tileCount}
                 onRefresh={onRefresh}
                 onAbort={onAbort}
               />
@@ -471,8 +468,6 @@ function HomeContent({
               onSettingsChange={handleSettingsChange}
               showPOIs={showPOIs}
               onShowPOIsChange={setShowPOIs}
-              mode={mode}
-              onModeChange={setMode}
               useOverpassAPI={useOverpassAPI}
               onUseOverpassAPIChange={onUseOverpassAPIChange}
               isMobile={false}
@@ -526,8 +521,6 @@ function HomeContent({
                 isLoading={isLoading}
                 disabled={isRefreshDisabled}
                 disabledReason={isTooLarge ? 'tooLarge' : null}
-                loadedTiles={loadedTileCount}
-                totalTiles={tileCount}
                 onRefresh={onRefresh}
                 onAbort={onAbort}
               />
@@ -538,8 +531,6 @@ function HomeContent({
                 onSettingsChange={handleSettingsChange}
                 showPOIs={showPOIs}
                 onShowPOIsChange={setShowPOIs}
-                mode={mode}
-                onModeChange={setMode}
                 useOverpassAPI={useOverpassAPI}
                 onUseOverpassAPIChange={onUseOverpassAPIChange}
                 isMobile={true}

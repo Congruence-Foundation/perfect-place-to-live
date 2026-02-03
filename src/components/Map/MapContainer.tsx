@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, forwardRef, useImperativeHandle, useRef, useMemo, useCallback, useContext } from 'react';
+import { useEffect, useState, forwardRef, useImperativeHandle, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { POLAND_CENTER } from '@/config/factors';

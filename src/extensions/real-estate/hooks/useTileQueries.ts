@@ -30,7 +30,7 @@ import {
 } from '@/lib/geo/tiles';
 import { getTilesForBounds } from '@/lib/geo';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
-import { createTimer, logPerf } from '@/lib/profiling';
+import { createTimer } from '@/lib/profiling';
 
 /**
  * Response from the tile API

@@ -40,10 +40,3 @@ export function createTimer(label: string): (metadata?: Record<string, unknown>)
   const start = performance.now();
   return (metadata?: Record<string, unknown>) => logPerf(label, performance.now() - start, metadata);
 }
-
-/**
- * Check if profiling is enabled
- */
-export function isProfilingEnabled(): boolean {
-  return PROFILING_ENABLED;
-}

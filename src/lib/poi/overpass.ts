@@ -1,4 +1,4 @@
-import type { Bounds, POI } from '@/types';
+import type { Bounds, POI, FactorDef } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { tileToBounds } from '@/lib/geo/grid';
 import { OVERPASS_API_URL } from '@/config/factors';
@@ -220,15 +220,6 @@ function matchesAnyTag(poiTags: Record<string, string>, osmTags: string[]): bool
     const [key, value] = tagStr.split('=');
     return poiTags[key] === value;
   });
-}
-
-// ============================================================================
-// Factor Definition Type
-// ============================================================================
-
-interface FactorDef {
-  id: string;
-  osmTags: string[];
 }
 
 // ============================================================================

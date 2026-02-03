@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';

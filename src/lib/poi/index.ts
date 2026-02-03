@@ -7,7 +7,6 @@
 export { 
   getPOIsFromDB,
   getPOIsForTilesBatched,
-  getPOIsWithDetailsFromDB, // Legacy alias
 } from './db';
 
 // Overpass API
@@ -19,5 +18,5 @@ export {
 } from './overpass';
 
 // Unified service
-export { fetchPOIs, fetchPOIsBatched } from './service';
-export type { DataSource } from './service';
+export { fetchPOIs, fetchPOIsBatched, fetchPoisWithFallback } from './service';
+export type { DataSource, FetchPoisWithFallbackResult } from './service';

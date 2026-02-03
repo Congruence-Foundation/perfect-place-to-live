@@ -207,6 +207,3 @@ function isPointInBounds(lat: number, lng: number, bounds: Bounds): boolean {
     lng <= bounds.east
   );
 }
-
-// Legacy alias for backward compatibility
-export const getPOIsWithDetailsFromDB = getPOIsFromDB;

@@ -245,3 +245,17 @@ export const POI_TILE_CONFIG = {
   /** Approximate tile size in meters at Poland's latitude (~52°) for zoom 13 */
   TILE_SIZE_METERS: 2400,
 } as const;
+
+/**
+ * Base cache configuration for Redis/memory fallback
+ */
+export const CACHE_CONFIG = {
+  /** Default TTL for cache entries in seconds - 1 hour */
+  DEFAULT_TTL_SECONDS: 3600,
+  
+  /** Maximum entries in memory cache fallback */
+  MEMORY_CACHE_MAX_SIZE: 10000,
+  
+  /** Fraction of entries to evict when memory cache is full */
+  EVICTION_RATIO: 0.1,
+} as const;

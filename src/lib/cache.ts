@@ -1,10 +1,8 @@
 import { Redis } from '@upstash/redis';
+import { CACHE_CONFIG } from '@/constants/performance';
 
 // In-memory cache for development/fallback
 const memoryCache = new Map<string, { data: unknown; expiresAt: number }>();
-
-const DEFAULT_TTL = 3600; // 1 hour in seconds
-const MEMORY_CACHE_MAX_SIZE = 10000; // Prevent unbounded growth
 
 // Lazy-initialize Redis client
 let redis: Redis | null = null;
@@ -63,7 +61,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 /**
  * Set a value in cache
  */
-export async function cacheSet<T>(key: string, value: T, ttl: number = DEFAULT_TTL): Promise<void> {
+export async function cacheSet<T>(key: string, value: T, ttl: number = CACHE_CONFIG.DEFAULT_TTL_SECONDS): Promise<void> {
   try {
     const client = getRedis();
     if (client) {
@@ -72,9 +70,12 @@ export async function cacheSet<T>(key: string, value: T, ttl: number = DEFAULT_T
     }
 
     // Fallback to memory cache with size limit
-    if (memoryCache.size >= MEMORY_CACHE_MAX_SIZE) {
-      // Simple eviction: remove oldest entries (first 10%)
-      const keysToDelete = Array.from(memoryCache.keys()).slice(0, Math.floor(MEMORY_CACHE_MAX_SIZE * 0.1));
+    if (memoryCache.size >= CACHE_CONFIG.MEMORY_CACHE_MAX_SIZE) {
+      // Simple eviction: remove oldest entries
+      const keysToDelete = Array.from(memoryCache.keys()).slice(
+        0, 
+        Math.floor(CACHE_CONFIG.MEMORY_CACHE_MAX_SIZE * CACHE_CONFIG.EVICTION_RATIO)
+      );
       for (const k of keysToDelete) {
         memoryCache.delete(k);
       }
@@ -139,6 +140,7 @@ export async function testCacheConnection(): Promise<{ success: boolean; latency
 
 /**
  * Get Redis database stats (key count)
+ * Note: DBSIZE may return 0 with some Upstash configurations due to REST API limitations.
  */
 export async function getRedisStats(): Promise<{ keyCount: number } | null> {
   const client = getRedis();

@@ -33,6 +33,12 @@ export const POI_COLORS: Record<string, string> = {
 };
 
 /**
+ * Default fallback color for unknown categories or missing data
+ * Gray-500 from Tailwind
+ */
+export const DEFAULT_FALLBACK_COLOR = '#6b7280';
+
+/**
  * Color interpolation for K values
  * Uses ABSOLUTE K values (not normalized) so colors are consistent
  * K is 0-1 where 0 = excellent, 1 = poor

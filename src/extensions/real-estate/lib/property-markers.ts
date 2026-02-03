@@ -116,10 +116,3 @@ export function getPropertyMarkerClassName(estateType: EstateType, priceCategory
   }
   return base;
 }
-
-/**
- * Get the color for a price category
- */
-export function getPriceCategoryBorderColor(category: PriceCategory): string {
-  return PRICE_CATEGORY_COLORS[category] || PRICE_CATEGORY_COLORS.no_data;
-}

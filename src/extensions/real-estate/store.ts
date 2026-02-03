@@ -2,14 +2,12 @@
 
 import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
-import type { Bounds } from '@/types';
 import type {
   OtodomProperty,
   PropertyFilters,
   PropertyCluster,
   EnrichedProperty,
   PriceValueRange,
-  PropertyResponse,
 } from './types';
 import { DEFAULT_PROPERTY_FILTERS } from './types';
 import type { DataSource } from './config';
@@ -79,9 +77,6 @@ export interface RealEstateActions {
   
   // Clear all
   clearProperties: () => void;
-  
-  // Legacy fetch action (kept for backwards compatibility, but useTileQueries is preferred)
-  fetchProperties: (bounds: Bounds) => Promise<void>;
 }
 
 /**
@@ -226,88 +221,7 @@ export const useRealEstateStore = create<RealEstateStore>()(
           'clearProperties'
         );
       },
-      
-      // Fetch properties from API
-      fetchProperties: async (bounds: Bounds) => {
-        // Cancel any pending request
-        if (abortController) {
-          abortController.abort();
-        }
-        
-        // Create new abort controller and increment request ID
-        abortController = new AbortController();
-        const currentRequestId = ++requestId;
-        
-        const { filters } = get();
-        
-        set({ isLoading: true, error: null }, false, 'fetchProperties/start');
-        
-        try {
-          const response = await fetch('/api/properties', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bounds, filters }),
-            signal: abortController.signal,
-          });
-          
-          // Check if this request is still the latest one
-          if (currentRequestId !== requestId) {
-            return;
-          }
-          
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.message || `HTTP error: ${response.status}`);
-          }
-          
-          const data: PropertyResponse = await response.json();
-          
-          // Double-check this is still the latest request
-          if (currentRequestId === requestId) {
-            set(
-              {
-                rawProperties: data.properties,
-                rawClusters: data.clusters || [],
-                totalCount: data.totalCount,
-                isLoading: false,
-                clusterPropertiesCache: new Map(),
-                cacheVersion: get().cacheVersion + 1,
-              },
-              false,
-              'fetchProperties/success'
-            );
-          }
-        } catch (err) {
-          if (err instanceof Error && err.name === 'AbortError') {
-            return;
-          }
-          if (currentRequestId === requestId) {
-            set(
-              {
-                error: err instanceof Error ? err.message : 'Failed to fetch properties',
-                isLoading: false,
-              },
-              false,
-              'fetchProperties/error'
-            );
-            console.error('Properties fetch error:', err);
-          }
-        }
-      },
     })),
     { name: 'real-estate-store' }
   )
 );
-
-/**
- * Selector hooks for common use cases
- */
-export const useRealEstateEnabled = () => useRealEstateStore((s) => s.enabled);
-export const useRealEstateFilters = () => useRealEstateStore((s) => s.filters);
-export const useRealEstateProperties = () => useRealEstateStore((s) => s.properties);
-export const useRealEstateClusters = () => useRealEstateStore((s) => s.clusters);
-export const useRealEstateLoading = () => useRealEstateStore((s) => s.isLoading);
-export const useRealEstateError = () => useRealEstateStore((s) => s.error);
-export const useRealEstatePriceAnalysisRadius = () => useRealEstateStore((s) => s.priceAnalysisRadius);
-export const useRealEstateIsTooLarge = () => useRealEstateStore((s) => s.isTooLarge);
-export const useRealEstateIsBelowMinZoom = () => useRealEstateStore((s) => s.isBelowMinZoom);

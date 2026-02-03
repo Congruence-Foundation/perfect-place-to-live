@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 
 /**
  * Snap point configuration
@@ -63,62 +63,59 @@ export function useSnapPoints(config: SnapPointConfig = DEFAULT_SNAP_CONFIG) {
   });
   const [isMounted, setIsMounted] = useState(false);
 
+  // Memoize snap heights to avoid recalculating on every callback call
+  const snapHeights = useMemo(() => calculateSnapHeights(config), [config]);
+
   // Track mount state for SSR safety
   useEffect(() => {
     setIsMounted(true);
-    const snaps = calculateSnapHeights(config);
-    setHeight(snaps.collapsed);
-  }, [config]);
+    setHeight(snapHeights.collapsed);
+  }, [snapHeights.collapsed]);
 
   /**
    * Get snap heights in pixels
    */
   const getSnapHeights = useCallback((): SnapHeights => {
-    return calculateSnapHeights(config);
-  }, [config]);
+    return snapHeights;
+  }, [snapHeights]);
 
   /**
    * Get current snap point name based on height
    */
   const getCurrentSnapPoint = useCallback((): SnapPointName => {
-    const snaps = calculateSnapHeights(config);
-    
-    if (height < (snaps.collapsed + snaps.half) / 2) return 'collapsed';
-    if (height < (snaps.half + snaps.expanded) / 2) return 'half';
+    if (height < (snapHeights.collapsed + snapHeights.half) / 2) return 'collapsed';
+    if (height < (snapHeights.half + snapHeights.expanded) / 2) return 'half';
     return 'expanded';
-  }, [height, config]);
+  }, [height, snapHeights]);
 
   /**
    * Snap to the nearest snap point
    */
   const snapToNearest = useCallback((currentHeight: number): SnapPointName => {
-    const snaps = calculateSnapHeights(config);
-    
-    const collapsedDist = Math.abs(currentHeight - snaps.collapsed);
-    const halfDist = Math.abs(currentHeight - snaps.half);
-    const expandedDist = Math.abs(currentHeight - snaps.expanded);
+    const collapsedDist = Math.abs(currentHeight - snapHeights.collapsed);
+    const halfDist = Math.abs(currentHeight - snapHeights.half);
+    const expandedDist = Math.abs(currentHeight - snapHeights.expanded);
     
     const minDist = Math.min(collapsedDist, halfDist, expandedDist);
     
     if (minDist === collapsedDist) {
-      setHeight(snaps.collapsed);
+      setHeight(snapHeights.collapsed);
       return 'collapsed';
     } else if (minDist === halfDist) {
-      setHeight(snaps.half);
+      setHeight(snapHeights.half);
       return 'half';
     } else {
-      setHeight(snaps.expanded);
+      setHeight(snapHeights.expanded);
       return 'expanded';
     }
-  }, [config]);
+  }, [snapHeights]);
 
   /**
    * Clamp height between collapsed and expanded
    */
   const clampHeight = useCallback((newHeight: number): number => {
-    const snaps = calculateSnapHeights(config);
-    return Math.max(snaps.collapsed, Math.min(newHeight, snaps.expanded));
-  }, [config]);
+    return Math.max(snapHeights.collapsed, Math.min(newHeight, snapHeights.expanded));
+  }, [snapHeights]);
 
   return {
     height,

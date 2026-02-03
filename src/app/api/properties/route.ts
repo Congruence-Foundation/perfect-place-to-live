@@ -5,7 +5,7 @@ import { isValidBounds, tileToBounds } from '@/lib/geo';
 import { hashFilters } from '@/lib/geo/tiles';
 import { getCachedTile, setCachedTile, generateTileCacheKey, type TileCacheEntry } from '@/lib/tile-cache';
 import { errorResponse } from '@/lib/api-utils';
-import { createTimer, logPerf } from '@/lib/profiling';
+import { createTimer } from '@/lib/profiling';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

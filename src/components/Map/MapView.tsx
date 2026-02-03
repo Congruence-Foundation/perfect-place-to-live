@@ -5,7 +5,7 @@ import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
 import { POI_COLORS, getColorForK, Z_INDEX } from '@/constants';
 import { formatDistance } from '@/lib/utils';
 import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/scoring';
-import { renderHeatmapToCanvas } from '@/hooks/useCanvasRenderer';
+import { renderHeatmapToCanvas } from '@/hooks/canvasRenderer';
 import { useMapStore } from '@/stores/mapStore';
 
 // Popup translations interface

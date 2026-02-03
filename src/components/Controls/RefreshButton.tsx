@@ -1,14 +1,12 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Square, Loader2 } from 'lucide-react';
+import { RefreshCw, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 interface RefreshButtonProps {
   isLoading: boolean;
   disabled: boolean;
-  loadedTiles: number;
-  totalTiles: number;
   onRefresh: () => void;
   onAbort: () => void;
   /** Reason for being disabled - shows different text */
@@ -22,8 +20,6 @@ interface RefreshButtonProps {
 export function RefreshButton({
   isLoading,
   disabled,
-  loadedTiles,
-  totalTiles,
   onRefresh,
   onAbort,
   disabledReason,
