@@ -10,7 +10,7 @@ import type {
   PriceValueRange,
 } from './types';
 import { DEFAULT_PROPERTY_FILTERS } from './types';
-import type { DataSource } from './config';
+import type { PropertyDataSource } from './config';
 import type { ClusterAnalysisMap } from './lib';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
 
@@ -23,7 +23,7 @@ export interface RealEstateState {
   filters: PropertyFilters;
   scoreRange: [number, number];
   priceValueRange: PriceValueRange;
-  dataSources: DataSource[];
+  dataSources: PropertyDataSource[];
   
   // Tile-based fetching settings
   priceAnalysisRadius: number; // 0, 1, or 2 tile layers around viewport
@@ -58,7 +58,7 @@ export interface RealEstateActions {
   setFilters: (filters: Partial<PropertyFilters>) => void;
   setScoreRange: (range: [number, number]) => void;
   setPriceValueRange: (range: PriceValueRange) => void;
-  setDataSources: (sources: DataSource[]) => void;
+  setDataSources: (sources: PropertyDataSource[]) => void;
   setPriceAnalysisRadius: (radius: number) => void;
   
   // Data actions

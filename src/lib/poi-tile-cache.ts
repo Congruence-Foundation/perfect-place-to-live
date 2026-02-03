@@ -18,7 +18,7 @@ import type { TileCoord } from '@/lib/geo/tiles';
 import { getPoiTileKey } from '@/lib/geo/tiles';
 import { fetchPOIsBatched, type DataSource } from '@/lib/poi';
 import { cacheGet, cacheSet } from '@/lib/cache';
-import { POI_TILE_CONFIG } from '@/constants/performance';
+import { POI_TILE_CONFIG, COORDINATE_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
 
 // ============================================================================
@@ -334,8 +334,8 @@ function deduplicateResults(result: Map<string, POI[]>): Map<string, POI[]> {
   for (const [factorId, pois] of result) {
     const seen = new Set<string>();
     const unique = pois.filter(poi => {
-      // Use 6 decimal places (~0.1m precision)
-      const key = `${poi.lat.toFixed(6)}:${poi.lng.toFixed(6)}`;
+      // Use configured precision for deduplication
+      const key = `${poi.lat.toFixed(COORDINATE_CONFIG.DEDUP_PRECISION)}:${poi.lng.toFixed(COORDINATE_CONFIG.DEDUP_PRECISION)}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

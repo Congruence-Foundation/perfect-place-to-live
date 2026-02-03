@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
-import { POI_COLORS, getColorForK, Z_INDEX } from '@/constants';
+import { POI_COLORS, getColorForK, Z_INDEX, DEBUG_COLORS } from '@/constants';
 import { formatDistance } from '@/lib/utils';
 import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/scoring';
-import { renderHeatmapToCanvas } from '@/hooks/canvasRenderer';
+import { renderHeatmapToCanvas } from '@/lib/rendering/canvasRenderer';
 import { useMapStore } from '@/stores/mapStore';
 
 // Popup translations interface
@@ -35,8 +35,6 @@ function getRatingLabel(k: number, translations: PopupTranslations): { label: st
 
 // Generate popup HTML content - compact version
 function generatePopupContent(
-  lat: number,
-  lng: number,
   k: number,
   breakdown: FactorBreakdown[],
   translations: PopupTranslations,
@@ -57,20 +55,7 @@ function generatePopupContent(
   const kColor = getColorForK(k);
   const scorePercent = Math.round((1 - k) * 100);
 
-  let html = `
-    <div style="min-width: 200px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 11px;">
-      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb;">
-        <span style="font-size: 18px;">${rating.emoji}</span>
-        <div style="flex: 1;">
-          <span style="font-weight: 600; font-size: 13px; color: ${kColor};">${rating.label}</span>
-          <span style="color: #6b7280; margin-left: 4px;">${scorePercent}%</span>
-        </div>
-      </div>
-      <table style="width: 100%; border-collapse: collapse;">
-        <tbody>
-  `;
-
-  for (const item of breakdown) {
+  const breakdownRows = breakdown.map(item => {
     const color = POI_COLORS[item.factorId] || '#6b7280';
     const distanceText = item.noPOIs ? '—' : formatDistance(item.distance);
     const barColor = item.score < 0.3 ? '#22c55e' : item.score < 0.6 ? '#eab308' : '#ef4444';
@@ -84,7 +69,7 @@ function generatePopupContent(
     const nearbyText = item.nearbyCount > 1 ? `(${item.nearbyCount})` : '';
     const factorName = factorTranslations[item.factorId] || item.factorName;
 
-    html += `
+    return `
       <tr style="height: 22px;">
         <td style="width: 10px; padding: 2px 0;">
           <div style="width: 6px; height: 6px; border-radius: 50%; background: ${color};"></div>
@@ -102,9 +87,20 @@ function generatePopupContent(
         <td style="width: 14px; text-align: center; color: ${iconColor}; font-weight: bold;">${icon}</td>
       </tr>
     `;
-  }
+  }).join('');
 
-  html += `
+  return `
+    <div style="min-width: 200px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 11px;">
+      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb;">
+        <span style="font-size: 18px;">${rating.emoji}</span>
+        <div style="flex: 1;">
+          <span style="font-weight: 600; font-size: 13px; color: ${kColor};">${rating.label}</span>
+          <span style="color: #6b7280; margin-left: 4px;">${scorePercent}%</span>
+        </div>
+      </div>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tbody>
+          ${breakdownRows}
         </tbody>
       </table>
       <div style="font-size: 9px; color: #9ca3af; margin-top: 4px; padding-top: 4px; border-top: 1px solid #e5e7eb;">
@@ -112,8 +108,6 @@ function generatePopupContent(
       </div>
     </div>
   `;
-
-  return html;
 }
 
 export interface MapViewRef {
@@ -319,7 +313,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const leafletRef = useRef<typeof import('leaflet') | null>(null);
-  const gridLayerRef = useRef<L.LayerGroup | null>(null);
   const poiLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const extensionLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const canvasOverlayRef = useRef<L.ImageOverlay | null>(null);
@@ -349,7 +342,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   // Track previous heatmap data to avoid unnecessary re-renders
   const prevHeatmapHashRef = useRef<string>('');
   
-  const currentBoundsRef = useRef<Bounds | null>(null);
   const poisRef = useRef(pois);
   const factorsRef = useRef(factors);
   const popupTranslationsRef = useRef(popupTranslations);
@@ -376,7 +368,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     );
     
     const popupContent = generatePopupContent(
-      lat, lng, k, breakdown,
+      k, breakdown,
       popupTranslationsRef.current,
       factorTranslationsRef.current
     );
@@ -446,7 +438,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         }).addTo(map);
 
-        gridLayerRef.current = L.layerGroup().addTo(map);
         poiLayerGroupRef.current = L.layerGroup().addTo(map);
         extensionLayerGroupRef.current = L.layerGroup().addTo(map);
         
@@ -535,7 +526,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         }
         mapInstanceRef.current = null;
         leafletRef.current = null;
-        gridLayerRef.current = null;
         poiLayerGroupRef.current = null;
         extensionLayerGroupRef.current = null;
         canvasOverlayRef.current = null;
@@ -581,10 +571,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
       try {
         const L = (await import('leaflet')).default;
         if (!mapInstanceRef.current) return;
-
-        if (gridLayerRef.current) {
-          gridLayerRef.current.clearLayers();
-        }
 
         // If no points, remove existing overlay and return
         if (heatmapPoints.length === 0) {
@@ -639,7 +625,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           east: maxLng,
           west: minLng,
         };
-        currentBoundsRef.current = bounds;
 
         if (!offscreenCanvasRef.current) {
           offscreenCanvasRef.current = document.createElement('canvas');
@@ -810,7 +795,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
             map.createPane('tileBorderPane');
             tileBorderPane = map.getPane('tileBorderPane');
             if (tileBorderPane) {
-              tileBorderPane.style.zIndex = '500'; // Above heatmap (450)
+              tileBorderPane.style.zIndex = String(Z_INDEX.MAP_TILE_BORDER_PANE);
               tileBorderPane.style.pointerEvents = 'none';
             }
           }
@@ -838,7 +823,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
               const rect = L.rectangle(
                 [[bounds.south, bounds.west], [bounds.north, bounds.east]],
                 {
-                  color: '#3b82f6',
+                  color: DEBUG_COLORS.HEATMAP_TILE_BORDER,
                   weight: 2,
                   fill: false,
                   dashArray: '5, 5',
@@ -873,7 +858,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
               const rect = L.rectangle(
                 [[bounds.south, bounds.west], [bounds.north, bounds.east]],
                 {
-                  color: '#f97316',
+                  color: DEBUG_COLORS.PROPERTY_TILE_BORDER,
                   weight: 2,
                   fill: false,
                   dashArray: '3, 3',

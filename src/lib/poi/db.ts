@@ -2,9 +2,13 @@ import { neon } from '@neondatabase/serverless';
 import type { Bounds, POI } from '@/types';
 import { createTimer } from '@/lib/profiling';
 import type { TileCoord } from '@/lib/geo/tiles';
-import { tileToBounds } from '@/lib/geo/grid';
-import { isPointInBounds, getCombinedBounds } from '@/lib/geo/bounds';
-import { getTileKeyString } from '@/lib/geo/tiles';
+import { getCombinedBounds } from '@/lib/geo/bounds';
+import {
+  initializeTileResultMap,
+  computeTileBoundsMap,
+  findTileForPoint,
+  assignPOIToTile,
+} from './tile-utils';
 
 /**
  * Create a Neon SQL client
@@ -141,37 +145,15 @@ function distributePOIsToTiles(
   tiles: TileCoord[],
   factorIds: string[]
 ): Map<string, Record<string, POI[]>> {
-  // Pre-compute tile bounds for efficient lookup
-  const tileBoundsMap = new Map<string, Bounds>();
-  for (const tile of tiles) {
-    const key = getTileKeyString(tile);
-    tileBoundsMap.set(key, tileToBounds(tile.z, tile.x, tile.y));
-  }
+  const tileBoundsMap = computeTileBoundsMap(tiles);
+  const result = initializeTileResultMap(tiles, factorIds);
 
-  // Initialize result map with empty arrays for each tile and factor
-  const result = new Map<string, Record<string, POI[]>>();
-  for (const tile of tiles) {
-    const key = getTileKeyString(tile);
-    const factorMap: Record<string, POI[]> = {};
-    for (const factorId of factorIds) {
-      factorMap[factorId] = [];
-    }
-    result.set(key, factorMap);
-  }
-
-  // Assign each POI to its tile
   for (const row of rows) {
     const poi = rowToPOI(row);
+    const tileKey = findTileForPoint(poi.lat, poi.lng, tileBoundsMap);
     
-    // Find which tile contains this POI
-    for (const [tileKey, bounds] of tileBoundsMap) {
-      if (isPointInBounds(poi.lat, poi.lng, bounds)) {
-        const tileData = result.get(tileKey);
-        if (tileData && tileData[row.factor_id]) {
-          tileData[row.factor_id].push(poi);
-        }
-        break; // POI belongs to exactly one tile
-      }
+    if (tileKey) {
+      assignPOIToTile(poi, row.factor_id, tileKey, result);
     }
   }
 

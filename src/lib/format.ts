@@ -1,3 +1,7 @@
+// Price formatting thresholds
+const ONE_MILLION = 1_000_000;
+const ONE_THOUSAND = 1_000;
+
 /**
  * Format a price value with appropriate suffix (k, M) and currency
  * 
@@ -6,8 +10,8 @@
  * @returns Formatted price string (e.g., "1.50 M PLN", "500 k PLN", "999 PLN")
  */
 export function formatPrice(price: number, currency: string = 'PLN'): string {
-  if (price >= 1000000) return `${(price / 1000000).toFixed(2)} M ${currency}`;
-  if (price >= 1000) return `${(price / 1000).toFixed(0)} k ${currency}`;
+  if (price >= ONE_MILLION) return `${(price / ONE_MILLION).toFixed(2)} M ${currency}`;
+  if (price >= ONE_THOUSAND) return `${(price / ONE_THOUSAND).toFixed(0)} k ${currency}`;
   return `${price} ${currency}`;
 }
 
@@ -18,12 +22,12 @@ export function formatPrice(price: number, currency: string = 'PLN'): string {
  * @returns Compact price string (e.g., "1.5M", "500k", "999")
  */
 export function formatCompactPrice(price: number): string {
-  if (price >= 1000000) {
-    const millions = price / 1000000;
+  if (price >= ONE_MILLION) {
+    const millions = price / ONE_MILLION;
     return millions % 1 === 0 ? `${millions}M` : `${millions.toFixed(1)}M`;
   }
-  if (price >= 1000) {
-    const thousands = price / 1000;
+  if (price >= ONE_THOUSAND) {
+    const thousands = price / ONE_THOUSAND;
     return thousands % 1 === 0 ? `${thousands}k` : `${thousands.toFixed(0)}k`;
   }
   return price.toString();

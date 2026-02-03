@@ -1,8 +1,6 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
-import { InfoTooltip } from '@/components/ui/info-tooltip';
-import { getExtensions } from '@/extensions/utils';
+import ExtensionsPanelList from './ExtensionsPanelList';
 
 /**
  * ExtensionsBottomSheet Component
@@ -12,30 +10,5 @@ import { getExtensions } from '@/extensions/utils';
  * The bottom sheet content is self-contained and manages its own state internally.
  */
 export default function ExtensionsBottomSheet() {
-  const tControls = useTranslations('controls');
-  const extensions = getExtensions();
-
-  return (
-    <div className="pb-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          {tControls('extensions')}
-        </span>
-        <InfoTooltip>
-          <p className="text-xs">{tControls('extensionsTooltip')}</p>
-        </InfoTooltip>
-      </div>
-      
-      {extensions.map((extension) => {
-        const BottomSheetContent = extension.BottomSheetContent;
-        if (!BottomSheetContent) return null;
-        
-        return (
-          <div key={extension.id}>
-            <BottomSheetContent />
-          </div>
-        );
-      })}
-    </div>
-  );
+  return <ExtensionsPanelList panelType="BottomSheetContent" className="pb-4" />;
 }

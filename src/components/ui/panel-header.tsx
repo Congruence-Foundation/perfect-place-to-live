@@ -1,6 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface PanelHeaderProps {
   /** Title text to display */
@@ -17,9 +18,9 @@ interface PanelHeaderProps {
  * Reusable header for floating panels with a title and close button.
  * Used in AppInfo, DebugInfo, MapSettings, and other floating panels.
  */
-export function PanelHeader({ title, onClose, className = 'mb-3' }: PanelHeaderProps) {
+export function PanelHeader({ title, onClose, className }: PanelHeaderProps) {
   return (
-    <div className={`flex items-center justify-between ${className}`}>
+    <div className={cn('flex items-center justify-between mb-3', className)}>
       <span className="text-sm font-semibold">{title}</span>
       <button
         onClick={onClose}
@@ -30,5 +31,3 @@ export function PanelHeader({ title, onClose, className = 'mb-3' }: PanelHeaderP
     </div>
   );
 }
-
-export default PanelHeader;

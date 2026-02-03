@@ -26,6 +26,15 @@ interface POIResponse {
 }
 
 /**
+ * Handle POI API errors with appropriate status codes
+ */
+function handlePoiError(error: unknown): NextResponse {
+  console.error('POI API error:', error);
+  const status = error instanceof Error && error.message === 'No valid factors found' ? 400 : 500;
+  return errorResponse(error, status);
+}
+
+/**
  * Fetch POIs for given factors with caching
  */
 async function fetchPOIsWithCache(
@@ -98,36 +107,32 @@ export async function POST(request: NextRequest) {
     const result = await fetchPOIsWithCache(bounds, factorIds);
     return NextResponse.json(result);
   } catch (error) {
-    console.error('POI API error:', error);
-    const status = error instanceof Error && error.message === 'No valid factors found' ? 400 : 500;
-    return errorResponse(error, status);
+    return handlePoiError(error);
   }
 }
 
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-
-  const north = parseFloat(searchParams.get('north') || '');
-  const south = parseFloat(searchParams.get('south') || '');
-  const east = parseFloat(searchParams.get('east') || '');
-  const west = parseFloat(searchParams.get('west') || '');
-  const factorIds = searchParams.get('factorIds')?.split(',') || [];
-
-  if (isNaN(north) || isNaN(south) || isNaN(east) || isNaN(west)) {
-    return errorResponse(new Error('Invalid bounds'), 400);
-  }
-
-  if (factorIds.length === 0) {
-    return errorResponse(new Error('Invalid factor IDs'), 400);
-  }
-
   try {
+    const searchParams = request.nextUrl.searchParams;
+
+    const north = parseFloat(searchParams.get('north') || '');
+    const south = parseFloat(searchParams.get('south') || '');
+    const east = parseFloat(searchParams.get('east') || '');
+    const west = parseFloat(searchParams.get('west') || '');
+    const factorIds = searchParams.get('factorIds')?.split(',') || [];
+
+    if (isNaN(north) || isNaN(south) || isNaN(east) || isNaN(west)) {
+      return errorResponse(new Error('Invalid bounds'), 400);
+    }
+
+    if (factorIds.length === 0) {
+      return errorResponse(new Error('Invalid factor IDs'), 400);
+    }
+
     const bounds: Bounds = { north, south, east, west };
     const result = await fetchPOIsWithCache(bounds, factorIds);
     return NextResponse.json(result);
   } catch (error) {
-    console.error('POI API error:', error);
-    const status = error instanceof Error && error.message === 'No valid factors found' ? 400 : 500;
-    return errorResponse(error, status);
+    return handlePoiError(error);
   }
 }

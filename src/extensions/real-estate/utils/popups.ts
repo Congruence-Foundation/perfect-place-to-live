@@ -265,4 +265,3 @@ export function generateErrorPopupHtml(message: string): string {
     </div>
   `;
 }
-

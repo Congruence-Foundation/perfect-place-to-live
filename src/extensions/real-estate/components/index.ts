@@ -5,7 +5,10 @@
 
 export { default as DataSourcesPanel } from './DataSourcesPanel';
 export { PriceValueFilter } from './filters';
-export { TransactionTypeButtons, DEFAULT_RENT_PRICE, DEFAULT_SELL_PRICE } from './TransactionTypeButtons';
+export { 
+  TransactionTypeButtons, 
+  getDefaultPriceRange,
+} from './TransactionTypeButtons';
 export { ScoreRangeSection } from './ScoreRangeSection';
 
 // Panel components

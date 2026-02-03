@@ -3,7 +3,7 @@
 import { useEffect, useState, forwardRef, useImperativeHandle, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
-import { POLAND_CENTER } from '@/config/factors';
+import { POLAND_CENTER } from '@/lib/geo';
 import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
 import type { PopupTranslations, FactorTranslations, MapViewRef } from './MapView';
 

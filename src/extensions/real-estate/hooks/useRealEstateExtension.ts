@@ -1,9 +1,11 @@
 'use client';
 
+import { useCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { PriceValueRange } from '../types';
 import { useRealEstateStore } from '../store';
-import type { DataSource } from '../config';
+import type { PropertyDataSource } from '../config';
+import { getDefaultPriceRange } from '../components/TransactionTypeButtons';
 
 /**
  * Props returned by useRealEstateExtension hook for UI components
@@ -14,7 +16,7 @@ export interface UseRealEstateExtensionReturn {
   filters: import('../types').PropertyFilters;
   scoreRange: [number, number];
   priceValueRange: PriceValueRange;
-  dataSources: DataSource[];
+  dataSources: PropertyDataSource[];
   totalCount: number;
   isLoading: boolean;
   isBelowMinZoom: boolean;
@@ -29,7 +31,10 @@ export interface UseRealEstateExtensionReturn {
   setFilters: (filters: Partial<import('../types').PropertyFilters>) => void;
   setScoreRange: (range: [number, number]) => void;
   setPriceValueRange: (range: PriceValueRange) => void;
-  setDataSources: (sources: DataSource[]) => void;
+  setDataSources: (sources: PropertyDataSource[]) => void;
+  
+  // Convenience action for selecting transaction type
+  selectTransaction: (transaction: 'RENT' | 'SELL') => void;
 }
 
 /**
@@ -55,7 +60,6 @@ export function useRealEstateExtension(): UseRealEstateExtensionReturn {
     error,
     properties,
     clusters,
-    clusterPropertiesCache,
     setEnabled,
     setFilters,
     setScoreRange,
@@ -74,7 +78,6 @@ export function useRealEstateExtension(): UseRealEstateExtensionReturn {
       error: s.error,
       properties: s.properties,
       clusters: s.clusters,
-      clusterPropertiesCache: s.clusterPropertiesCache,
       setEnabled: s.setEnabled,
       setFilters: s.setFilters,
       setScoreRange: s.setScoreRange,
@@ -82,6 +85,17 @@ export function useRealEstateExtension(): UseRealEstateExtensionReturn {
       setDataSources: s.setDataSources,
     }))
   );
+
+  // Convenience action for selecting transaction type (enables extension and sets default price range)
+  const selectTransaction = useCallback((transaction: 'RENT' | 'SELL') => {
+    const priceRange = getDefaultPriceRange(transaction);
+    setEnabled(true);
+    setFilters({ 
+      transaction,
+      priceMin: priceRange.min,
+      priceMax: priceRange.max
+    });
+  }, [setEnabled, setFilters]);
 
   return {
     enabled,
@@ -100,5 +114,6 @@ export function useRealEstateExtension(): UseRealEstateExtensionReturn {
     setScoreRange,
     setPriceValueRange,
     setDataSources,
+    selectTransaction,
   };
 }

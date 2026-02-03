@@ -31,6 +31,18 @@ const MAX_CACHE_ENTRIES = 50;
 const OTODOM_CLUSTER_RADIUS_METERS = 500;
 
 /**
+ * Default area filter bounds for Otodom API
+ * These are required by the API based on HAR analysis
+ */
+const DEFAULT_AREA_MIN = 1;
+const DEFAULT_AREA_MAX = 500;
+
+/**
+ * Default pagination limit for cluster property fetches
+ */
+const DEFAULT_CLUSTER_PAGE_LIMIT = 36;
+
+/**
  * Common headers for Otodom API requests
  */
 const OTODOM_API_HEADERS: HeadersInit = {
@@ -121,8 +133,8 @@ function buildSearchMapPinsRequest(bounds: Bounds, filters: PropertyFilters, est
     market: filters.market ?? 'ALL',
     ownerTypeSingleSelect: filters.ownerType ?? 'ALL',
     // areaMin and areaMax seem to be required based on HAR analysis
-    areaMin: filters.areaMin ?? 1,
-    areaMax: filters.areaMax ?? 500,
+    areaMin: filters.areaMin ?? DEFAULT_AREA_MIN,
+    areaMax: filters.areaMax ?? DEFAULT_AREA_MAX,
   };
 
   // Add optional common filters
@@ -587,7 +599,7 @@ export async function fetchClusterProperties(
   lng: number,
   filters: PropertyFilters,
   page: number = 1,
-  limit: number = 36,
+  limit: number = DEFAULT_CLUSTER_PAGE_LIMIT,
   shape?: string,
   radiusMeters: number = OTODOM_CLUSTER_RADIUS_METERS,
   clusterEstateType?: string,

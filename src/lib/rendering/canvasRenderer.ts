@@ -17,31 +17,15 @@ interface CanvasRenderOptions {
 }
 
 /**
- * Convert hex color to RGBA string
+ * Convert rgb(r,g,b) color string to rgba with alpha
+ * Note: getColorForK always returns rgb() format
  */
-function hexToRgba(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-/**
- * Parse color string (hex or rgb) and return rgba
- */
-function colorToRgba(color: string, alpha: number): string {
-  // Handle hex format
-  if (color.startsWith('#')) {
-    return hexToRgba(color, alpha);
-  }
-  
-  // Handle rgb format: rgb(r,g,b)
+function rgbToRgba(color: string, alpha: number): string {
   const rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
   if (rgbMatch) {
     return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${alpha})`;
   }
-  
-  // Fallback - return as-is with alpha
+  // Fallback - return as-is (shouldn't happen with getColorForK)
   return color;
 }
 
@@ -104,7 +88,7 @@ export function renderHeatmapToCanvas(
 
     // Get color for this K value
     const color = getColorForK(point.value);
-    ctx.fillStyle = colorToRgba(color, opacity);
+    ctx.fillStyle = rgbToRgba(color, opacity);
 
     // Draw rectangle centered on the point
     ctx.fillRect(

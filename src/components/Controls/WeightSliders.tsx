@@ -213,6 +213,8 @@ export default function WeightSliders({ factors, onFactorChange }: WeightSliders
           type="button"
           onClick={() => toggleExpanded(factor.id)}
           disabled={!factor.enabled}
+          aria-expanded={isExpanded}
+          aria-controls={`max-distance-${factor.id}`}
           className={`flex items-center gap-1 text-xs transition-colors w-full ${
             factor.enabled 
               ? 'text-muted-foreground hover:text-foreground' 
@@ -230,7 +232,7 @@ export default function WeightSliders({ factors, onFactorChange }: WeightSliders
 
         {/* Max distance slider (expanded) */}
         {isExpanded && factor.enabled && (
-          <div className="pl-4 space-y-1 border-l-2 border-muted">
+          <div id={`max-distance-${factor.id}`} className="pl-4 space-y-1 border-l-2 border-muted">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{formatDistance(limits.min)}</span>
               <span className="font-medium text-foreground">{formatDistance(factor.maxDistance)}</span>

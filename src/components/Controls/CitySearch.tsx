@@ -6,6 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search, Loader2, X, LocateFixed } from 'lucide-react';
 import { useClickOutside } from '@/hooks';
+import { UI_CONFIG } from '@/constants/performance';
+
+const SEARCH_DEBOUNCE_MS = UI_CONFIG.FACTORS_DEBOUNCE_MS;
+const MIN_SEARCH_LENGTH = 2;
 
 interface SearchResult {
   place_id: number;
@@ -43,7 +47,7 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
   });
 
   const searchCity = useCallback(async (searchQuery: string) => {
-    if (searchQuery.length < 2) {
+    if (searchQuery.length < MIN_SEARCH_LENGTH) {
       setResults([]);
       setIsOpen(false);
       return;
@@ -95,7 +99,7 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
 
     debounceRef.current = setTimeout(() => {
       searchCity(value);
-    }, 300);
+    }, SEARCH_DEBOUNCE_MS);
   };
 
   const handleSelectResult = (result: SearchResult) => {
@@ -242,7 +246,7 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
               </div>
             </button>
           ))}
-          {results.length === 0 && !isLoading && query.length >= 2 && (
+          {results.length === 0 && !isLoading && query.length >= MIN_SEARCH_LENGTH && (
             <div className="px-3 py-2 text-sm text-muted-foreground">
               {t('noResults')}
             </div>

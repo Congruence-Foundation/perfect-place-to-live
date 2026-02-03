@@ -15,6 +15,7 @@ import { HeatmapSettings, ClusterPriceAnalysisMode } from '@/types';
 import { ClusterPriceDisplay } from '../types';
 import { useRealEstateExtension } from '../hooks';
 import { useRealEstateStore } from '../store';
+import { Z_INDEX } from '@/constants/z-index';
 
 const CLUSTER_PRICE_VALUES: ClusterPriceDisplay[] = ['none', 'range', 'median', 'median_spread'];
 const CLUSTER_ANALYSIS_VALUES: ClusterPriceAnalysisMode[] = ['off', 'simplified', 'detailed'];
@@ -59,7 +60,7 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
           <SelectTrigger className="h-7 text-xs w-[100px]">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent position="popper" className="z-[1100]">
+          <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}]`}>
             {PRICE_RADIUS_VALUES.map((value) => (
               <SelectItem key={value} value={value.toString()} className="text-xs">
                 {t(`priceAnalysisRadius_${value}`)}
@@ -84,7 +85,7 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
           <SelectTrigger className="h-7 text-xs w-[100px]">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent position="popper" className="z-[1100]">
+          <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}]`}>
             {CLUSTER_PRICE_VALUES.map((displayValue) => (
               <SelectItem key={displayValue} value={displayValue} className="text-xs">
                 {t(`clusterPrice_${displayValue}`)}
@@ -109,7 +110,7 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
           <SelectTrigger className="h-7 text-xs w-[100px]">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent position="popper" className="z-[1100]">
+          <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}]`}>
             {CLUSTER_ANALYSIS_VALUES.map((analysisValue) => (
               <SelectItem key={analysisValue} value={analysisValue} className="text-xs">
                 {t(`clusterAnalysis_${analysisValue}`)}

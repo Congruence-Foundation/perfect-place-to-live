@@ -52,12 +52,6 @@ export interface TileCoordinates {
   y: number;
 }
 
-/**
- * Alias for TileCoordinates for backward compatibility
- * @deprecated Use TileCoordinates instead
- */
-export type TileCoord = TileCoordinates;
-
 export interface PrecomputedTile {
   coordinates: TileCoordinates;
   points: HeatmapPoint[];

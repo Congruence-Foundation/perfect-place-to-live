@@ -6,6 +6,8 @@ import { useState, useRef } from 'react';
 import { useClickOutside } from '@/hooks';
 import { TIME_CONSTANTS } from '@/constants/performance';
 import { SUPPORTED_LOCALES, LOCALE_METADATA } from '@/i18n/routing';
+import { PanelToggleButton } from './PanelToggleButton';
+import { Z_INDEX } from '@/constants/z-index';
 
 export default function LanguageSwitcher() {
   const locale = useLocale();
@@ -24,20 +26,16 @@ export default function LanguageSwitcher() {
 
   return (
     <div ref={containerRef} className="relative">
-      <button
+      <PanelToggleButton
+        Icon={Globe}
+        isOpen={isOpen}
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center justify-center w-8 h-8 rounded-full shadow-lg transition-all ${
-          isOpen
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-background/95 backdrop-blur-sm hover:bg-muted border'
-        }`}
         title={currentLocaleMetadata?.label || 'Language'}
-      >
-        <Globe className={`h-4 w-4 ${isOpen ? '' : 'text-muted-foreground'}`} />
-      </button>
+        size="sm"
+      />
       
       {isOpen && (
-        <div className="absolute top-full right-0 mt-2 bg-background/95 backdrop-blur-sm rounded-xl shadow-lg border p-1 w-32 animate-in fade-in slide-in-from-top-2 duration-200 z-[1100]">
+        <div className={`absolute top-full right-0 mt-2 bg-background/95 backdrop-blur-sm rounded-xl shadow-lg border p-1 w-32 animate-in fade-in slide-in-from-top-2 duration-200 z-[${Z_INDEX.DROPDOWN}]`}>
           {SUPPORTED_LOCALES.map((localeCode) => {
             const metadata = LOCALE_METADATA[localeCode];
             return (

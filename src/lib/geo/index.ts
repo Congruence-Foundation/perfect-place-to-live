@@ -4,10 +4,16 @@
  */
 
 // Constants
-export { EARTH_RADIUS_METERS, METERS_PER_DEGREE_LAT } from './constants';
+export {
+  EARTH_RADIUS_METERS,
+  METERS_PER_DEGREE_LAT,
+  POLAND_BOUNDS,
+  POLAND_CENTER,
+  OVERPASS_API_URL,
+} from './constants';
 
 // Distance calculations
-export { toRad, metersPerDegreeLng, distanceInMeters } from './distance';
+export { metersPerDegreeLng, distanceInMeters } from './distance';
 
 // Haversine distance and spatial indexing
 export { haversineDistance, SpatialIndex } from './haversine';

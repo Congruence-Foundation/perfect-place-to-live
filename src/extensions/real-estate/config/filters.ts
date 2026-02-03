@@ -25,11 +25,6 @@ import type {
  */
 export type PropertyDataSource = 'otodom' | 'gratka';
 
-/**
- * @deprecated Use PropertyDataSource instead
- */
-export type DataSource = PropertyDataSource;
-
 // ============================================================================
 // Filter Option Types
 // ============================================================================

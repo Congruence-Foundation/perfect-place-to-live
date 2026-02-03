@@ -57,8 +57,8 @@ function chunkArray<T>(array: T[], numChunks: number): T[][] {
  * 
  * Constants that must stay in sync:
  * - EARTH_RADIUS_METERS (6371000) - from src/lib/geo/constants.ts
+ * - METERS_PER_DEGREE_LAT (111320) - from src/lib/geo/constants.ts
  * - DENSITY_BONUS_* constants - from src/constants/performance.ts
- * - Magic number 111320 (meters per degree lat) - from src/lib/geo/constants.ts METERS_PER_DEGREE_LAT
  * 
  * When modifying any of these source files, remember to update this worker code!
  */
@@ -66,7 +66,9 @@ const WORKER_CODE = `
 const { parentPort, workerData } = require('worker_threads');
 
 // These constants must match src/constants/performance.ts DENSITY_BONUS
+// and src/lib/geo/constants.ts
 const EARTH_RADIUS_METERS = 6371000;
+const METERS_PER_DEGREE_LAT = 111320;
 const DENSITY_BONUS_RADIUS_RATIO = 0.5;
 const DENSITY_BONUS_MAX = 0.15;
 const DENSITY_BONUS_SCALE = 3;
@@ -93,11 +95,11 @@ class SpatialIndex {
   findNearestDistance(point, maxDistance) {
     const centerCellLat = Math.floor(point.lat / this.cellSize);
     const centerCellLng = Math.floor(point.lng / this.cellSize);
-    const maxCellRadius = Math.ceil(maxDistance / (this.cellSize * 111320)) + 1;
+    const maxCellRadius = Math.ceil(maxDistance / (this.cellSize * METERS_PER_DEGREE_LAT)) + 1;
     let minDistance = Infinity;
 
     for (let radius = 0; radius <= maxCellRadius; radius++) {
-      if (minDistance < Infinity && radius * this.cellSize * 111320 > minDistance) break;
+      if (minDistance < Infinity && radius * this.cellSize * METERS_PER_DEGREE_LAT > minDistance) break;
 
       for (let dLat = -radius; dLat <= radius; dLat++) {
         for (let dLng = -radius; dLng <= radius; dLng++) {
@@ -123,7 +125,7 @@ class SpatialIndex {
   countWithinRadius(point, radius) {
     const centerCellLat = Math.floor(point.lat / this.cellSize);
     const centerCellLng = Math.floor(point.lng / this.cellSize);
-    const cellRadius = Math.ceil(radius / (this.cellSize * 111320)) + 1;
+    const cellRadius = Math.ceil(radius / (this.cellSize * METERS_PER_DEGREE_LAT)) + 1;
     let count = 0;
 
     for (let dLat = -cellRadius; dLat <= cellRadius; dLat++) {

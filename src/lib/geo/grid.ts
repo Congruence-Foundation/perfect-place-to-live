@@ -75,15 +75,15 @@ export function calculateAdaptiveGridSize(
  * Convert tile coordinates to geographic bounds
  */
 export function tileToBounds(z: number, x: number, y: number): Bounds {
-  const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+  const numTiles = Math.pow(2, z);
+  const n = Math.PI - (2 * Math.PI * y) / numTiles;
+  const nNext = n - (2 * Math.PI) / numTiles;
 
   const north = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-  const south =
-    (180 / Math.PI) *
-    Math.atan(0.5 * (Math.exp(n - (2 * Math.PI) / Math.pow(2, z)) - Math.exp(-(n - (2 * Math.PI) / Math.pow(2, z)))));
+  const south = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(nNext) - Math.exp(-nNext)));
 
-  const west = (x / Math.pow(2, z)) * 360 - 180;
-  const east = ((x + 1) / Math.pow(2, z)) * 360 - 180;
+  const west = (x / numTiles) * 360 - 180;
+  const east = ((x + 1) / numTiles) * 360 - 180;
 
   return { north, south, east, west };
 }
@@ -92,10 +92,11 @@ export function tileToBounds(z: number, x: number, y: number): Bounds {
  * Convert geographic coordinates to tile coordinates
  */
 function coordsToTile(lat: number, lng: number, z: number): { x: number; y: number } {
-  const x = Math.floor(((lng + 180) / 360) * Math.pow(2, z));
+  const numTiles = Math.pow(2, z);
+  const latRad = (lat * Math.PI) / 180;
+  const x = Math.floor(((lng + 180) / 360) * numTiles);
   const y = Math.floor(
-    ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) *
-      Math.pow(2, z)
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * numTiles
   );
 
   return { x, y };

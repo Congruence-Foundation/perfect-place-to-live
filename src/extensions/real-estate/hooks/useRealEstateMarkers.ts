@@ -33,6 +33,34 @@ import {
 } from '../utils/enrichment';
 import { createTimer } from '@/lib/profiling';
 
+/**
+ * Generate a window key for storing cluster properties
+ * Used for popup navigation state management
+ */
+function getClusterWindowKey(clusterId: string): string {
+  return `__cluster_${clusterId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+}
+
+/**
+ * Build request body for cluster properties API
+ */
+function buildClusterFetchBody(
+  cluster: PropertyCluster,
+  filters: PropertyFilters,
+  limit: number
+): object {
+  return {
+    lat: cluster.lat,
+    lng: cluster.lng,
+    filters,
+    page: 1,
+    limit: Math.min(cluster.count, limit),
+    shape: cluster.shape,
+    radius: cluster.radiusInMeters || DEFAULT_CLUSTER_RADIUS,
+    estateType: cluster.estateType,
+  };
+}
+
 export interface UseRealEstateMarkersOptions {
   /** Leaflet instance */
   L: typeof import('leaflet') | null;
@@ -161,7 +189,7 @@ export function useRealEstateMarkers({
       if (!enabled) {
         // Clean up window properties when clearing markers
         clusterMarkersRef.current.forEach((_, clusterId) => {
-          const windowKey = `__cluster_${clusterId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+          const windowKey = getClusterWindowKey(clusterId);
           delete (window as unknown as Record<string, unknown>)[windowKey];
         });
         layerGroup.clearLayers();
@@ -286,16 +314,7 @@ export function useRealEstateMarkers({
               const response = await fetch('/api/properties/cluster', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  lat: cluster.lat,
-                  lng: cluster.lng,
-                  filters,
-                  page: 1,
-                  limit: Math.min(cluster.count, BACKGROUND_FETCH_LIMIT),
-                  shape: cluster.shape,
-                  radius: cluster.radiusInMeters || DEFAULT_CLUSTER_RADIUS,
-                  estateType: cluster.estateType,
-                }),
+                body: JSON.stringify(buildClusterFetchBody(cluster, filters, BACKGROUND_FETCH_LIMIT)),
               });
 
               if (!response.ok) return;
@@ -347,16 +366,7 @@ export function useRealEstateMarkers({
             const response = await fetch('/api/properties/cluster', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                lat: cluster.lat,
-                lng: cluster.lng,
-                filters,
-                page: 1,
-                limit: Math.min(cluster.count, CLICK_FETCH_LIMIT),
-                shape: cluster.shape,
-                radius: cluster.radiusInMeters || DEFAULT_CLUSTER_RADIUS,
-                estateType: cluster.estateType,
-              }),
+              body: JSON.stringify(buildClusterFetchBody(cluster, filters, CLICK_FETCH_LIMIT)),
             });
 
             if (!response.ok) {
@@ -390,7 +400,7 @@ export function useRealEstateMarkers({
             }
 
             // Store for navigation
-            const windowKey = `__cluster_${clusterId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            const windowKey = getClusterWindowKey(clusterId);
             (window as unknown as Record<string, EnrichedProperty[]>)[windowKey] = enrichedClusterProps;
 
             const actualTotalCount = data.totalCount;
@@ -490,7 +500,7 @@ export function useRealEstateMarkers({
           clusterMarkersRef.current.delete(id);
           removedClusterMarkers++;
           // Clean up window properties when clearing markers
-          const windowKey = `__cluster_${id.replace(/[^a-zA-Z0-9]/g, '_')}`;
+          const windowKey = getClusterWindowKey(id);
           delete (window as unknown as Record<string, unknown>)[windowKey];
         }
       }
@@ -523,7 +533,7 @@ export function useRealEstateMarkers({
     return () => {
       // Clean up window properties when unmounting
       clusterMarkersRef.current.forEach((_, clusterId) => {
-        const windowKey = `__cluster_${clusterId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        const windowKey = getClusterWindowKey(clusterId);
         delete (window as unknown as Record<string, unknown>)[windowKey];
       });
       propertyMarkersRef.current.clear();

@@ -3,6 +3,7 @@ import { getCacheStatus, testCacheConnection, getRedisStats } from '@/lib/cache'
 import { getHeatmapTileCacheStats } from '@/lib/heatmap-tile-cache';
 import { getTileCacheStats } from '@/lib/tile-cache';
 import { getPoiTileCacheStats } from '@/lib/poi-tile-cache';
+import { formatTTL } from '@/lib/api-utils';
 import { 
   PROPERTY_TILE_CONFIG, 
   HEATMAP_TILE_CONFIG, 
@@ -53,23 +54,4 @@ export async function GET() {
     },
     timestamp: new Date().toISOString(),
   });
-}
-
-/**
- * Format TTL seconds to human-readable string
- */
-function formatTTL(seconds: number): string {
-  if (seconds >= 86400) {
-    const days = Math.floor(seconds / 86400);
-    return `${days} day${days > 1 ? 's' : ''}`;
-  }
-  if (seconds >= 3600) {
-    const hours = Math.floor(seconds / 3600);
-    return `${hours} hour${hours > 1 ? 's' : ''}`;
-  }
-  if (seconds >= 60) {
-    const minutes = Math.floor(seconds / 60);
-    return `${minutes} minute${minutes > 1 ? 's' : ''}`;
-  }
-  return `${seconds} second${seconds > 1 ? 's' : ''}`;
 }

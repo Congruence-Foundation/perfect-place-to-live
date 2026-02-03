@@ -1,11 +1,21 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import type { PropertyFilters } from '../types';
+import { cn } from '@/lib/utils';
+import type { PropertyFilters, TransactionType } from '../types';
 
 /** Default price ranges for transaction types */
-const DEFAULT_RENT_PRICE = { min: 1000, max: 10000 };
-const DEFAULT_SELL_PRICE = { min: 100000, max: 2000000 };
+export const DEFAULT_RENT_PRICE = { min: 1000, max: 10000 };
+export const DEFAULT_SELL_PRICE = { min: 100000, max: 2000000 };
+
+/** Get default price range for a transaction type */
+export function getDefaultPriceRange(transaction: TransactionType) {
+  return transaction === 'RENT' ? DEFAULT_RENT_PRICE : DEFAULT_SELL_PRICE;
+}
+
+const BASE_BUTTON_CLASSES = 'flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors';
+const ACTIVE_BUTTON_CLASSES = 'bg-primary text-primary-foreground';
+const INACTIVE_BUTTON_CLASSES = 'bg-muted hover:bg-muted/80 text-muted-foreground';
 
 interface TransactionTypeButtonsProps {
   enabled: boolean;
@@ -30,41 +40,20 @@ export function TransactionTypeButtons({
 }: TransactionTypeButtonsProps) {
   const tRealEstate = useTranslations('realEstate');
 
+  const getButtonClasses = (isActive: boolean) =>
+    cn(BASE_BUTTON_CLASSES, isActive ? ACTIVE_BUTTON_CLASSES : INACTIVE_BUTTON_CLASSES);
+
   return (
     <div className="flex gap-1 mb-3">
-      <button
-        onClick={onDisable}
-        className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-          !enabled
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-        }`}
-      >
+      <button onClick={onDisable} className={getButtonClasses(!enabled)}>
         {tRealEstate('none')}
       </button>
-      <button
-        onClick={onSelectRent}
-        className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-          enabled && transaction === 'RENT'
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-        }`}
-      >
+      <button onClick={onSelectRent} className={getButtonClasses(enabled && transaction === 'RENT')}>
         {tRealEstate('rent')}
       </button>
-      <button
-        onClick={onSelectSell}
-        className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-          enabled && transaction === 'SELL'
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-        }`}
-      >
+      <button onClick={onSelectSell} className={getButtonClasses(enabled && transaction === 'SELL')}>
         {tRealEstate('sell')}
       </button>
     </div>
   );
 }
-
-/** Export default price ranges for use by consumers */
-export { DEFAULT_RENT_PRICE, DEFAULT_SELL_PRICE };

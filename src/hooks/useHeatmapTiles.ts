@@ -11,7 +11,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { decode } from '@msgpack/msgpack';
 import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, DataSource } from '@/types';
 import {
@@ -187,7 +186,6 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     enabled,
   } = options;
   
-  const queryClient = useQueryClient();
   const setHeatmapDebugTiles = useMapStore((s) => s.setHeatmapDebugTiles);
 
   // State
@@ -331,15 +329,6 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
           setUsedFallback(true);
         }
 
-        // Store individual tile results in React Query cache for potential future use
-        for (const [tileKey, tileData] of Object.entries(result.tiles)) {
-          const [z, x, y] = tileKey.split(':').map(Number);
-          queryClient.setQueryData(
-            ['heatmap-tile', z, x, y, configHash],
-            { points: tileData.points, cached: tileData.cached }
-          );
-        }
-
         // Track which tiles this batch result corresponds to
         const tilesKey = allTiles.map(t => `${t.z}:${t.x}:${t.y}`).sort().join(',');
         batchResultTilesRef.current = tilesKey;
@@ -377,8 +366,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     poiBufferScale,
     enabled,
     isTooLarge,
-    queryClient,
-    refreshTrigger, // Add refresh trigger to dependencies
+    refreshTrigger,
   ]);
 
   // Process batch result into heatmap points

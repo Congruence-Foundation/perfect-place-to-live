@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { Info } from 'lucide-react';
 import { PanelHeader } from '@/components/ui/panel-header';
+import { PanelToggleButton } from './PanelToggleButton';
+import { Z_INDEX } from '@/constants/z-index';
 
 const STORAGE_KEY = 'location-finder-info-seen';
 
@@ -35,12 +37,13 @@ export default function AppInfo({ isMobile = false }: AppInfoProps) {
   if (!hasCheckedStorage) {
     return (
       <div className="relative">
-        <button
-          className="flex items-center justify-center w-8 h-8 rounded-full shadow-lg bg-background/95 backdrop-blur-sm border"
-          disabled
-        >
-          <Info className="h-4 w-4 text-muted-foreground" />
-        </button>
+        <PanelToggleButton
+          Icon={Info}
+          isOpen={false}
+          onClick={() => {}}
+          size="sm"
+          className="pointer-events-none"
+        />
       </div>
     );
   }
@@ -49,7 +52,7 @@ export default function AppInfo({ isMobile = false }: AppInfoProps) {
     <div className="relative">
       {/* Expanded Panel */}
       {isOpen && (
-        <div className={`absolute top-10 right-0 z-[1000] bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 animate-in fade-in slide-in-from-top-2 duration-200 ${
+        <div className={`absolute top-10 right-0 z-[${Z_INDEX.FLOATING_CONTROLS}] bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 animate-in fade-in slide-in-from-top-2 duration-200 ${
           isMobile ? 'w-[calc(100vw-2rem)] max-w-72' : 'w-64'
         }`}>
           <PanelHeader title={t('title')} onClose={handleClose} />
@@ -80,17 +83,13 @@ export default function AppInfo({ isMobile = false }: AppInfoProps) {
       )}
 
       {/* Toggle Button - Always visible */}
-      <button
+      <PanelToggleButton
+        Icon={Info}
+        isOpen={isOpen}
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center justify-center w-8 h-8 rounded-full shadow-lg transition-colors ${
-          isOpen
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-background/95 backdrop-blur-sm hover:bg-muted border'
-        }`}
         title={t('title')}
-      >
-        <Info className={`h-4 w-4 ${isOpen ? '' : 'text-muted-foreground'}`} />
-      </button>
+        size="sm"
+      />
     </div>
   );
 }

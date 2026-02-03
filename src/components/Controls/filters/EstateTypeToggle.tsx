@@ -1,8 +1,7 @@
 'use client';
 
-import { ReactNode } from 'react';
 import { Label } from '@/components/ui/label';
-import { Building2, Home } from 'lucide-react';
+import { Building2, Home, LucideIcon } from 'lucide-react';
 import { EstateType } from '@/extensions/real-estate/types';
 
 interface EstateTypeToggleProps {
@@ -43,9 +42,9 @@ export default function EstateTypeToggle({
     onChange(updated);
   };
 
-  const options: { value: EstateType; label: string; icon: ReactNode }[] = [
-    { value: 'FLAT', label: flatLabel, icon: <Building2 className="h-3.5 w-3.5" /> },
-    { value: 'HOUSE', label: houseLabel, icon: <Home className="h-3.5 w-3.5" /> },
+  const options: { value: EstateType; label: string; Icon: LucideIcon }[] = [
+    { value: 'FLAT', label: flatLabel, Icon: Building2 },
+    { value: 'HOUSE', label: houseLabel, Icon: Home },
   ];
 
   return (
@@ -65,7 +64,7 @@ export default function EstateTypeToggle({
                   : 'bg-background hover:bg-muted border-input'
               }`}
             >
-              {option.icon}
+              <option.Icon className="h-3.5 w-3.5" />
               {option.label}
             </button>
           );

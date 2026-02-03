@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useMapStore } from '@/stores/mapStore';
 import { useRealEstateStore } from './store';
@@ -95,7 +95,6 @@ export function RealEstateController() {
     isTooLarge,
     error,
     tiles: propertyTiles,
-    mode: fetchMode,
     totalCount,
   } = useTileQueries({
     bounds,

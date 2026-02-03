@@ -3,7 +3,7 @@
  * Re-exports all config options
  */
 
-export type { DataSource } from './filters';
+export type { PropertyDataSource } from './filters';
 
 export {
   ROOM_OPTIONS,

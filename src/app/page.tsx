@@ -16,6 +16,7 @@ import { Toast } from '@/components/ui/toast';
 import { useMapStore } from '@/stores/mapStore';
 import { ExtensionControllers } from '@/components/ExtensionControllers';
 import { UI_CONFIG } from '@/constants/performance';
+import { Z_INDEX } from '@/constants/z-index';
 
 /**
  * Props for HomeContent - data passed from wrapper
@@ -36,8 +37,6 @@ interface HomeContentProps {
   } | null;
   usedFallback: boolean;
   clearFallbackNotification: () => void;
-  tileCount: number;
-  loadedTileCount: number;
   // Bounds state lifted from parent
   bounds: Bounds | null;
   zoomLevel: number;
@@ -70,8 +69,6 @@ function HomeContent({
   metadata,
   usedFallback,
   clearFallbackNotification,
-  tileCount,
-  loadedTileCount,
   bounds,
   zoomLevel,
   onBoundsChange,
@@ -126,7 +123,6 @@ function HomeContent({
   // Debounce bounds and factors to avoid too many API calls
   const debouncedBounds = useDebounce(bounds, UI_CONFIG.BOUNDS_DEBOUNCE_MS);
   const debouncedFactors = useDebounce(factors, UI_CONFIG.FACTORS_DEBOUNCE_MS);
-  const debouncedSettings = useDebounce(heatmapSettings, UI_CONFIG.SETTINGS_DEBOUNCE_MS);
 
   // Track if user has interacted (searched for a city)
   const hasInteracted = useRef(false);
@@ -287,7 +283,7 @@ function HomeContent({
   // Disable refresh button only when viewport has too many tiles
   const isRefreshDisabled = isTooLarge;
 
-  const panelWidth = isPanelOpen && !isMobile ? 320 : 0;
+  const panelWidth = isPanelOpen && !isMobile ? UI_CONFIG.PANEL_WIDTH : 0;
 
   const currentProfile = FACTOR_PROFILES.find(p => p.id === selectedProfile);
 
@@ -295,7 +291,7 @@ function HomeContent({
     <main className="h-screen w-screen flex overflow-hidden relative">
       {/* Search Box - Floating on top center */}
       <div 
-        className={`absolute z-[1001] ${
+        className={`absolute z-[${Z_INDEX.SEARCH_BOX}] ${
           isMobile 
             ? 'top-4 left-14 right-24' 
             : 'top-4'
@@ -313,7 +309,7 @@ function HomeContent({
         <div
           className={`${
             isPanelOpen ? 'w-80' : 'w-0'
-          } transition-all duration-300 flex-shrink-0 overflow-hidden bg-background/95 backdrop-blur-sm relative z-[1002]`}
+          } transition-all duration-300 flex-shrink-0 overflow-hidden bg-background/95 backdrop-blur-sm relative z-[${Z_INDEX.CONTROL_PANEL}]`}
         >
           <div className="w-80 h-full overflow-y-auto scrollbar-hidden">
             {/* Header */}
@@ -401,9 +397,9 @@ function HomeContent({
             setIsPanelOpen(!isPanelOpen);
             setTimeout(() => {
               mapRef.current?.invalidateSize();
-            }, 350);
+            }, UI_CONFIG.PANEL_ANIMATION_DURATION_MS);
           }}
-          className={`absolute top-1/2 -translate-y-1/2 z-[1003] flex items-center justify-center
+          className={`absolute top-1/2 -translate-y-1/2 z-[${Z_INDEX.CONTROL_PANEL + 1}] flex items-center justify-center
             w-6 h-12 bg-background/95 backdrop-blur-sm border border-l-0 rounded-r-lg shadow-sm
             hover:bg-muted transition-colors
             ${isPanelOpen ? 'left-80' : 'left-0'}`}
@@ -424,7 +420,7 @@ function HomeContent({
           ref={mapRef}
           onBoundsChange={handleBoundsChangeInternal}
           heatmapPoints={heatmapPoints}
-          heatmapOpacity={0.15}
+          heatmapOpacity={UI_CONFIG.DEFAULT_HEATMAP_OPACITY}
           pois={pois}
           showPOIs={showPOIs}
           factors={factors}
@@ -443,7 +439,7 @@ function HomeContent({
         {!isMobile && (
           <>
             {/* Refresh/Stop Button - Bottom Center */}
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 z-[1000]">
+            <div className={`absolute left-1/2 -translate-x-1/2 bottom-4 z-[${Z_INDEX.FLOATING_CONTROLS}]`}>
               <RefreshButton
                 isLoading={isLoading}
                 disabled={isRefreshDisabled}
@@ -479,7 +475,7 @@ function HomeContent({
         {/* Loading Overlay - centered in visible map area (above bottom sheet on mobile) */}
         {isLoading && isMobile && (
           <div 
-            className="absolute inset-0 bg-background/30 backdrop-blur-[2px] flex items-center justify-center z-[999]"
+            className={`absolute inset-0 bg-background/30 backdrop-blur-[2px] flex items-center justify-center z-[${Z_INDEX.FLOATING_CONTROLS - 1}]`}
             style={isMobile ? { 
               bottom: `${bottomSheetHeight}px`,
               alignItems: 'center',
@@ -552,7 +548,7 @@ function HomeContent({
 export default function Home() {
   // Local state for bounds and zoom (lifted from HomeContent)
   const [bounds, setBounds] = useState<Bounds | null>(null);
-  const [zoomLevel, setZoomLevel] = useState<number>(7);
+  const [zoomLevel, setZoomLevel] = useState<number>(UI_CONFIG.DEFAULT_INITIAL_ZOOM);
   
   // Get other state from store
   const factors = useMapStore((s) => s.factors);
@@ -582,8 +578,6 @@ export default function Home() {
     metadata,
     usedFallback,
     clearFallbackNotification,
-    tileCount,
-    loadedTileCount,
     abort,
     refresh,
     tiles: heatmapTileCoords,
@@ -625,8 +619,6 @@ export default function Home() {
         metadata={metadata}
         usedFallback={usedFallback}
         clearFallbackNotification={clearFallbackNotification}
-        tileCount={tileCount}
-        loadedTileCount={loadedTileCount}
         bounds={bounds}
         zoomLevel={zoomLevel}
         onBoundsChange={handleBoundsChange}

@@ -155,54 +155,21 @@
   padding: 12px;
 }
 
-/* Property popup styling */
-.property-popup .leaflet-popup-content-wrapper {
-  padding: 0;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.property-popup .leaflet-popup-content {
-  margin: 0;
-  padding: 0;
-}
-
-.property-popup .leaflet-popup-close-button {
-  top: 8px !important;
-  right: 8px !important;
-  width: 24px !important;
-  height: 24px !important;
-  font-size: 18px !important;
-  font-weight: 400 !important;
-  color: white !important;
-  background: rgba(0, 0, 0, 0.5) !important;
-  border-radius: 50% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  line-height: 1 !important;
-  padding: 0 !important;
-  z-index: 10 !important;
-  transition: background 0.2s !important;
-}
-
-.property-popup .leaflet-popup-close-button:hover {
-  background: rgba(0, 0, 0, 0.7) !important;
-  color: white !important;
-}
-
-/* Cluster popup styling */
+/* Property and cluster popup styling */
+.property-popup .leaflet-popup-content-wrapper,
 .cluster-popup .leaflet-popup-content-wrapper {
   padding: 0;
   border-radius: 12px;
   overflow: hidden;
 }
 
+.property-popup .leaflet-popup-content,
 .cluster-popup .leaflet-popup-content {
   margin: 0;
   padding: 0;
 }
 
+.property-popup .leaflet-popup-close-button,
 .cluster-popup .leaflet-popup-close-button {
   top: 8px !important;
   right: 8px !important;
@@ -222,6 +189,7 @@
   transition: background 0.2s !important;
 }
 
+.property-popup .leaflet-popup-close-button:hover,
 .cluster-popup .leaflet-popup-close-button:hover {
   background: rgba(0, 0, 0, 0.7) !important;
   color: white !important;

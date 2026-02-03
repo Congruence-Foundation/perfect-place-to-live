@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl';
 import { Bug, AlertCircle } from 'lucide-react';
 import { ExtensionsDebugPanel } from './ExtensionsDebugPanel';
 import { PanelHeader } from '@/components/ui/panel-header';
+import { PanelToggleButton } from './PanelToggleButton';
+import { Z_INDEX } from '@/constants/z-index';
 
 interface L2CacheStatus {
   type: 'redis' | 'memory';
@@ -73,7 +75,7 @@ export default function DebugInfo({
   return (
     <div className={`${
       isMobile ? 'relative' : 'absolute bottom-4 left-4'
-    } z-[1000]`}>
+    } z-[${Z_INDEX.FLOATING_CONTROLS}]`}>
       {/* Expanded Panel - Absolutely positioned above the button */}
       {isOpen && (
         <div className="absolute bottom-12 left-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-56 animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -180,23 +182,14 @@ export default function DebugInfo({
       )}
 
       {/* Toggle Button */}
-      <button
+      <PanelToggleButton
+        Icon={Bug}
+        ErrorIcon={AlertCircle}
+        isOpen={isOpen}
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center justify-center w-10 h-10 rounded-full shadow-lg transition-all ${
-          isOpen 
-            ? 'bg-primary text-primary-foreground' 
-            : error 
-              ? 'bg-destructive text-destructive-foreground'
-              : 'bg-background/95 backdrop-blur-sm hover:bg-muted border'
-        }`}
         title={t('title')}
-      >
-        {error && !isOpen ? (
-          <AlertCircle className="h-5 w-5" />
-        ) : (
-          <Bug className={`h-5 w-5 ${isOpen ? '' : 'text-muted-foreground'}`} />
-        )}
-      </button>
+        hasError={!!error}
+      />
     </div>
   );
 }

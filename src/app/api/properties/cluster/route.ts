@@ -61,8 +61,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('Cluster properties API error:', error);
-    // Return more specific error message
-    const message = error instanceof Error ? error.message : 'Failed to fetch cluster properties';
-    return errorResponse(new Error(message), 500);
+    return errorResponse(error, 500);
   }
 }

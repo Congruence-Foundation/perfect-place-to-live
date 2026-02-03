@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchPOIsFromOverpass as fetchPOIs, generatePOICacheKey } from '@/lib/poi';
 import { calculateHeatmap } from '@/lib/scoring';
-import { tileToBounds, getTilesForBounds } from '@/lib/geo';
+import { tileToBounds, getTilesForBounds, POLAND_BOUNDS } from '@/lib/geo';
 import { cacheGet, cacheSet } from '@/lib/cache';
-import { DEFAULT_FACTORS, POLAND_BOUNDS } from '@/config/factors';
-import { POI, PrecomputedTile } from '@/types';
+import { DEFAULT_FACTORS } from '@/config/factors';
+import { POI, PrecomputedTile, Factor } from '@/types';
 import { errorResponse } from '@/lib/api-utils';
 import { TILE_CONFIG } from '@/constants/performance';
 
@@ -23,6 +23,112 @@ interface GenerateRequest {
   adminSecret: string;
 }
 
+interface TileCoord {
+  z: number;
+  x: number;
+  y: number;
+}
+
+interface GenerationResult {
+  generated: number;
+  errors: number;
+}
+
+/**
+ * Calculate adaptive grid size based on zoom level
+ */
+function calculateGridSize(zoom: number): number {
+  return Math.max(
+    TILE_CONFIG.MIN_GRID_SIZE,
+    TILE_CONFIG.BASE_GRID_SIZE / Math.pow(2, zoom - TILE_CONFIG.GRID_ZOOM_BASE)
+  );
+}
+
+/**
+ * Fetch POIs for a factor with caching
+ */
+async function fetchFactorPOIs(
+  factor: Factor,
+  tileBounds: ReturnType<typeof tileToBounds>
+): Promise<POI[]> {
+  const cacheKey = generatePOICacheKey(factor.id, tileBounds);
+  
+  const cached = await cacheGet<POI[]>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const pois = await fetchPOIs(factor.osmTags, tileBounds);
+    await cacheSet(cacheKey, pois, TILE_CONFIG.POI_CACHE_TTL_SECONDS);
+    return pois;
+  } catch (error) {
+    console.error(`Error fetching POIs for factor ${factor.id}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Generate a single tile
+ */
+async function generateTile(
+  tile: TileCoord,
+  enabledFactors: Factor[],
+  gridSize: number
+): Promise<void> {
+  const tileBounds = tileToBounds(tile.z, tile.x, tile.y);
+
+  // Fetch POIs for all factors
+  const poiData = new Map<string, POI[]>();
+  for (const factor of enabledFactors) {
+    const pois = await fetchFactorPOIs(factor, tileBounds);
+    poiData.set(factor.id, pois);
+  }
+
+  // Calculate heatmap
+  const heatmapPoints = calculateHeatmap(tileBounds, poiData, enabledFactors, gridSize);
+
+  // Create pre-computed tile
+  const precomputedTile: PrecomputedTile = {
+    coordinates: tile,
+    points: heatmapPoints,
+    factorWeights: Object.fromEntries(
+      enabledFactors.map((f) => [f.id, f.weight])
+    ),
+    generatedAt: new Date().toISOString(),
+  };
+
+  // Store in cache
+  const tileCacheKey = `tile:${tile.z}:${tile.x}:${tile.y}`;
+  await cacheSet(tileCacheKey, precomputedTile, TILE_CONFIG.TILE_CACHE_TTL_SECONDS);
+}
+
+/**
+ * Process a batch of tiles
+ */
+async function processTileBatch(
+  batch: TileCoord[],
+  enabledFactors: Factor[],
+  gridSize: number
+): Promise<GenerationResult> {
+  let generated = 0;
+  let errors = 0;
+
+  await Promise.all(
+    batch.map(async (tile) => {
+      try {
+        await generateTile(tile, enabledFactors, gridSize);
+        generated++;
+      } catch (error) {
+        console.error(`Error generating tile ${tile.z}/${tile.x}/${tile.y}:`, error);
+        errors++;
+      }
+    })
+  );
+
+  return { generated, errors };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: GenerateRequest = await request.json();
@@ -39,76 +145,22 @@ export async function POST(request: NextRequest) {
     }
 
     const bounds = customBounds || POLAND_BOUNDS;
-
-    // Get all tiles for the bounds at this zoom level
     const tiles = getTilesForBounds(bounds, zoom);
+    const enabledFactors = DEFAULT_FACTORS.filter((f) => f.enabled && f.weight > 0);
+    const gridSize = calculateGridSize(zoom);
 
     console.log(`Generating ${tiles.length} tiles at zoom ${zoom}`);
 
-    // Get enabled factors
-    const enabledFactors = DEFAULT_FACTORS.filter((f) => f.enabled && f.weight > 0);
-
-    let generatedCount = 0;
-    let errorCount = 0;
+    let totalGenerated = 0;
+    let totalErrors = 0;
 
     // Process tiles in batches to avoid overwhelming the Overpass API
     for (let i = 0; i < tiles.length; i += TILE_CONFIG.BATCH_SIZE) {
       const batch = tiles.slice(i, i + TILE_CONFIG.BATCH_SIZE);
-
-      await Promise.all(
-        batch.map(async (tile) => {
-          try {
-            const tileBounds = tileToBounds(tile.z, tile.x, tile.y);
-
-            // Fetch POIs for this tile
-            const poiData = new Map<string, POI[]>();
-
-            for (const factor of enabledFactors) {
-              const cacheKey = generatePOICacheKey(factor.id, tileBounds);
-
-              const cached = await cacheGet<POI[]>(cacheKey);
-              if (cached) {
-                poiData.set(factor.id, cached);
-              } else {
-                try {
-                  const pois = await fetchPOIs(factor.osmTags, tileBounds);
-                  poiData.set(factor.id, pois);
-                  await cacheSet(cacheKey, pois, TILE_CONFIG.POI_CACHE_TTL_SECONDS);
-                } catch (poiError) {
-                  console.error(`Error fetching POIs for factor ${factor.id}:`, poiError);
-                  poiData.set(factor.id, []);
-                }
-              }
-            }
-
-            // Calculate heatmap for this tile - adaptive grid size based on zoom
-            const gridSize = Math.max(
-              TILE_CONFIG.MIN_GRID_SIZE,
-              TILE_CONFIG.BASE_GRID_SIZE / Math.pow(2, zoom - TILE_CONFIG.GRID_ZOOM_BASE)
-            );
-            const heatmapPoints = calculateHeatmap(tileBounds, poiData, enabledFactors, gridSize);
-
-            // Create pre-computed tile
-            const precomputedTile: PrecomputedTile = {
-              coordinates: tile,
-              points: heatmapPoints,
-              factorWeights: Object.fromEntries(
-                enabledFactors.map((f) => [f.id, f.weight])
-              ),
-              generatedAt: new Date().toISOString(),
-            };
-
-            // Store in cache
-            const tileCacheKey = `tile:${tile.z}:${tile.x}:${tile.y}`;
-            await cacheSet(tileCacheKey, precomputedTile, TILE_CONFIG.TILE_CACHE_TTL_SECONDS);
-
-            generatedCount++;
-          } catch (error) {
-            console.error(`Error generating tile ${tile.z}/${tile.x}/${tile.y}:`, error);
-            errorCount++;
-          }
-        })
-      );
+      const result = await processTileBatch(batch, enabledFactors, gridSize);
+      
+      totalGenerated += result.generated;
+      totalErrors += result.errors;
 
       // Small delay between batches to be nice to Overpass API
       if (i + TILE_CONFIG.BATCH_SIZE < tiles.length) {
@@ -118,8 +170,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      generated: generatedCount,
-      errors: errorCount,
+      generated: totalGenerated,
+      errors: totalErrors,
       total: tiles.length,
       zoom,
     });

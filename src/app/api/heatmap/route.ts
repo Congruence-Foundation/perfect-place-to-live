@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { encode } from '@msgpack/msgpack';
 import { fetchPoisWithFallback, DataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
-import { DEFAULT_FACTORS, getEnabledFactors } from '@/config/factors';
-import { Factor, POI, HeatmapRequest } from '@/types';
+import { Factor, HeatmapRequest } from '@/types';
 import { estimateGridSize, calculateAdaptiveGridSize, expandBounds, isValidBounds, filterPoisToBounds } from '@/lib/geo';
-import { errorResponse } from '@/lib/api-utils';
+import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
@@ -38,7 +36,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Check if client wants MessagePack format (~30% smaller than JSON)
-    const acceptsMsgpack = request.headers.get('Accept') === 'application/msgpack';
+    const useMsgpack = acceptsMsgpack(request);
 
     // Determine data source (default to Neon for performance)
     const dataSource: DataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
@@ -48,13 +46,12 @@ export async function POST(request: NextRequest) {
       return errorResponse(new Error('Invalid bounds'), 400);
     }
 
-    // Use provided factors or defaults
-    const factors: Factor[] = requestFactors || DEFAULT_FACTORS;
-    const enabledFactors = getEnabledFactors(factors);
-
-    if (enabledFactors.length === 0) {
-      return errorResponse(new Error('No enabled factors'), 400);
+    // Use provided factors or defaults, validate enabled factors
+    const factorResult = getValidatedFactors(requestFactors);
+    if (factorResult instanceof Response) {
+      return factorResult;
     }
+    const { factors, enabledFactors } = factorResult;
 
     // Expand bounds for grid/canvas to extend beyond viewport (prevents reload on small scrolls)
     const gridBounds = expandBounds(bounds, GRID_BUFFER_DEGREES);
@@ -131,18 +128,7 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    // Return MessagePack format if requested (~30% smaller than JSON)
-    if (acceptsMsgpack) {
-      const encoded = encode(responseData);
-      return new Response(encoded, {
-        headers: {
-          'Content-Type': 'application/msgpack',
-        },
-      });
-    }
-
-    // Default to JSON response
-    return NextResponse.json(responseData);
+    return createResponse(responseData, useMsgpack);
   } catch (error) {
     console.error('Heatmap API error:', error);
     return errorResponse(error);

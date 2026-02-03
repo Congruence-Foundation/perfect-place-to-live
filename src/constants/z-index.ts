@@ -11,6 +11,8 @@ export const Z_INDEX = {
   // Map layers (Leaflet)
   /** Leaflet map heatmap pane (below tile pane at 200, above overlay pane at 400) */
   MAP_HEATMAP_PANE: 450,
+  /** Tile border debug pane (above heatmap) */
+  MAP_TILE_BORDER_PANE: 500,
   
   // Floating UI controls
   /** Base level for floating controls (settings, debug, info panels) */

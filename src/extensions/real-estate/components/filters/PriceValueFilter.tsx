@@ -7,6 +7,12 @@ import type { PriceValueFilter as PriceValueFilterType } from '../../types/prope
 import { PRICE_CATEGORY_COLORS } from '../../lib';
 import { cn } from '@/lib/utils';
 
+// Slider configuration constants
+const SLIDER_MIN = 0;
+const SLIDER_MAX = 100;
+const SLIDER_STEP = 20;
+const DEFAULT_COLOR = '#6b7280';
+
 interface PriceValueFilterOption {
   value: PriceValueFilterType;
   label: string;
@@ -23,15 +29,25 @@ const PRICE_VALUE_OPTIONS: PriceValueFilterOption[] = [
   { value: 'overpriced', label: 'Over', color: PRICE_CATEGORY_COLORS.overpriced, position: 100 },
 ];
 
-// Get label for current range
+/** Check if range covers all options */
+function isFullRange(range: [number, number]): boolean {
+  return range[0] === SLIDER_MIN && range[1] === SLIDER_MAX;
+}
+
+/** Check if range is a single step selection */
+function isSingleStep(range: [number, number]): boolean {
+  return range[1] - range[0] === SLIDER_STEP;
+}
+
+/** Get label for current range */
 function getRangeLabel(range: [number, number]): string {
-  if (range[0] === 0 && range[1] === 100) return 'All';
+  if (isFullRange(range)) return 'All';
   
   const startOption = PRICE_VALUE_OPTIONS.find(o => o.position === range[0]);
   const endOption = PRICE_VALUE_OPTIONS.find(o => o.position === range[1]);
   
   // Single step selection
-  if (range[1] - range[0] === 20) {
+  if (isSingleStep(range)) {
     return endOption?.label || 'Custom';
   }
   
@@ -41,17 +57,17 @@ function getRangeLabel(range: [number, number]): string {
   return `${startLabel} - ${endLabel}`;
 }
 
-// Get color for current range
+/** Get color for current range */
 function getRangeColor(range: [number, number]): string {
-  if (range[0] === 0 && range[1] === 100) return '#6b7280';
+  if (isFullRange(range)) return DEFAULT_COLOR;
   
   // For single step, use the end option's color
-  if (range[1] - range[0] === 20) {
+  if (isSingleStep(range)) {
     const endOption = PRICE_VALUE_OPTIONS.find(o => o.position === range[1]);
-    return endOption?.color || '#6b7280';
+    return endOption?.color || DEFAULT_COLOR;
   }
   
-  // For range, use a blend or the midpoint color
+  // For range, use the midpoint color
   const midpoint = (range[0] + range[1]) / 2;
   const closest = PRICE_VALUE_OPTIONS.reduce((prev, curr) => 
     Math.abs(curr.position - midpoint) < Math.abs(prev.position - midpoint) ? curr : prev
@@ -88,11 +104,11 @@ export default function PriceValueFilter({
     if (disabled) return;
     
     if (option.value === 'all') {
-      onChange([0, 100]);
+      onChange([SLIDER_MIN, SLIDER_MAX]);
     } else {
-      // Select the interval ending at this position (one step = 20)
+      // Select the interval ending at this position
       const endPos = option.position;
-      const startPos = Math.max(0, endPos - 20);
+      const startPos = Math.max(SLIDER_MIN, endPos - SLIDER_STEP);
       onChange([startPos, endPos]);
     }
   };
@@ -123,9 +139,9 @@ export default function PriceValueFilter({
         <SliderPrimitive.Root
           value={range}
           onValueChange={handleValueChange}
-          min={0}
-          max={100}
-          step={20}
+          min={SLIDER_MIN}
+          max={SLIDER_MAX}
+          step={SLIDER_STEP}
           disabled={disabled}
           className={cn(
             'relative flex w-full touch-none items-center select-none',
@@ -180,7 +196,7 @@ export default function PriceValueFilter({
             // Check if this option is within the selected range
             const isInRange = option.position >= range[0] && option.position <= range[1];
             // Check if this is the exact single-step selection
-            const isExactSelection = range[1] - range[0] === 20 && option.position === range[1];
+            const isExactSelection = isSingleStep(range) && option.position === range[1];
             
             return (
               <button

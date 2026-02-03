@@ -11,9 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { encode } from '@msgpack/msgpack';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
-import { DEFAULT_FACTORS, getEnabledFactors } from '@/config/factors';
 import type { Factor, POI, HeatmapPoint, Bounds } from '@/types';
 import { tileToBounds, isValidBounds } from '@/lib/geo';
 import { 
@@ -29,7 +27,7 @@ import {
   type HeatmapTileCacheEntry,
 } from '@/lib/heatmap-tile-cache';
 import { getPoiTilesForArea, filterPoisToViewport, getPoiTileCacheStats } from '@/lib/poi-tile-cache';
-import { errorResponse } from '@/lib/api-utils';
+import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 import type { DataSource } from '@/lib/poi';
 import { createTimer } from '@/lib/profiling';
@@ -109,14 +107,15 @@ export async function POST(request: NextRequest) {
       viewportBounds,
     } = body;
 
-    const acceptsMsgpack = request.headers.get('Accept') === 'application/msgpack';
+    const useMsgpack = acceptsMsgpack(request);
     const dataSource: DataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
-    const factors: Factor[] = requestFactors || DEFAULT_FACTORS;
-    const enabledFactors = getEnabledFactors(factors);
-
-    if (enabledFactors.length === 0) {
-      return errorResponse(new Error('No enabled factors'), 400);
+    
+    // Use provided factors or defaults, validate enabled factors
+    const factorResult = getValidatedFactors(requestFactors);
+    if (factorResult instanceof Response) {
+      return factorResult;
     }
+    const { factors, enabledFactors } = factorResult;
 
     const configHash = hashHeatmapConfig({ factors, distanceCurve, sensitivity });
     const tileCoords: TileCoord[] = tiles.map(t => ({ z: t.z, x: t.x, y: t.y }));
@@ -203,7 +202,7 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    return formatResponse(responseData, acceptsMsgpack);
+    return createResponse(responseData, useMsgpack);
   } catch (error) {
     console.error('Batch heatmap API error:', error);
     return errorResponse(error);
@@ -333,18 +332,4 @@ async function computeUncachedTiles(
   }
 
   return results;
-}
-
-// ============================================================================
-// Response Formatting
-// ============================================================================
-
-function formatResponse(data: BatchHeatmapResponse, useMsgpack: boolean): Response {
-  if (useMsgpack) {
-    const encoded = encode(data);
-    return new Response(encoded, {
-      headers: { 'Content-Type': 'application/msgpack' },
-    });
-  }
-  return NextResponse.json(data);
 }

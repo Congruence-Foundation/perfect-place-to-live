@@ -4,14 +4,14 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Database, ChevronDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { DataSource } from '../config/filters';
+import type { PropertyDataSource } from '../config/filters';
 
 interface DataSourcesPanelProps {
-  enabledSources: DataSource[];
-  onSourcesChange: (sources: DataSource[]) => void;
+  enabledSources: PropertyDataSource[];
+  onSourcesChange: (sources: PropertyDataSource[]) => void;
 }
 
-const DATA_SOURCES: { id: DataSource; name: string; available: boolean }[] = [
+const DATA_SOURCES: { id: PropertyDataSource; name: string; available: boolean }[] = [
   { id: 'otodom', name: 'Otodom', available: true },
   { id: 'gratka', name: 'Gratka', available: false },
 ];
@@ -23,7 +23,7 @@ export default function DataSourcesPanel({
   const [isExpanded, setIsExpanded] = useState(false);
   const t = useTranslations('realEstate');
 
-  const handleSourceToggle = (source: DataSource, checked: boolean) => {
+  const handleSourceToggle = (source: PropertyDataSource, checked: boolean) => {
     if (checked) {
       onSourcesChange([...enabledSources, source]);
     } else {

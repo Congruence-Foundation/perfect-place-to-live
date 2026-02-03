@@ -2,8 +2,9 @@ import type { MapExtension, ExtensionRegistry } from './types';
 
 /**
  * Create an extension registry for managing map extensions
+ * Internal factory - not exported
  */
-export function createExtensionRegistry(): ExtensionRegistry {
+function createExtensionRegistry(): ExtensionRegistry {
   const extensions = new Map<string, MapExtension>();
 
   return {

@@ -36,6 +36,54 @@ export interface FetchPoisWithFallbackResult {
 }
 
 /**
+ * Store POIs in cache and add to the result map
+ */
+async function storePOIsInCache(
+  fetchedPOIs: Record<string, POI[]>,
+  poiData: Map<string, POI[]>,
+  bounds: Bounds
+): Promise<void> {
+  for (const [factorId, pois] of Object.entries(fetchedPOIs)) {
+    poiData.set(factorId, pois);
+    const cacheKey = generatePOICacheKey(factorId, bounds);
+    await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
+  }
+}
+
+/**
+ * Initialize empty arrays for factors that failed to fetch
+ */
+function initializeEmptyFactors(
+  factors: FactorDef[],
+  poiData: Map<string, POI[]>
+): void {
+  for (const factor of factors) {
+    if (!poiData.has(factor.id)) {
+      poiData.set(factor.id, []);
+    }
+  }
+}
+
+/**
+ * Attempt to fetch POIs from Overpass as a fallback
+ */
+async function fetchFromOverpassFallback(
+  factors: FactorDef[],
+  bounds: Bounds,
+  poiData: Map<string, POI[]>
+): Promise<boolean> {
+  try {
+    const overpassPOIs = await fetchPOIs(factors, bounds, 'overpass');
+    await storePOIsInCache(overpassPOIs, poiData, bounds);
+    return true;
+  } catch (overpassError) {
+    console.error('Overpass fallback also failed:', overpassError);
+    initializeEmptyFactors(factors, poiData);
+    return false;
+  }
+}
+
+/**
  * Fetches POIs with automatic fallback from Neon to Overpass.
  * 
  * This function handles:
@@ -89,34 +137,9 @@ export async function fetchPoisWithFallback(
         // No data in Neon DB for this area - try Overpass as fallback
         console.log('No POIs found in Neon DB, falling back to Overpass API...');
         actualDataSource = 'overpass';
-        
-        try {
-          const overpassPOIs = await fetchPOIs(uncachedFactors, bounds, 'overpass');
-          
-          // Store Overpass results
-          for (const [factorId, pois] of Object.entries(overpassPOIs)) {
-            poiData.set(factorId, pois);
-            // Cache the results for future requests
-            const cacheKey = generatePOICacheKey(factorId, bounds);
-            await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
-          }
-        } catch (overpassError) {
-          console.error('Overpass fallback also failed:', overpassError);
-          // Initialize empty arrays for failed factors
-          for (const factor of uncachedFactors) {
-            if (!poiData.has(factor.id)) {
-              poiData.set(factor.id, []);
-            }
-          }
-        }
+        await fetchFromOverpassFallback(uncachedFactors, bounds, poiData);
       } else {
-        // Store in cache and add to poiData
-        for (const [factorId, pois] of Object.entries(fetchedPOIs)) {
-          poiData.set(factorId, pois);
-          // Cache the results (useful for both sources)
-          const cacheKey = generatePOICacheKey(factorId, bounds);
-          await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
-        }
+        await storePOIsInCache(fetchedPOIs, poiData, bounds);
       }
     } catch (error) {
       console.error(`Error fetching POIs from ${actualDataSource}:`, error);
@@ -125,31 +148,9 @@ export async function fetchPoisWithFallback(
       if (actualDataSource === 'neon') {
         console.log('Neon DB error, falling back to Overpass API...');
         actualDataSource = 'overpass';
-        
-        try {
-          const overpassPOIs = await fetchPOIs(uncachedFactors, bounds, 'overpass');
-          
-          for (const [factorId, pois] of Object.entries(overpassPOIs)) {
-            poiData.set(factorId, pois);
-            const cacheKey = generatePOICacheKey(factorId, bounds);
-            await cacheSet(cacheKey, pois, POI_CACHE_TTL_SECONDS);
-          }
-        } catch (overpassError) {
-          console.error('Overpass fallback also failed:', overpassError);
-          // Initialize empty arrays for failed factors
-          for (const factor of uncachedFactors) {
-            if (!poiData.has(factor.id)) {
-              poiData.set(factor.id, []);
-            }
-          }
-        }
+        await fetchFromOverpassFallback(uncachedFactors, bounds, poiData);
       } else {
-        // Initialize empty arrays for failed factors
-        for (const factor of uncachedFactors) {
-          if (!poiData.has(factor.id)) {
-            poiData.set(factor.id, []);
-          }
-        }
+        initializeEmptyFactors(uncachedFactors, poiData);
       }
     }
   }

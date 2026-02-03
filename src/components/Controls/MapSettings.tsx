@@ -15,10 +15,11 @@ import {
 } from '@/components/ui/select';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { PanelHeader } from '@/components/ui/panel-header';
-import { HeatmapSettings } from '@/types';
-import { DistanceCurve } from '@/types';
+import { HeatmapSettings, DistanceCurve } from '@/types';
 import { ExtensionsSettingsPanel } from './ExtensionsSettingsPanel';
+import { PanelToggleButton } from './PanelToggleButton';
 import { useMapStore } from '@/stores/mapStore';
+import { Z_INDEX } from '@/constants/z-index';
 
 const CURVE_VALUES: DistanceCurve[] = ['log', 'linear', 'exp', 'power'];
 const HEATMAP_RADIUS_VALUES = [0, 1, 2] as const;
@@ -64,7 +65,7 @@ export default function MapSettings({
   return (
     <div className={`${
       isMobile ? 'relative' : 'absolute bottom-4 right-4'
-    } z-[1000]`}>
+    } z-[${Z_INDEX.FLOATING_CONTROLS}]`}>
       {/* Expanded Panel - Absolutely positioned above the button */}
       {isOpen && (
         <div className={`absolute bottom-12 right-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-64 animate-in fade-in slide-in-from-bottom-2 duration-200 ${
@@ -105,13 +106,13 @@ export default function MapSettings({
                 <SelectTrigger className="h-7 text-xs w-[100px]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper" className="z-[1100] w-64">
+                <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}] w-64`}>
                   {CURVE_VALUES.map((curveValue) => (
                     <SelectItem key={curveValue} value={curveValue} className="text-xs py-2">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{tCurves(`${curveValue}.label`)}</span>
                         <InfoTooltip 
-                          contentClassName="z-[1200]"
+                          contentClassName={`z-[${Z_INDEX.NESTED_DROPDOWN}]`}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <p className="text-xs font-medium mb-1">{tCurves(`${curveValue}.description`)}</p>
@@ -181,7 +182,7 @@ export default function MapSettings({
                 <SelectTrigger className="h-7 text-xs w-[100px]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper" className="z-[1100]">
+                <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}]`}>
                   {HEATMAP_RADIUS_VALUES.map((radiusValue) => (
                     <SelectItem key={radiusValue} value={String(radiusValue)} className="text-xs">
                       {t(`heatmapArea_${radiusValue}`)}
@@ -206,7 +207,7 @@ export default function MapSettings({
                 <SelectTrigger className="h-7 text-xs w-[100px]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper" className="z-[1100]">
+                <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}]`}>
                   {POI_BUFFER_SCALE_VALUES.map((scaleValue) => (
                     <SelectItem key={scaleValue} value={String(scaleValue)} className="text-xs">
                       {t(`poiBuffer_${String(scaleValue).replace('.', '_')}`)}
@@ -288,17 +289,12 @@ export default function MapSettings({
       )}
 
       {/* Toggle Button */}
-      <button
+      <PanelToggleButton
+        Icon={Settings}
+        isOpen={isOpen}
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center justify-center w-10 h-10 rounded-full shadow-lg transition-all ${
-          isOpen 
-            ? 'bg-primary text-primary-foreground' 
-            : 'bg-background/95 backdrop-blur-sm hover:bg-muted border'
-        }`}
         title={t('title')}
-      >
-        <Settings className={`h-5 w-5 ${isOpen ? '' : 'text-muted-foreground'}`} />
-      </button>
+      />
     </div>
   );
 }

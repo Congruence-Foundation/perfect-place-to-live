@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import { RealEstateSidebar } from '@/components/Controls';
 import DataSourcesPanel from './DataSourcesPanel';
 import PriceValueFilter from './filters/PriceValueFilter';
-import { TransactionTypeButtons, DEFAULT_RENT_PRICE, DEFAULT_SELL_PRICE } from './TransactionTypeButtons';
+import { TransactionTypeButtons } from './TransactionTypeButtons';
 import { ScoreRangeSection } from './ScoreRangeSection';
 import { useRealEstateExtension } from '../hooks';
 
@@ -25,22 +25,8 @@ export function RealEstateSidebarPanel() {
         enabled={realEstate.enabled}
         transaction={realEstate.filters.transaction}
         onDisable={() => realEstate.setEnabled(false)}
-        onSelectRent={() => {
-          realEstate.setEnabled(true);
-          realEstate.setFilters({ 
-            transaction: 'RENT',
-            priceMin: DEFAULT_RENT_PRICE.min,
-            priceMax: DEFAULT_RENT_PRICE.max
-          });
-        }}
-        onSelectSell={() => {
-          realEstate.setEnabled(true);
-          realEstate.setFilters({ 
-            transaction: 'SELL',
-            priceMin: DEFAULT_SELL_PRICE.min,
-            priceMax: DEFAULT_SELL_PRICE.max
-          });
-        }}
+        onSelectRent={() => realEstate.selectTransaction('RENT')}
+        onSelectSell={() => realEstate.selectTransaction('SELL')}
       />
 
       {/* Score Range Slider (only when real estate is enabled) */}

@@ -1,11 +1,11 @@
 import type { Bounds, POI, FactorDef } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
-import { tileToBounds } from '@/lib/geo/grid';
-import { isPointInBounds, getCombinedBounds } from '@/lib/geo/bounds';
-import { getTileKeyString } from '@/lib/geo/tiles';
-import { OVERPASS_API_URL } from '@/config/factors';
+import { getCombinedBounds, OVERPASS_API_URL } from '@/lib/geo';
 import { OVERPASS_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
+import {
+  distributePOIsByFactorToTiles,
+} from './tile-utils';
 
 // Rate limiting: track last request time
 let lastRequestTime = 0;
@@ -312,51 +312,8 @@ export async function fetchPOIsForTilesBatched(
   stopTimer({ tiles: tiles.length, factors: factorTags.length });
 
   // Distribute POIs to their respective tiles
-  return distributePOIsToTiles(allPOIsByFactor, tiles, factorTags);
-}
-
-/**
- * Distribute POIs from a combined query to their respective tiles
- */
-function distributePOIsToTiles(
-  poisByFactor: Record<string, POI[]>,
-  tiles: TileCoord[],
-  factorTags: FactorDef[]
-): Map<string, Record<string, POI[]>> {
-  // Pre-compute tile bounds for efficient lookup
-  const tileBoundsMap = new Map<string, Bounds>();
-  for (const tile of tiles) {
-    const key = getTileKeyString(tile);
-    tileBoundsMap.set(key, tileToBounds(tile.z, tile.x, tile.y));
-  }
-
-  // Initialize result map with empty arrays
-  const result = new Map<string, Record<string, POI[]>>();
-  for (const tile of tiles) {
-    const key = getTileKeyString(tile);
-    const factorMap: Record<string, POI[]> = {};
-    for (const factor of factorTags) {
-      factorMap[factor.id] = [];
-    }
-    result.set(key, factorMap);
-  }
-
-  // Assign each POI to its tile
-  for (const [factorId, pois] of Object.entries(poisByFactor)) {
-    for (const poi of pois) {
-      for (const [tileKey, bounds] of tileBoundsMap) {
-        if (isPointInBounds(poi.lat, poi.lng, bounds)) {
-          const tileData = result.get(tileKey);
-          if (tileData?.[factorId]) {
-            tileData[factorId].push(poi);
-          }
-          break; // POI belongs to exactly one tile
-        }
-      }
-    }
-  }
-
-  return result;
+  const factorIds = factorTags.map(f => f.id);
+  return distributePOIsByFactorToTiles(allPOIsByFactor, tiles, factorIds);
 }
 
 /**
@@ -365,11 +322,12 @@ function distributePOIsToTiles(
 export function generatePOICacheKey(factorId: string, bounds: Bounds): string {
   // Round bounds to reduce cache fragmentation
   const precision = 2;
+  const multiplier = 10 ** precision;
   const roundedBounds = {
-    south: Math.floor(bounds.south * Math.pow(10, precision)) / Math.pow(10, precision),
-    west: Math.floor(bounds.west * Math.pow(10, precision)) / Math.pow(10, precision),
-    north: Math.ceil(bounds.north * Math.pow(10, precision)) / Math.pow(10, precision),
-    east: Math.ceil(bounds.east * Math.pow(10, precision)) / Math.pow(10, precision),
+    south: Math.floor(bounds.south * multiplier) / multiplier,
+    west: Math.floor(bounds.west * multiplier) / multiplier,
+    north: Math.ceil(bounds.north * multiplier) / multiplier,
+    east: Math.ceil(bounds.east * multiplier) / multiplier,
   };
 
   return `poi:${factorId}:${roundedBounds.south},${roundedBounds.west},${roundedBounds.north},${roundedBounds.east}`;

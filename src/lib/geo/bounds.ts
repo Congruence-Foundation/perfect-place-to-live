@@ -107,13 +107,7 @@ export function filterPoisToBounds(
 ): Record<string, POI[]> {
   const result: Record<string, POI[]> = {};
   poiData.forEach((pois, factorId) => {
-    result[factorId] = pois.filter(
-      (poi) =>
-        poi.lat >= bounds.south &&
-        poi.lat <= bounds.north &&
-        poi.lng >= bounds.west &&
-        poi.lng <= bounds.east
-    );
+    result[factorId] = pois.filter((poi) => isPointInBounds(poi.lat, poi.lng, bounds));
   });
   return result;
 }

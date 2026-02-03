@@ -11,6 +11,7 @@ import { useSnapPoints } from '@/hooks';
 import ProfileSelector from './ProfileSelector';
 import WeightSliders from './WeightSliders';
 import ExtensionsBottomSheet from './ExtensionsBottomSheet';
+import { Z_INDEX } from '@/constants/z-index';
 
 // Snap points configuration
 const SNAP_CONFIG = {
@@ -167,7 +168,7 @@ export default function BottomSheet({
       {/* Floating controls - positioned relative to bottom sheet */}
       {floatingControls && (
         <div 
-          className={`fixed left-0 right-0 z-[1001] px-4 pb-2 pointer-events-none ${
+          className={`fixed left-0 right-0 z-[${Z_INDEX.SEARCH_BOX}] px-4 pb-2 pointer-events-none ${
             isDragging ? '' : 'bottom-sheet'
           }`}
           style={{ 
@@ -183,7 +184,7 @@ export default function BottomSheet({
       {/* Bottom Sheet */}
       <div
         ref={sheetRef}
-        className={`fixed bottom-0 left-0 right-0 z-[1002] bg-background/95 backdrop-blur-sm rounded-t-2xl shadow-lg border-t ${
+        className={`fixed bottom-0 left-0 right-0 z-[${Z_INDEX.BOTTOM_SHEET}] bg-background/95 backdrop-blur-sm rounded-t-2xl shadow-lg border-t ${
           isDragging ? '' : 'bottom-sheet'
         }`}
         style={{ 
@@ -199,6 +200,12 @@ export default function BottomSheet({
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleMouseDown}
         onClick={handleToggle}
+        role="slider"
+        aria-label="Drag to resize panel"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round((sheetHeight / (typeof window !== 'undefined' ? window.innerHeight : 800)) * 100)}
+        tabIndex={0}
       >
         <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
         <GripHorizontal className="h-4 w-4 text-muted-foreground/50 mt-1" />

@@ -1,14 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { encode } from '@msgpack/msgpack';
+import { NextRequest } from 'next/server';
 import { fetchPoisWithFallback, DataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
-import { DEFAULT_FACTORS, getEnabledFactors } from '@/config/factors';
-import { Factor, POI } from '@/types';
+import { Factor } from '@/types';
 import { tileToBounds, expandBounds, isValidBounds, filterPoisToBounds } from '@/lib/geo';
 import { getHeatmapTileKey, hashHeatmapConfig } from '@/lib/geo/tiles';
 import { getCachedHeatmapTile, setCachedHeatmapTile } from '@/lib/heatmap-tile-cache';
-import { errorResponse } from '@/lib/api-utils';
-import { PERFORMANCE_CONFIG } from '@/constants/performance';
+import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors } from '@/lib/api-utils';
+import { PERFORMANCE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +18,8 @@ const {
   MIN_CELL_SIZE,
   MAX_CELL_SIZE,
 } = PERFORMANCE_CONFIG;
+
+const { TILE_SIZE_METERS } = POI_TILE_CONFIG;
 
 /**
  * Request body for heatmap tile endpoint
@@ -55,18 +55,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if client wants MessagePack format
-    const acceptsMsgpack = request.headers.get('Accept') === 'application/msgpack';
+    const useMsgpack = acceptsMsgpack(request);
 
     // Determine data source
     const dataSource: DataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
 
-    // Use provided factors or defaults
-    const factors: Factor[] = requestFactors || DEFAULT_FACTORS;
-    const enabledFactors = getEnabledFactors(factors);
-
-    if (enabledFactors.length === 0) {
-      return errorResponse(new Error('No enabled factors'), 400);
+    // Use provided factors or defaults, validate enabled factors
+    const factorResult = getValidatedFactors(requestFactors);
+    if (factorResult instanceof Response) {
+      return factorResult;
     }
+    const { factors, enabledFactors } = factorResult;
 
     // Generate config hash for cache key
     const configHash = hashHeatmapConfig({
@@ -90,14 +89,7 @@ export async function POST(request: NextRequest) {
         },
       };
 
-      if (acceptsMsgpack) {
-        const encoded = encode(responseData);
-        return new Response(encoded, {
-          headers: { 'Content-Type': 'application/msgpack' },
-        });
-      }
-
-      return NextResponse.json(responseData);
+      return createResponse(responseData, useMsgpack);
     }
 
     const startTime = performance.now();
@@ -113,10 +105,8 @@ export async function POST(request: NextRequest) {
     // Expand bounds for POI fetching to avoid edge effects
     const poiBounds = expandBounds(tileBounds, POI_BUFFER_DEGREES);
 
-    // Calculate adaptive grid size for this tile
-    // Tiles at zoom 12 are ~4.8km x 4.8km, so we use a reasonable grid size
-    const tileWidthMeters = 4800; // Approximate at Poland's latitude
-    const gridSize = Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, tileWidthMeters / Math.sqrt(TARGET_GRID_POINTS / 4)));
+    // Calculate adaptive grid size for this tile using configured tile size
+    const gridSize = Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, TILE_SIZE_METERS / Math.sqrt(TARGET_GRID_POINTS / 4)));
 
     // Fetch POIs with automatic fallback from Neon to Overpass
     const factorDefs = enabledFactors.map(f => ({ id: f.id, osmTags: f.osmTags }));
@@ -170,14 +160,7 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    if (acceptsMsgpack) {
-      const encoded = encode(responseData);
-      return new Response(encoded, {
-        headers: { 'Content-Type': 'application/msgpack' },
-      });
-    }
-
-    return NextResponse.json(responseData);
+    return createResponse(responseData, useMsgpack);
   } catch (error) {
     console.error('Heatmap tile API error:', error);
     return errorResponse(error);

@@ -1,13 +1,15 @@
 import { Factor } from '@/types/factors';
 import { POI_CATEGORIES, POICategory, getOsmTags } from './poi-categories';
 
-// Profile type definition
-interface FactorProfile {
+/**
+ * Profile type definition for factor presets
+ */
+export interface FactorProfile {
   id: string;
   name: string;
   description: string;
   icon: string;
-  // Factor overrides: factorId -> { weight, maxDistance, enabled }
+  /** Factor overrides: factorId -> { weight, maxDistance, enabled } */
   overrides: Record<string, { weight?: number; maxDistance?: number; enabled?: boolean }>;
 }
 
@@ -390,17 +392,3 @@ export function applyProfile(profileId: string): Factor[] {
 export function getEnabledFactors(factors: Factor[]): Factor[] {
   return factors.filter(f => f.enabled && f.weight !== 0);
 }
-
-export const POLAND_BOUNDS = {
-  north: 54.9,
-  south: 49.0,
-  east: 24.2,
-  west: 14.1,
-};
-
-export const POLAND_CENTER = {
-  lat: 52.0,
-  lng: 19.0,
-};
-
-export const OVERPASS_API_URL = 'https://overpass-api.de/api/interpreter';

@@ -34,7 +34,7 @@ export const PROPERTY_TILE_ZOOM = PROPERTY_TILE_CONFIG.TILE_ZOOM;
 
 /**
  * Expand a set of tiles by a radius in all directions
- * Used to include neighboring tiles for price analysis
+ * Used to include neighboring tiles for price analysis or POI fetching
  * 
  * @param tiles - Array of tile coordinates
  * @param radius - Number of tile layers to add around the viewport
@@ -53,20 +53,41 @@ export function getExpandedTilesForRadius(
   const maxY = Math.max(...tiles.map(t => t.y));
   const z = tiles[0].z;
 
-  // Expand by radius in all directions
-  const expanded: TileCoord[] = [];
+  return generateTileGrid(minX, maxX, minY, maxY, z, radius);
+}
+
+/**
+ * Generate a grid of tiles within bounds, optionally expanded by a radius
+ * 
+ * @param minX - Minimum X tile coordinate
+ * @param maxX - Maximum X tile coordinate
+ * @param minY - Minimum Y tile coordinate
+ * @param maxY - Maximum Y tile coordinate
+ * @param z - Zoom level
+ * @param radius - Number of tile layers to add around the bounds (default 0)
+ * @returns Array of tile coordinates
+ */
+function generateTileGrid(
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number,
+  z: number,
+  radius: number = 0
+): TileCoord[] {
+  const tiles: TileCoord[] = [];
   const maxTileIndex = Math.pow(2, z) - 1;
 
   for (let x = minX - radius; x <= maxX + radius; x++) {
     for (let y = minY - radius; y <= maxY + radius; y++) {
       // Clamp to valid tile coordinates
       if (x >= 0 && y >= 0 && x <= maxTileIndex && y <= maxTileIndex) {
-        expanded.push({ x, y, z });
+        tiles.push({ x, y, z });
       }
     }
   }
 
-  return expanded;
+  return tiles;
 }
 
 /**
@@ -172,12 +193,6 @@ export function getHeatmapTileKey(z: number, x: number, y: number, configHash: s
 // ============================================================================
 
 /**
- * Fixed zoom level for POI tiles
- * Using same zoom as heatmap tiles for simplicity
- */
-export const POI_TILE_ZOOM = POI_TILE_CONFIG.TILE_ZOOM;
-
-/**
  * Generate a cache key for a POI tile
  * @param z - Zoom level
  * @param x - Tile X coordinate
@@ -226,25 +241,5 @@ export function getPoiTilesForHeatmapTiles(
   if (heatmapTiles.length === 0) return [];
   
   const poiRadius = calculatePoiTileRadius(maxDistanceMeters, bufferScale);
-  
-  // Get bounding box of heatmap tiles
-  const minX = Math.min(...heatmapTiles.map(t => t.x));
-  const maxX = Math.max(...heatmapTiles.map(t => t.x));
-  const minY = Math.min(...heatmapTiles.map(t => t.y));
-  const maxY = Math.max(...heatmapTiles.map(t => t.y));
-  const z = heatmapTiles[0].z;
-  
-  // Expand by POI radius
-  const poiTiles: TileCoord[] = [];
-  const maxTileIndex = Math.pow(2, z) - 1;
-  
-  for (let x = minX - poiRadius; x <= maxX + poiRadius; x++) {
-    for (let y = minY - poiRadius; y <= maxY + poiRadius; y++) {
-      if (x >= 0 && y >= 0 && x <= maxTileIndex && y <= maxTileIndex) {
-        poiTiles.push({ x, y, z });
-      }
-    }
-  }
-  
-  return poiTiles;
+  return getExpandedTilesForRadius(heatmapTiles, poiRadius);
 }

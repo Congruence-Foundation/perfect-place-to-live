@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, ChevronDown } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -111,11 +111,11 @@ export default function RealEstateSidebar({
   return (
     <div className="rounded-xl bg-muted/50 transition-colors">
       {/* Header - always visible */}
-      <div className="flex items-center justify-between p-3">
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-3 flex-1"
-        >
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center justify-between p-3 w-full"
+      >
+        <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm bg-primary text-primary-foreground">
             <Search className="h-4 w-4" />
           </div>
@@ -123,18 +123,15 @@ export default function RealEstateSidebar({
             <span className="text-sm font-medium block">{t('searchCriteria')}</span>
             <span className="text-xs text-muted-foreground">{getStatusText()}</span>
           </div>
-        </button>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="p-1 hover:bg-background/50 rounded transition-colors"
-        >
+        </div>
+        <div className="p-1 hover:bg-background/50 rounded transition-colors">
           <ChevronDown
             className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
               isExpanded ? 'rotate-180' : ''
             }`}
           />
-        </button>
-      </div>
+        </div>
+      </button>
 
       {/* Expanded content */}
       {isExpanded && (

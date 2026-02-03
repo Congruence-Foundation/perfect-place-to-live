@@ -1,4 +1,5 @@
 import { Info } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   Tooltip,
   TooltipContent,
@@ -16,6 +17,11 @@ interface InfoTooltipProps {
   onClick?: (e: React.MouseEvent) => void;
 }
 
+const ICON_SIZE_CLASSES = {
+  sm: 'h-3 w-3',
+  md: 'h-3.5 w-3.5',
+} as const;
+
 /**
  * Reusable info tooltip component with consistent styling
  * Displays an info icon that shows a tooltip on hover
@@ -28,9 +34,6 @@ export function InfoTooltip({
   contentClassName,
   onClick
 }: InfoTooltipProps) {
-  const iconClass = iconSize === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5';
-  const finalContentClass = contentClassName ? `${className} ${contentClassName}` : className;
-  
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -39,10 +42,10 @@ export function InfoTooltip({
           className="p-0.5 hover:bg-muted rounded transition-colors"
           onClick={onClick}
         >
-          <Info className={`${iconClass} text-muted-foreground`} />
+          <Info className={cn(ICON_SIZE_CLASSES[iconSize], 'text-muted-foreground')} />
         </button>
       </TooltipTrigger>
-      <TooltipContent side={side} className={finalContentClass}>
+      <TooltipContent side={side} className={cn(className, contentClassName)}>
         {children}
       </TooltipContent>
     </Tooltip>
