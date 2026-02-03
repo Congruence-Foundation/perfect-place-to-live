@@ -109,6 +109,7 @@ export function RealEstateSidebarPanel() {
             onFiltersChange={realEstate.setFilters}
             propertyCount={realEstate.totalCount}
             isLoading={realEstate.isLoading}
+            isBelowMinZoom={realEstate.isBelowMinZoom}
             error={realEstate.error}
           />
           

@@ -333,8 +333,16 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   // Read debug tile state from store
   const showHeatmapTileBorders = useMapStore((s) => s.showHeatmapTileBorders);
   const showPropertyTileBorders = useMapStore((s) => s.showPropertyTileBorders);
+  const setShowHeatmapTileBorders = useMapStore((s) => s.setShowHeatmapTileBorders);
+  const setShowPropertyTileBorders = useMapStore((s) => s.setShowPropertyTileBorders);
   const heatmapTiles = useMapStore((s) => s.heatmapDebugTiles);
   const propertyTiles = useMapStore((s) => s.extensionDebugTiles);
+  
+  // Reset debug toggles on mount to avoid stale state from devtools
+  useEffect(() => {
+    setShowHeatmapTileBorders(false);
+    setShowPropertyTileBorders(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   
   // Track previous heatmap data to avoid unnecessary re-renders
   const prevHeatmapHashRef = useRef<string>('');
@@ -761,6 +769,14 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   // Render tile borders for debugging
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
+    
+    // If neither border type is enabled, clear and return
+    if (!showHeatmapTileBorders && !showPropertyTileBorders) {
+      if (tileBorderLayerRef.current) {
+        tileBorderLayerRef.current.clearLayers();
+      }
+      return;
+    }
 
     const renderTileBorders = async () => {
       try {
@@ -770,7 +786,17 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
         // Create or clear tile border layer
         if (!tileBorderLayerRef.current) {
-          tileBorderLayerRef.current = L.layerGroup().addTo(map);
+          // Create a pane for tile borders above the heatmap
+          let tileBorderPane = map.getPane('tileBorderPane');
+          if (!tileBorderPane) {
+            map.createPane('tileBorderPane');
+            tileBorderPane = map.getPane('tileBorderPane');
+            if (tileBorderPane) {
+              tileBorderPane.style.zIndex = '500'; // Above heatmap (450)
+              tileBorderPane.style.pointerEvents = 'none';
+            }
+          }
+          tileBorderLayerRef.current = L.layerGroup({ pane: 'tileBorderPane' }).addTo(map);
         }
         tileBorderLayerRef.current.clearLayers();
 
@@ -787,64 +813,72 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         };
 
         // Render heatmap tile borders (blue)
-        if (showHeatmapTileBorders && heatmapTiles.length > 0) {
-          for (const tile of heatmapTiles) {
-            const bounds = tileToBounds(tile.z, tile.x, tile.y);
-            const rect = L.rectangle(
-              [[bounds.south, bounds.west], [bounds.north, bounds.east]],
-              {
-                color: '#3b82f6',
-                weight: 2,
-                fill: false,
-                dashArray: '5, 5',
+        if (showHeatmapTileBorders) {
+          if (heatmapTiles.length > 0) {
+            for (const tile of heatmapTiles) {
+              const bounds = tileToBounds(tile.z, tile.x, tile.y);
+              const rect = L.rectangle(
+                [[bounds.south, bounds.west], [bounds.north, bounds.east]],
+                {
+                  color: '#3b82f6',
+                  weight: 2,
+                  fill: false,
+                  dashArray: '5, 5',
+                  interactive: false,
+                  pane: 'tileBorderPane',
+                }
+              );
+              rect.addTo(tileBorderLayerRef.current!);
+              
+              // Add tile label at center
+              const center = [(bounds.north + bounds.south) / 2, (bounds.east + bounds.west) / 2] as [number, number];
+              const label = L.marker(center, {
+                icon: L.divIcon({
+                  className: '',
+                  html: `<div style="background: rgb(59, 130, 246); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-family: monospace; white-space: nowrap; transform: translate(-50%, -100%);">H ${tile.z}/${tile.x}/${tile.y}</div>`,
+                  iconSize: [0, 0],
+                  iconAnchor: [0, 0],
+                }),
                 interactive: false,
-              }
-            );
-            rect.addTo(tileBorderLayerRef.current!);
-            
-            // Add tile label at center
-            const center = [(bounds.north + bounds.south) / 2, (bounds.east + bounds.west) / 2] as [number, number];
-            const label = L.marker(center, {
-              icon: L.divIcon({
-                className: '',
-                html: `<div style="background: rgba(59, 130, 246, 0.85); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-family: monospace; white-space: nowrap; transform: translate(-50%, -100%);">H ${tile.z}/${tile.x}/${tile.y}</div>`,
-                iconSize: [0, 0],
-                iconAnchor: [0, 0],
-              }),
-              interactive: false,
-            });
-            label.addTo(tileBorderLayerRef.current!);
+                pane: 'tileBorderPane',
+              });
+              label.addTo(tileBorderLayerRef.current!);
+            }
           }
         }
 
         // Render property tile borders (orange)
-        if (showPropertyTileBorders && propertyTiles.length > 0) {
-          for (const tile of propertyTiles) {
-            const bounds = tileToBounds(tile.z, tile.x, tile.y);
-            const rect = L.rectangle(
-              [[bounds.south, bounds.west], [bounds.north, bounds.east]],
-              {
-                color: '#f97316',
-                weight: 2,
-                fill: false,
-                dashArray: '3, 3',
+        if (showPropertyTileBorders) {
+          if (propertyTiles.length > 0) {
+            for (const tile of propertyTiles) {
+              const bounds = tileToBounds(tile.z, tile.x, tile.y);
+              const rect = L.rectangle(
+                [[bounds.south, bounds.west], [bounds.north, bounds.east]],
+                {
+                  color: '#f97316',
+                  weight: 2,
+                  fill: false,
+                  dashArray: '3, 3',
+                  interactive: false,
+                  pane: 'tileBorderPane',
+                }
+              );
+              rect.addTo(tileBorderLayerRef.current!);
+              
+              // Add tile label (offset below heatmap label)
+              const center = [(bounds.north + bounds.south) / 2, (bounds.east + bounds.west) / 2] as [number, number];
+              const label = L.marker(center, {
+                icon: L.divIcon({
+                  className: '',
+                  html: `<div style="background: rgb(249, 115, 22); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-family: monospace; white-space: nowrap; transform: translate(-50%, 5px);">P ${tile.z}/${tile.x}/${tile.y}</div>`,
+                  iconSize: [0, 0],
+                  iconAnchor: [0, 0],
+                }),
                 interactive: false,
-              }
-            );
-            rect.addTo(tileBorderLayerRef.current!);
-            
-            // Add tile label (offset below heatmap label)
-            const center = [(bounds.north + bounds.south) / 2, (bounds.east + bounds.west) / 2] as [number, number];
-            const label = L.marker(center, {
-              icon: L.divIcon({
-                className: '',
-                html: `<div style="background: rgba(249, 115, 22, 0.85); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-family: monospace; white-space: nowrap; transform: translate(-50%, 5px);">P ${tile.z}/${tile.x}/${tile.y}</div>`,
-                iconSize: [0, 0],
-                iconAnchor: [0, 0],
-              }),
-              interactive: false,
-            });
-            label.addTo(tileBorderLayerRef.current!);
+                pane: 'tileBorderPane',
+              });
+              label.addTo(tileBorderLayerRef.current!);
+            }
           }
         }
       } catch (error) {

@@ -16,6 +16,7 @@ import {
   filterClustersByScore,
 } from './lib';
 import { createTimer, logPerf, isProfilingEnabled } from '@/lib/profiling';
+import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
 
 /**
  * RealEstateController - Self-contained controller for the real estate extension
@@ -60,6 +61,7 @@ export function RealEstateController() {
     setComputedData,
     setIsLoading,
     setIsTooLarge,
+    setIsBelowMinZoom,
     setError,
     cacheClusterProperties,
     clearProperties,
@@ -76,6 +78,7 @@ export function RealEstateController() {
       setComputedData: s.setComputedData,
       setIsLoading: s.setIsLoading,
       setIsTooLarge: s.setIsTooLarge,
+      setIsBelowMinZoom: s.setIsBelowMinZoom,
       setError: s.setError,
       cacheClusterProperties: s.cacheClusterProperties,
       clearProperties: s.clearProperties,
@@ -92,6 +95,8 @@ export function RealEstateController() {
     isTooLarge,
     error,
     tiles: propertyTiles,
+    mode: fetchMode,
+    totalCount,
   } = useTileQueries({
     bounds,
     zoom,
@@ -99,6 +104,9 @@ export function RealEstateController() {
     priceAnalysisRadius,
     enabled,
   });
+
+  // Check if zoom is below minimum display level
+  const isBelowMinZoom = zoom < PROPERTY_TILE_CONFIG.MIN_DISPLAY_ZOOM;
 
   // Sync tile query state to store
   useEffect(() => {
@@ -108,6 +116,10 @@ export function RealEstateController() {
   useEffect(() => {
     setIsTooLarge(isTooLarge);
   }, [isTooLarge, setIsTooLarge]);
+
+  useEffect(() => {
+    setIsBelowMinZoom(isBelowMinZoom);
+  }, [isBelowMinZoom, setIsBelowMinZoom]);
 
   useEffect(() => {
     setError(error);
@@ -120,18 +132,18 @@ export function RealEstateController() {
 
   // Update raw data in store when tile data changes
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || isBelowMinZoom) {
       return;
     }
-    setRawData(rawProperties, rawClusters, rawProperties.length);
-  }, [rawProperties, rawClusters, enabled, setRawData]);
+    setRawData(rawProperties, rawClusters, totalCount);
+  }, [rawProperties, rawClusters, totalCount, enabled, setRawData, isBelowMinZoom]);
 
-  // Clear properties when disabled
+  // Clear properties when disabled or below minimum zoom
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || isBelowMinZoom) {
       clearProperties();
     }
-  }, [enabled, clearProperties]);
+  }, [enabled, isBelowMinZoom, clearProperties]);
 
   // ============================================
   // COMPUTED: Enrich and filter properties

@@ -25,9 +25,10 @@ import {
 import { 
   getCachedHeatmapTile, 
   setCachedHeatmapTile,
+  getHeatmapTileCacheStats,
   type HeatmapTileCacheEntry,
 } from '@/lib/heatmap-tile-cache';
-import { getPoiTilesForArea, filterPoisToViewport } from '@/lib/poi-tile-cache';
+import { getPoiTilesForArea, filterPoisToViewport, getPoiTileCacheStats } from '@/lib/poi-tile-cache';
 import { errorResponse } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 import type { DataSource } from '@/lib/poi';
@@ -70,6 +71,10 @@ interface BatchHeatmapResponse {
     poiTileCount: number;
     poiCounts: Record<string, number>;
     dataSource: DataSource;
+    l1CacheStats?: {
+      heatmap: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
+      poi: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
+    };
   };
 }
 
@@ -191,6 +196,10 @@ export async function POST(request: NextRequest) {
         poiTileCount: poiTiles.length,
         poiCounts,
         dataSource,
+        l1CacheStats: {
+          heatmap: getHeatmapTileCacheStats(),
+          poi: getPoiTileCacheStats(),
+        },
       },
     };
 

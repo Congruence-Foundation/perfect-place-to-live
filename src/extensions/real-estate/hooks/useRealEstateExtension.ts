@@ -19,6 +19,7 @@ export interface UseRealEstateExtensionReturn {
   dataSources: DataSource[];
   totalCount: number;
   isLoading: boolean;
+  isBelowMinZoom: boolean;
   error: string | null;
   
   // Computed values for debug/settings
@@ -56,6 +57,7 @@ export function useRealEstateExtension(): UseRealEstateExtensionReturn {
     dataSources,
     totalCount,
     isLoading,
+    isBelowMinZoom,
     error,
     properties,
     clusters,
@@ -74,6 +76,7 @@ export function useRealEstateExtension(): UseRealEstateExtensionReturn {
       dataSources: s.dataSources,
       totalCount: s.totalCount,
       isLoading: s.isLoading,
+      isBelowMinZoom: s.isBelowMinZoom,
       error: s.error,
       properties: s.properties,
       clusters: s.clusters,
@@ -160,6 +163,7 @@ export function useRealEstateExtension(): UseRealEstateExtensionReturn {
     dataSources,
     totalCount,
     isLoading,
+    isBelowMinZoom,
     error,
     propertyCount: properties.length,
     clusterCount: clusters.length,

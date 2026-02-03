@@ -43,6 +43,7 @@ export interface RealEstateState {
   // API state
   isLoading: boolean;
   isTooLarge: boolean; // Viewport too large for tile fetching
+  isBelowMinZoom: boolean; // Zoom level below minimum display threshold
   error: string | null;
   
   // Cache
@@ -69,6 +70,7 @@ export interface RealEstateActions {
   // API state actions
   setIsLoading: (loading: boolean) => void;
   setIsTooLarge: (isTooLarge: boolean) => void;
+  setIsBelowMinZoom: (isBelowMinZoom: boolean) => void;
   setError: (error: string | null) => void;
   
   // Cache actions
@@ -105,6 +107,7 @@ const initialState: RealEstateState = {
   clusterAnalysisData: new Map(),
   isLoading: false,
   isTooLarge: false,
+  isBelowMinZoom: false,
   error: null,
   clusterPropertiesCache: new Map(),
   cacheVersion: 0,
@@ -173,6 +176,7 @@ export const useRealEstateStore = create<RealEstateStore>()(
       // API state actions
       setIsLoading: (isLoading) => set({ isLoading }, false, 'setIsLoading'),
       setIsTooLarge: (isTooLarge) => set({ isTooLarge }, false, 'setIsTooLarge'),
+      setIsBelowMinZoom: (isBelowMinZoom) => set({ isBelowMinZoom }, false, 'setIsBelowMinZoom'),
       setError: (error) => set({ error }, false, 'setError'),
       
       // Cache actions
@@ -306,3 +310,4 @@ export const useRealEstateLoading = () => useRealEstateStore((s) => s.isLoading)
 export const useRealEstateError = () => useRealEstateStore((s) => s.error);
 export const useRealEstatePriceAnalysisRadius = () => useRealEstateStore((s) => s.priceAnalysisRadius);
 export const useRealEstateIsTooLarge = () => useRealEstateStore((s) => s.isTooLarge);
+export const useRealEstateIsBelowMinZoom = () => useRealEstateStore((s) => s.isBelowMinZoom);

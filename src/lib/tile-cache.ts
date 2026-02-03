@@ -1,9 +1,11 @@
 /**
- * Property tile cache with LRU + Redis support
+ * Property tile cache with Redis-first strategy
  * 
- * Uses a two-layer caching strategy:
- * 1. LRU cache (in-memory) - fastest, limited size
- * 2. Redis cache (optional) - persistent, shared across instances
+ * Optimized for serverless environments where each request may run in a different instance.
+ * 
+ * Strategy:
+ * 1. Redis (primary) - persistent, shared across all instances
+ * 2. LRU cache (secondary) - request-local optimization to avoid repeated Redis calls
  */
 
 import { LRUCache } from 'lru-cache';
@@ -22,8 +24,7 @@ export interface TileCacheEntry {
 }
 
 /**
- * LRU cache for property tiles
- * Provides fast in-memory caching with automatic eviction
+ * LRU cache for request-local optimization
  */
 const tileCache = new LRUCache<string, TileCacheEntry>({
   max: PROPERTY_TILE_CONFIG.SERVER_LRU_MAX,
@@ -32,29 +33,36 @@ const tileCache = new LRUCache<string, TileCacheEntry>({
   updateAgeOnHas: true,
 });
 
+// Track cache hits for stats
+let l1Hits = 0;
+let l2Hits = 0;
+let misses = 0;
+
 /**
- * Get a tile from cache
- * Checks LRU cache first, then Redis
+ * Get a tile from cache (Redis-first)
  * 
  * @param key - Cache key for the tile
  * @returns Cached tile data or null if not found
  */
 export async function getCachedTile(key: string): Promise<TileCacheEntry | null> {
   try {
-    // Check LRU cache first (fastest)
+    // Check L1 first (for same-request deduplication)
     const local = tileCache.get(key);
     if (local) {
+      l1Hits++;
       return local;
     }
 
-    // Check Redis (slower but persistent)
+    // Check Redis (primary cache)
     const redis = await cacheGet<TileCacheEntry>(key);
     if (redis) {
-      // Populate LRU cache for subsequent requests
+      l2Hits++;
+      // Populate L1 for subsequent reads in same request
       tileCache.set(key, redis);
       return redis;
     }
 
+    misses++;
     return null;
   } catch (error) {
     console.error('Tile cache get error:', error);
@@ -63,39 +71,48 @@ export async function getCachedTile(key: string): Promise<TileCacheEntry | null>
 }
 
 /**
- * Store a tile in cache
- * Writes to both LRU cache and Redis
+ * Store a tile in cache (Redis-first)
  * 
  * @param key - Cache key for the tile
  * @param data - Tile data to cache
  */
 export async function setCachedTile(key: string, data: TileCacheEntry): Promise<void> {
   try {
-    // Store in LRU cache
+    // Write to Redis first (primary, persistent)
+    await cacheSet(key, data, PROPERTY_TILE_CONFIG.SERVER_TTL_SECONDS);
+    
+    // Then populate L1 for same-request reads
     tileCache.set(key, data);
-
-    // Store in Redis (async, don't wait)
-    cacheSet(key, data, PROPERTY_TILE_CONFIG.SERVER_TTL_SECONDS).catch(err => {
-      console.error('Redis tile cache set error:', err);
-    });
   } catch (error) {
     console.error('Tile cache set error:', error);
+    // Still try to set L1 even if Redis fails
+    tileCache.set(key, data);
   }
 }
 
 /**
- * Check if a tile exists in cache (without retrieving it)
- * Only checks LRU cache for performance
+ * Check if a tile exists in cache
+ * Checks L1 first, then Redis (populates L1 if found in Redis)
  * 
  * @param key - Cache key for the tile
- * @returns True if tile exists in LRU cache
+ * @returns True if tile exists in cache
  */
-export function hasCachedTile(key: string): boolean {
-  return tileCache.has(key);
+export async function hasCachedTile(key: string): Promise<boolean> {
+  if (tileCache.has(key)) {
+    return true;
+  }
+  const redis = await cacheGet<TileCacheEntry>(key);
+  if (redis) {
+    // Populate L1 for subsequent reads
+    tileCache.set(key, redis);
+    return true;
+  }
+  return false;
 }
 
 /**
- * Remove a tile from cache
+ * Remove a tile from L1 cache
+ * Note: Does not remove from Redis (TTL handles expiration)
  * 
  * @param key - Cache key for the tile
  */
@@ -104,7 +121,7 @@ export function deleteCachedTile(key: string): void {
 }
 
 /**
- * Clear all tiles from LRU cache
+ * Clear L1 tile cache
  * Note: Does not clear Redis cache
  */
 export function clearTileCache(): void {
@@ -118,14 +135,16 @@ export function clearTileCache(): void {
 export function getTileCacheStats(): {
   size: number;
   max: number;
-  hitRate: number;
+  l1Hits: number;
+  l2Hits: number;
+  misses: number;
 } {
-  const calculatedSize = tileCache.calculatedSize || tileCache.size;
-  
   return {
     size: tileCache.size,
     max: PROPERTY_TILE_CONFIG.SERVER_LRU_MAX,
-    hitRate: calculatedSize > 0 ? 1 - (tileCache.size / calculatedSize) : 0,
+    l1Hits,
+    l2Hits,
+    misses,
   };
 }
 

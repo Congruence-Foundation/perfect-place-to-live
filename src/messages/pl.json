@@ -12,6 +12,7 @@
     "stop": "Zatrzymaj",
     "calculating": "Obliczanie...",
     "zoomIn": "Przybliż, aby obliczyć",
+    "zoomInFirst": "Najpierw przybliż",
     "fallbackNotice": "Używam Overpass API dla tego obszaru",
     "extensions": "Nieruchomości",
     "extensionsTooltip": "Przeglądaj oferty nieruchomości z Otodom podczas eksploracji okolic"
@@ -105,6 +106,7 @@
   "debug": {
     "title": "Debugowanie",
     "zoomLevel": "Poziom zoom",
+    "cache": "Cache",
     "properties": "Nieruchomości",
     "clusters": "Klastry",
     "activeFactors": "Aktywne czynniki",
@@ -400,6 +402,7 @@
     "loading": "Ładowanie...",
     "error": "Błąd ładowania",
     "noResults": "Brak ofert",
+    "zoomInToSee": "Przybliż, aby zobaczyć oferty",
     "properties": "{count} ofert",
     "cached": "Z cache",
     "viewOnOtodom": "Zobacz na Otodom",

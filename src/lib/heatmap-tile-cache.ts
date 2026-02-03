@@ -1,11 +1,15 @@
 /**
- * Heatmap tile cache with LRU + Redis support
+ * Heatmap tile cache with Redis-first strategy
  * 
- * Uses a two-layer caching strategy:
- * 1. LRU cache (in-memory) - fastest, limited size
- * 2. Redis cache (optional) - persistent, shared across instances
+ * Optimized for serverless environments where each request may run in a different instance.
  * 
- * Separate from property tile cache to avoid eviction conflicts
+ * Strategy:
+ * 1. Redis (primary) - persistent, shared across all instances
+ * 2. LRU cache (secondary) - request-local optimization to avoid repeated Redis calls
+ *    within the same request batch
+ * 
+ * On GET: Check L1 first (for same-request deduplication), then Redis
+ * On SET: Write to Redis first (primary), then L1 (for same-request reads)
  */
 
 import { LRUCache } from 'lru-cache';
@@ -31,9 +35,8 @@ export interface HeatmapTileCacheEntry {
 }
 
 /**
- * LRU cache for heatmap tiles
- * Provides fast in-memory caching with automatic eviction
- * Uses fewer entries than property cache due to larger data size
+ * LRU cache for request-local optimization
+ * Smaller size since it's only for within-request deduplication
  */
 const heatmapTileCache = new LRUCache<string, HeatmapTileCacheEntry>({
   max: HEATMAP_TILE_CONFIG.SERVER_LRU_MAX,
@@ -42,29 +45,36 @@ const heatmapTileCache = new LRUCache<string, HeatmapTileCacheEntry>({
   updateAgeOnHas: true,
 });
 
+// Track cache hits for stats
+let l1Hits = 0;
+let l2Hits = 0;
+let misses = 0;
+
 /**
- * Get a heatmap tile from cache
- * Checks LRU cache first, then Redis
+ * Get a heatmap tile from cache (Redis-first)
  * 
  * @param key - Cache key for the tile
  * @returns Cached tile data or null if not found
  */
 export async function getCachedHeatmapTile(key: string): Promise<HeatmapTileCacheEntry | null> {
   try {
-    // Check LRU cache first (fastest)
+    // Check L1 first (for same-request deduplication)
     const local = heatmapTileCache.get(key);
     if (local) {
+      l1Hits++;
       return local;
     }
 
-    // Check Redis (slower but persistent)
+    // Check Redis (primary cache)
     const redis = await cacheGet<HeatmapTileCacheEntry>(key);
     if (redis) {
-      // Populate LRU cache for subsequent requests
+      l2Hits++;
+      // Populate L1 for subsequent reads in same request
       heatmapTileCache.set(key, redis);
       return redis;
     }
 
+    misses++;
     return null;
   } catch (error) {
     console.error('Heatmap tile cache get error:', error);
@@ -73,39 +83,48 @@ export async function getCachedHeatmapTile(key: string): Promise<HeatmapTileCach
 }
 
 /**
- * Store a heatmap tile in cache
- * Writes to both LRU cache and Redis
+ * Store a heatmap tile in cache (Redis-first)
  * 
  * @param key - Cache key for the tile
  * @param data - Tile data to cache
  */
 export async function setCachedHeatmapTile(key: string, data: HeatmapTileCacheEntry): Promise<void> {
   try {
-    // Store in LRU cache
+    // Write to Redis first (primary, persistent)
+    await cacheSet(key, data, HEATMAP_TILE_CONFIG.SERVER_TTL_SECONDS);
+    
+    // Then populate L1 for same-request reads
     heatmapTileCache.set(key, data);
-
-    // Store in Redis (async, don't wait)
-    cacheSet(key, data, HEATMAP_TILE_CONFIG.SERVER_TTL_SECONDS).catch(err => {
-      console.error('Redis heatmap tile cache set error:', err);
-    });
   } catch (error) {
     console.error('Heatmap tile cache set error:', error);
+    // Still try to set L1 even if Redis fails
+    heatmapTileCache.set(key, data);
   }
 }
 
 /**
- * Check if a heatmap tile exists in cache (without retrieving it)
- * Only checks LRU cache for performance
+ * Check if a heatmap tile exists in cache
+ * Checks L1 first, then Redis (populates L1 if found in Redis)
  * 
  * @param key - Cache key for the tile
- * @returns True if tile exists in LRU cache
+ * @returns True if tile exists in cache
  */
-export function hasCachedHeatmapTile(key: string): boolean {
-  return heatmapTileCache.has(key);
+export async function hasCachedHeatmapTile(key: string): Promise<boolean> {
+  if (heatmapTileCache.has(key)) {
+    return true;
+  }
+  const redis = await cacheGet<HeatmapTileCacheEntry>(key);
+  if (redis) {
+    // Populate L1 for subsequent reads
+    heatmapTileCache.set(key, redis);
+    return true;
+  }
+  return false;
 }
 
 /**
- * Remove a heatmap tile from cache
+ * Remove a heatmap tile from L1 cache
+ * Note: Does not remove from Redis (TTL handles expiration)
  * 
  * @param key - Cache key for the tile
  */
@@ -114,7 +133,7 @@ export function deleteCachedHeatmapTile(key: string): void {
 }
 
 /**
- * Clear all heatmap tiles from LRU cache
+ * Clear L1 heatmap tile cache
  * Note: Does not clear Redis cache
  */
 export function clearHeatmapTileCache(): void {
@@ -128,13 +147,15 @@ export function clearHeatmapTileCache(): void {
 export function getHeatmapTileCacheStats(): {
   size: number;
   max: number;
-  hitRate: number;
+  l1Hits: number;
+  l2Hits: number;
+  misses: number;
 } {
-  const calculatedSize = heatmapTileCache.calculatedSize || heatmapTileCache.size;
-  
   return {
     size: heatmapTileCache.size,
     max: HEATMAP_TILE_CONFIG.SERVER_LRU_MAX,
-    hitRate: calculatedSize > 0 ? 1 - (heatmapTileCache.size / calculatedSize) : 0,
+    l1Hits,
+    l2Hits,
+    misses,
   };
 }

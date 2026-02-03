@@ -37,6 +37,7 @@ interface RealEstateSidebarProps {
   onFiltersChange: (filters: Partial<PropertyFilters>) => void;
   propertyCount?: number;
   isLoading?: boolean;
+  isBelowMinZoom?: boolean;
   error?: string | null;
 }
 
@@ -58,6 +59,7 @@ export default function RealEstateSidebar({
   onFiltersChange,
   propertyCount,
   isLoading,
+  isBelowMinZoom,
   error,
 }: RealEstateSidebarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -97,6 +99,7 @@ export default function RealEstateSidebar({
   const isHouse = isSingleType && filters.estate?.[0] === 'HOUSE';
 
   const getStatusText = () => {
+    if (isBelowMinZoom) return t('zoomInToSee');
     if (isLoading) return t('loading');
     if (error) return t('error');
     if (propertyCount !== undefined) {

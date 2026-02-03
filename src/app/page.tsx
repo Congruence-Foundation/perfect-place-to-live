@@ -447,6 +447,7 @@ function HomeContent({
               <RefreshButton
                 isLoading={isLoading}
                 disabled={isRefreshDisabled}
+                disabledReason={isTooLarge ? 'tooLarge' : null}
                 loadedTiles={loadedTileCount}
                 totalTiles={tileCount}
                 onRefresh={onRefresh}
@@ -524,6 +525,7 @@ function HomeContent({
               <RefreshButton
                 isLoading={isLoading}
                 disabled={isRefreshDisabled}
+                disabledReason={isTooLarge ? 'tooLarge' : null}
                 loadedTiles={loadedTileCount}
                 totalTiles={tileCount}
                 onRefresh={onRefresh}

@@ -1,15 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { Bug, X, AlertCircle } from 'lucide-react';
 import { ExtensionsDebugPanel } from './ExtensionsDebugPanel';
+
+interface L2CacheStatus {
+  type: 'redis' | 'memory';
+  connected: boolean;
+  latencyMs?: number;
+  redisKeyCount?: number;
+}
+
+interface L1CacheStats {
+  heatmap: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
+  poi: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
+}
 
 interface DebugInfoProps {
   enabledFactorCount: number;
   metadata: {
     pointCount: number;
     computeTimeMs: number;
+    l1CacheStats?: L1CacheStats;
   } | null;
   totalPOICount: number;
   error: string | null;
@@ -26,7 +39,35 @@ export default function DebugInfo({
   zoomLevel,
 }: DebugInfoProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [l2Status, setL2Status] = useState<L2CacheStatus | null>(null);
   const t = useTranslations('debug');
+
+  // Fetch L2 status ONCE when panel opens (no polling to avoid server load)
+  useEffect(() => {
+    if (!isOpen || l2Status !== null) return;
+    
+    fetch('/api/cache/status')
+      .then(res => res.json())
+      .then(data => {
+        setL2Status({
+          type: data.cache.type,
+          connected: data.cache.connection.success,
+          latencyMs: data.cache.connection.latencyMs,
+          redisKeyCount: data.cache.redisStats?.keyCount,
+        });
+      })
+      .catch(() => {});
+  }, [isOpen, l2Status]);
+
+  // Reset L2 status when panel closes so it refetches on next open
+  useEffect(() => {
+    if (!isOpen) {
+      setL2Status(null);
+    }
+  }, [isOpen]);
+
+  // Get cache stats from metadata (comes from heatmap API, no extra requests)
+  const l1CacheStats = metadata?.l1CacheStats;
 
   return (
     <div className={`${
@@ -34,7 +75,7 @@ export default function DebugInfo({
     } z-[1000]`}>
       {/* Expanded Panel - Absolutely positioned above the button */}
       {isOpen && (
-        <div className="absolute bottom-12 left-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-48 animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div className="absolute bottom-12 left-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-56 animate-in fade-in slide-in-from-bottom-2 duration-200">
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-semibold">{t('title')}</span>
@@ -84,6 +125,63 @@ export default function DebugInfo({
                 <AlertCircle className="h-3 w-3 flex-shrink-0" />
                 <span className="truncate">{error}</span>
               </div>
+            )}
+            
+            {/* Cache Section */}
+            {(l2Status || l1CacheStats) && (
+              <>
+                <div className="border-t pt-2 mt-2">
+                  <span className="text-muted-foreground text-[10px] uppercase tracking-wide">{t('cache')}</span>
+                </div>
+                
+                {/* L2 - Redis/Memory (fetched once on panel open) */}
+                {l2Status && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">L2</span>
+                      <span className={`font-mono font-medium ${l2Status.type === 'redis' && l2Status.connected ? 'text-green-500' : 'text-yellow-500'}`}>
+                        {l2Status.type === 'redis' 
+                          ? `Redis ${l2Status.connected ? `(${l2Status.latencyMs}ms)` : '(err)'}`
+                          : 'Memory'
+                        }
+                      </span>
+                    </div>
+                    {l2Status.type === 'redis' && l2Status.redisKeyCount !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">L2 Keys</span>
+                        <span className="font-mono font-medium">{l2Status.redisKeyCount.toLocaleString()}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                
+                {/* Cache hit stats (from heatmap API response - no extra requests) */}
+                {l1CacheStats && (
+                  <div className="mt-1 space-y-1">
+                    {/* Header row */}
+                    <div className="grid grid-cols-4 gap-1 text-[10px] text-muted-foreground">
+                      <span></span>
+                      <span className="text-right">L1</span>
+                      <span className="text-right">L2</span>
+                      <span className="text-right">Miss</span>
+                    </div>
+                    {/* Heatmap row */}
+                    <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
+                      <span className="text-muted-foreground">Heatmap</span>
+                      <span className="text-right font-medium">{l1CacheStats.heatmap.l1Hits}</span>
+                      <span className="text-right font-medium">{l1CacheStats.heatmap.l2Hits}</span>
+                      <span className="text-right font-medium">{l1CacheStats.heatmap.misses}</span>
+                    </div>
+                    {/* POI row */}
+                    <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
+                      <span className="text-muted-foreground">POI</span>
+                      <span className="text-right font-medium">{l1CacheStats.poi.l1Hits}</span>
+                      <span className="text-right font-medium">{l1CacheStats.poi.l2Hits}</span>
+                      <span className="text-right font-medium">{l1CacheStats.poi.misses}</span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

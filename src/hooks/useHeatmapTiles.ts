@@ -43,6 +43,10 @@ interface BatchHeatmapResponse {
     poiTileCount: number;
     poiCounts: Record<string, number>;
     dataSource: DataSource;
+    l1CacheStats?: {
+      heatmap: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
+      poi: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
+    };
   };
 }
 
@@ -469,6 +473,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
         poiCounts: batchResult.metadata.poiCounts,
         poiTileCount: batchResult.metadata.poiTileCount,
         cachedTiles: batchResult.metadata.cachedTiles,
+        l1CacheStats: batchResult.metadata.l1CacheStats,
       },
     };
   }, [batchResult, isTooLarge, factors, allTiles]);

@@ -269,7 +269,12 @@ export default function MapSettings({
               
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs">Heatmap tile borders</Label>
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs">Heatmap tiles</Label>
+                    <InfoTooltip>
+                      <p className="text-xs">Shows tile boundaries used for heatmap calculation (zoom level 13 tiles)</p>
+                    </InfoTooltip>
+                  </div>
                   <Switch
                     checked={showHeatmapTileBorders}
                     onCheckedChange={setShowHeatmapTileBorders}
@@ -277,7 +282,12 @@ export default function MapSettings({
                 </div>
                 
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs">Property tile borders</Label>
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs">Property tiles</Label>
+                    <InfoTooltip>
+                      <p className="text-xs">Shows tile boundaries used for property fetching (requires zoom 14+)</p>
+                    </InfoTooltip>
+                  </div>
                   <Switch
                     checked={showPropertyTileBorders}
                     onCheckedChange={setShowPropertyTileBorders}

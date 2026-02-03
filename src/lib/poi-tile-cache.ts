@@ -1,10 +1,12 @@
 /**
- * POI Tile Cache System
+ * POI Tile Cache System (Redis-first)
  * 
- * Provides tile-aligned POI caching for efficient heatmap calculations.
- * Uses a two-layer caching strategy:
- * 1. LRU cache (in-memory) - fastest, limited size
- * 2. Redis cache (optional) - persistent, shared across instances
+ * Optimized for serverless environments where each request may run in a different instance.
+ * 
+ * Strategy:
+ * 1. Redis (primary) - persistent, shared across all instances
+ * 2. LRU cache (secondary) - request-local optimization to avoid repeated Redis calls
+ *    within the same request batch
  * 
  * Key optimization: Fetches all uncached tiles in a single batched query
  * instead of making individual requests per tile.
@@ -42,11 +44,12 @@ interface CacheCheckResult {
 }
 
 // ============================================================================
-// LRU Cache
+// LRU Cache (Request-local optimization)
 // ============================================================================
 
 /**
  * In-memory LRU cache for POI tiles
+ * Used for request-local deduplication to avoid repeated Redis calls
  * Key format: poi-tile:{z}:{x}:{y}:{factorId}
  */
 const poiTileLRU = new LRUCache<string, POI[]>({
@@ -54,15 +57,24 @@ const poiTileLRU = new LRUCache<string, POI[]>({
   ttl: POI_TILE_CONFIG.SERVER_TTL_SECONDS * 1000,
 });
 
+// Track cache hits for stats
+let l1Hits = 0;
+let l2Hits = 0;
+let misses = 0;
+
 // ============================================================================
-// Cache Operations
+// Cache Operations (Redis-first)
 // ============================================================================
 
 /**
- * Check LRU cache for a tile+factor combination
+ * Check L1 (LRU) cache for a tile+factor combination
  */
-function checkLRUCache(cacheKey: string): POI[] | undefined {
-  return poiTileLRU.get(cacheKey);
+function checkL1Cache(cacheKey: string): POI[] | undefined {
+  const result = poiTileLRU.get(cacheKey);
+  if (result !== undefined) {
+    l1Hits++;
+  }
+  return result;
 }
 
 /**
@@ -71,19 +83,28 @@ function checkLRUCache(cacheKey: string): POI[] | undefined {
 async function checkRedisCache(cacheKey: string): Promise<POI[] | null> {
   const cached = await cacheGet<POI[]>(cacheKey);
   if (cached) {
-    // Populate LRU cache for subsequent requests
+    l2Hits++;
+    // Populate L1 for subsequent reads in same request
     poiTileLRU.set(cacheKey, cached);
+  } else {
+    misses++;
   }
   return cached;
 }
 
 /**
- * Store POIs in both LRU and Redis cache
+ * Store POIs in cache (Redis-first)
  */
-function cachePOIs(cacheKey: string, pois: POI[]): void {
-  poiTileLRU.set(cacheKey, pois);
-  // Fire-and-forget Redis cache set
-  cacheSet(cacheKey, pois, POI_TILE_CONFIG.SERVER_TTL_SECONDS).catch(() => {});
+async function cachePOIs(cacheKey: string, pois: POI[]): Promise<void> {
+  try {
+    // Write to Redis first (primary, persistent)
+    await cacheSet(cacheKey, pois, POI_TILE_CONFIG.SERVER_TTL_SECONDS);
+    // Then populate L1 for same-request reads
+    poiTileLRU.set(cacheKey, pois);
+  } catch (error) {
+    // Still set L1 even if Redis fails
+    poiTileLRU.set(cacheKey, pois);
+  }
 }
 
 // ============================================================================
@@ -123,29 +144,29 @@ export async function getPoiTilesForArea(
     return result;
   }
 
-  // Step 1: Check LRU cache for all combinations
-  const stopLRUTimer = createTimer('poi-cache:lru-check');
-  const { cached: lruCached, uncached: lruMisses } = checkAllLRUCache(tiles, factors);
+  // Step 1: Check L1 cache for all combinations
+  const stopLRUTimer = createTimer('poi-cache:l1-check');
+  const { cached: l1Cached, uncached: l1Misses } = checkAllL1Cache(tiles, factors);
   stopLRUTimer({ 
     total: tiles.length * factors.length, 
-    hits: lruCached.length, 
-    misses: lruMisses.length 
+    hits: l1Cached.length, 
+    misses: l1Misses.length 
   });
 
-  // Add LRU cached POIs to result
-  for (const item of lruCached) {
+  // Add L1 cached POIs to result
+  for (const item of l1Cached) {
     if (item.pois) {
       const existing = result.get(item.factor.id) || [];
       result.set(item.factor.id, [...existing, ...item.pois]);
     }
   }
 
-  // Step 2: Check Redis cache for LRU misses (parallel)
-  if (lruMisses.length > 0) {
+  // Step 2: Check Redis cache for L1 misses (parallel)
+  if (l1Misses.length > 0) {
     const stopRedisTimer = createTimer('poi-cache:redis-check');
-    const { cached: redisCached, uncached: stillUncached } = await checkAllRedisCache(lruMisses);
+    const { cached: redisCached, uncached: stillUncached } = await checkAllRedisCache(l1Misses);
     stopRedisTimer({ 
-      checked: lruMisses.length, 
+      checked: l1Misses.length, 
       hits: redisCached.length, 
       misses: stillUncached.length 
     });
@@ -177,7 +198,7 @@ export async function getPoiTilesForArea(
   stopTotalTimer({ 
     tiles: tiles.length, 
     factors: factors.length, 
-    allCached: lruMisses.length === 0 
+    allCached: l1Misses.length === 0 
   });
   
   return dedupedResult;
@@ -188,9 +209,9 @@ export async function getPoiTilesForArea(
 // ============================================================================
 
 /**
- * Check LRU cache for all tile+factor combinations
+ * Check L1 cache for all tile+factor combinations
  */
-function checkAllLRUCache(
+function checkAllL1Cache(
   tiles: TileCoord[],
   factors: FactorDef[]
 ): { cached: CacheCheckResult[]; uncached: CacheCheckResult[] } {
@@ -200,7 +221,7 @@ function checkAllLRUCache(
   for (const tile of tiles) {
     for (const factor of factors) {
       const cacheKey = getPoiTileKey(tile.z, tile.x, tile.y, factor.id);
-      const pois = checkLRUCache(cacheKey);
+      const pois = checkL1Cache(cacheKey);
       
       const item: CacheCheckResult = { tile, factor, cacheKey, pois: pois ?? null };
       
@@ -255,19 +276,23 @@ async function fetchAndCacheUncached(
   // Single batched fetch for all tiles and factors
   const fetchedData = await fetchPOIsBatched(uniqueTiles, uniqueFactors, dataSource);
 
-  // Populate caches and add to result
+  // Populate caches and add to result (parallel cache writes)
+  const cachePromises: Promise<void>[] = [];
   for (const item of uncached) {
     const tileKey = `${item.tile.z}:${item.tile.x}:${item.tile.y}`;
     const tileData = fetchedData.get(tileKey);
     const pois = tileData?.[item.factor.id] || [];
 
-    // Cache the result
-    cachePOIs(item.cacheKey, pois);
+    // Cache the result (async)
+    cachePromises.push(cachePOIs(item.cacheKey, pois));
 
     // Add to result
     const existing = result.get(item.factor.id) || [];
     result.set(item.factor.id, [...existing, ...pois]);
   }
+  
+  // Wait for all cache writes to complete
+  await Promise.all(cachePromises);
 }
 
 /**
@@ -380,9 +405,18 @@ export function clearPoiTileCache(): void {
 /**
  * Get cache statistics
  */
-export function getPoiTileCacheStats(): { size: number; max: number } {
+export function getPoiTileCacheStats(): { 
+  size: number; 
+  max: number;
+  l1Hits: number;
+  l2Hits: number;
+  misses: number;
+} {
   return {
     size: poiTileLRU.size,
     max: POI_TILE_CONFIG.SERVER_LRU_MAX,
+    l1Hits,
+    l2Hits,
+    misses,
   };
 }

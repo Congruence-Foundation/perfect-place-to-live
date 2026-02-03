@@ -11,6 +11,8 @@ interface RefreshButtonProps {
   totalTiles: number;
   onRefresh: () => void;
   onAbort: () => void;
+  /** Reason for being disabled - shows different text */
+  disabledReason?: 'tooLarge' | null;
 }
 
 /**
@@ -24,8 +26,17 @@ export function RefreshButton({
   totalTiles,
   onRefresh,
   onAbort,
+  disabledReason,
 }: RefreshButtonProps) {
   const tControls = useTranslations('controls');
+
+  // Determine button text based on disabled reason
+  const getButtonText = () => {
+    if (disabled && disabledReason === 'tooLarge') {
+      return tControls('zoomInFirst');
+    }
+    return tControls('refresh');
+  };
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -33,7 +44,7 @@ export function RefreshButton({
         <Button
           variant="destructive"
           size="sm"
-          className="shadow-lg rounded-full px-4"
+          className="shadow-lg rounded-full px-4 text-white"
           onClick={onAbort}
         >
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -50,7 +61,7 @@ export function RefreshButton({
           disabled={disabled}
         >
           <RefreshCw className="h-4 w-4" />
-          <span className="ml-2">{tControls('refresh')}</span>
+          <span className="ml-2">{getButtonText()}</span>
         </Button>
       )}
     </div>

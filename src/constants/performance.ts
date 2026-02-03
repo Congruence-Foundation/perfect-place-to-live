@@ -140,6 +140,12 @@ export const PROPERTY_TILE_CONFIG = {
   /** Fixed tile zoom level for property fetching (~2.4km x 2.4km tiles at Poland's latitude) */
   TILE_ZOOM: 13,
   
+  /** Minimum zoom level to display properties */
+  MIN_DISPLAY_ZOOM: 10,
+  
+  /** Zoom level where tile-based fetching starts (below this, viewport-based fetching is used) */
+  TILE_MODE_ZOOM: 14,
+  
   /** Maximum viewport tiles before showing "zoom in" message */
   MAX_VIEWPORT_TILES: 25,
   
@@ -159,13 +165,13 @@ export const PROPERTY_TILE_CONFIG = {
   CLIENT_GC_TIME_MS: 30 * 60 * 1000,
   
   /** Server-side LRU cache maximum entries */
-  SERVER_LRU_MAX: 500,
+  SERVER_LRU_MAX: 1000,
   
-  /** Server-side cache TTL in seconds - 5 minutes */
-  SERVER_TTL_SECONDS: 300,
+  /** Server-side cache TTL in seconds - 12 hours */
+  SERVER_TTL_SECONDS: 43200,
   
-  /** Default price analysis radius (number of tile layers around viewport) */
-  DEFAULT_PRICE_RADIUS: 1,
+  /** Default price analysis radius (number of tile layers around viewport) - 0 means viewport tiles only */
+  DEFAULT_PRICE_RADIUS: 0,
   
   /** Maximum price analysis radius */
   MAX_PRICE_RADIUS: 2,
@@ -200,8 +206,8 @@ export const HEATMAP_TILE_CONFIG = {
   /** Server-side LRU cache maximum entries */
   SERVER_LRU_MAX: 10000,
   
-  /** Server-side cache TTL in seconds - 10 minutes */
-  SERVER_TTL_SECONDS: 600,
+  /** Server-side cache TTL in seconds - 24 hours (aligned with POI cache) */
+  SERVER_TTL_SECONDS: 86400,
   
   /** Client-side cache stale time (React Query) - 10 minutes */
   CLIENT_STALE_TIME_MS: 10 * 60 * 1000,
@@ -233,8 +239,8 @@ export const POI_TILE_CONFIG = {
   /** Server-side LRU cache maximum entries for POI tiles */
   SERVER_LRU_MAX: 1000,
   
-  /** Server-side cache TTL in seconds - 30 minutes */
-  SERVER_TTL_SECONDS: 1800,
+  /** Server-side cache TTL in seconds - 24 hours */
+  SERVER_TTL_SECONDS: 86400,
   
   /** Approximate tile size in meters at Poland's latitude (~52°) for zoom 13 */
   TILE_SIZE_METERS: 2400,
