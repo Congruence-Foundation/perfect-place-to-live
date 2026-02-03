@@ -28,7 +28,7 @@ import {
   type TileCoord,
   PROPERTY_TILE_ZOOM,
 } from '@/lib/geo/tiles';
-import { getTilesForBounds } from '@/lib/geo';
+import { getTilesForBounds, createCoordinateKey } from '@/lib/geo';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
 
@@ -401,7 +401,7 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
 
       // Deduplicate clusters by location
       for (const cluster of data.clusters) {
-        const clusterKey = `${cluster.lat.toFixed(6)}:${cluster.lng.toFixed(6)}`;
+        const clusterKey = createCoordinateKey(cluster.lat, cluster.lng);
         if (!seenClusterKeys.has(clusterKey)) {
           seenClusterKeys.add(clusterKey);
           allClusters.push(cluster);

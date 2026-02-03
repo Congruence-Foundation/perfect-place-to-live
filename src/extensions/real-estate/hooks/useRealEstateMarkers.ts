@@ -32,14 +32,7 @@ import {
   CLICK_FETCH_LIMIT,
 } from '../utils/enrichment';
 import { createTimer } from '@/lib/profiling';
-
-/**
- * Generate a window key for storing cluster properties
- * Used for popup navigation state management
- */
-function getClusterWindowKey(clusterId: string): string {
-  return `__cluster_${clusterId.replace(/[^a-zA-Z0-9]/g, '_')}`;
-}
+import { createClusterId } from '@/lib/geo';
 
 /**
  * Build request body for cluster properties API
@@ -116,6 +109,9 @@ export function useRealEstateMarkers({
   const propertyMarkersRef = useRef<Map<number, L.Marker>>(new Map());
   const clusterMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   
+  // Ref for storing cluster popup data (replaces window object storage)
+  const clusterPopupDataRef = useRef<Map<string, EnrichedProperty[]>>(new Map());
+  
   // Track previous analysis mode to detect changes
   const prevClusterPriceAnalysisRef = useRef(clusterPriceAnalysis);
   const prevDetailedModeThresholdRef = useRef(detailedModeThreshold);
@@ -187,11 +183,8 @@ export function useRealEstateMarkers({
       
       // Hide layer if not enabled
       if (!enabled) {
-        // Clean up window properties when clearing markers
-        clusterMarkersRef.current.forEach((_, clusterId) => {
-          const windowKey = getClusterWindowKey(clusterId);
-          delete (window as unknown as Record<string, unknown>)[windowKey];
-        });
+        // Clean up popup data when clearing markers
+        clusterPopupDataRef.current.clear();
         layerGroup.clearLayers();
         propertyMarkersRef.current.clear();
         clusterMarkersRef.current.clear();
@@ -260,7 +253,7 @@ export function useRealEstateMarkers({
       const stopClusterMarkersTimer = createTimer('markers:cluster-markers');
       let newClusterMarkers = 0;
       for (const cluster of clusters) {
-        const clusterId = `cluster-${cluster.lat.toFixed(6)}-${cluster.lng.toFixed(6)}`;
+        const clusterId = createClusterId(cluster.lat, cluster.lng);
         currentClusterIds.add(clusterId);
 
         // Skip if marker already exists
@@ -400,8 +393,7 @@ export function useRealEstateMarkers({
             }
 
             // Store for navigation
-            const windowKey = getClusterWindowKey(clusterId);
-            (window as unknown as Record<string, EnrichedProperty[]>)[windowKey] = enrichedClusterProps;
+            clusterPopupDataRef.current.set(clusterId, enrichedClusterProps);
 
             const actualTotalCount = data.totalCount;
             const fetchedCount = data.properties.length;
@@ -410,7 +402,7 @@ export function useRealEstateMarkers({
             let currentImageIndex = 0;
 
             const updatePopup = () => {
-              const props = (window as unknown as Record<string, EnrichedProperty[]>)[windowKey];
+              const props = clusterPopupDataRef.current.get(clusterId);
               if (!props || props.length === 0) return;
 
               const html = generateClusterPropertyPopupHtml(
@@ -499,9 +491,8 @@ export function useRealEstateMarkers({
           layerGroup.removeLayer(marker);
           clusterMarkersRef.current.delete(id);
           removedClusterMarkers++;
-          // Clean up window properties when clearing markers
-          const windowKey = getClusterWindowKey(id);
-          delete (window as unknown as Record<string, unknown>)[windowKey];
+          // Clean up popup data when removing markers
+          clusterPopupDataRef.current.delete(id);
         }
       }
       stopClusterMarkersTimer({ new: newClusterMarkers, removed: removedClusterMarkers, total: clusterMarkersRef.current.size });
@@ -531,11 +522,8 @@ export function useRealEstateMarkers({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      // Clean up window properties when unmounting
-      clusterMarkersRef.current.forEach((_, clusterId) => {
-        const windowKey = getClusterWindowKey(clusterId);
-        delete (window as unknown as Record<string, unknown>)[windowKey];
-      });
+      // Clean up popup data when unmounting
+      clusterPopupDataRef.current.clear();
       propertyMarkersRef.current.clear();
       clusterMarkersRef.current.clear();
     };

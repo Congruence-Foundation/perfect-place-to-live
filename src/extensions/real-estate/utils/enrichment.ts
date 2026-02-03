@@ -1,13 +1,13 @@
 import type { HeatmapPoint } from '@/types';
 import type { OtodomProperty, EnrichedProperty } from '../types';
 import { enrichPropertiesSimplified } from '../lib';
-import { UI_CONFIG } from '@/constants/performance';
+import { UI_CONFIG, CLUSTER_CONFIG } from '@/constants/performance';
 
 // Constants for cluster operations
 // This radius is used for UI-level cluster analysis and price comparison.
 // Note: OTODOM_CLUSTER_RADIUS_METERS in otodom.ts (500m) is smaller and used
 // for API requests when fetching properties within a cluster area.
-export const DEFAULT_CLUSTER_RADIUS = 1000;
+export const DEFAULT_CLUSTER_RADIUS = CLUSTER_CONFIG.DEFAULT_RADIUS_METERS;
 export const BACKGROUND_FETCH_LIMIT = 100;
 export const CLICK_FETCH_LIMIT = 500;
 

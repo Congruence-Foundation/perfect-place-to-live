@@ -1,6 +1,7 @@
 import type { EstateType, PriceCategory } from '../types/property';
 import { PRICE_CATEGORY_COLORS } from './price-analysis';
 import { formatCompactPrice } from '@/lib/format';
+import { DEFAULT_FALLBACK_COLOR } from '@/constants/colors';
 
 /**
  * Property marker colors by estate type
@@ -11,7 +12,7 @@ const PROPERTY_MARKER_COLORS: Record<EstateType, string> = {
   TERRAIN: '#f59e0b',   // Amber
   COMMERCIAL: '#8b5cf6', // Purple
   ROOM: '#ec4899',      // Pink
-  GARAGE: '#6b7280',    // Gray
+  GARAGE: DEFAULT_FALLBACK_COLOR,
 };
 
 /**

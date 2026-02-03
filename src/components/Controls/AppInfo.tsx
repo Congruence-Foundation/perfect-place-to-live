@@ -52,9 +52,12 @@ export default function AppInfo({ isMobile = false }: AppInfoProps) {
     <div className="relative">
       {/* Expanded Panel */}
       {isOpen && (
-        <div className={`absolute top-10 right-0 z-[${Z_INDEX.FLOATING_CONTROLS}] bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 animate-in fade-in slide-in-from-top-2 duration-200 ${
-          isMobile ? 'w-[calc(100vw-2rem)] max-w-72' : 'w-64'
-        }`}>
+        <div 
+          className={`absolute top-10 right-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 animate-in fade-in slide-in-from-top-2 duration-200 ${
+            isMobile ? 'w-[calc(100vw-2rem)] max-w-72' : 'w-64'
+          }`}
+          style={{ zIndex: Z_INDEX.FLOATING_CONTROLS }}
+        >
           <PanelHeader title={t('title')} onClose={handleClose} />
 
           <ol className="space-y-2 text-xs text-muted-foreground list-none">

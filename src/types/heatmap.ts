@@ -1,7 +1,7 @@
 import { Bounds } from './poi';
 import { Factor } from './factors';
 import { POI } from './poi';
-import { POIDataSource, DataSource } from '@/lib/errors';
+import { POIDataSource } from '@/lib/errors';
 import type { ClusterPriceDisplay } from '@/extensions/real-estate/types';
 
 export type DistanceCurve = 'linear' | 'log' | 'exp' | 'power';
@@ -14,8 +14,8 @@ export type DistanceCurve = 'linear' | 'log' | 'exp' | 'power';
  */
 export type ClusterPriceAnalysisMode = 'off' | 'simplified' | 'detailed';
 
-// Re-export DataSource types for convenience
-export type { POIDataSource, DataSource } from '@/lib/errors';
+// Re-export POIDataSource type for convenience
+export type { POIDataSource } from '@/lib/errors';
 
 export interface HeatmapPoint {
   lat: number;
@@ -43,7 +43,7 @@ export interface HeatmapRequest {
   distanceCurve?: DistanceCurve;
   sensitivity?: number;
   normalizeToViewport?: boolean;
-  dataSource?: DataSource;
+  dataSource?: POIDataSource;
 }
 
 export interface TileCoordinates {

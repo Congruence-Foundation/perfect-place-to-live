@@ -17,13 +17,13 @@ import type { Bounds, POI, FactorDef } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { getPOIsFromDB, getPOIsForTilesBatched as getPOIsForTilesBatchedDB } from './db';
 import { fetchAllPOIsCombined, fetchPOIsForTilesBatched as fetchPOIsForTilesBatchedOverpass } from './overpass';
-import { POIFetchError, DataSource } from '@/lib/errors';
+import { POIFetchError, POIDataSource } from '@/lib/errors';
 import { createTimer } from '@/lib/profiling';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { generatePOICacheKey } from './overpass';
 import { PERFORMANCE_CONFIG } from '@/constants/performance';
 
-export type { DataSource } from '@/lib/errors';
+export type { POIDataSource } from '@/lib/errors';
 
 const { POI_CACHE_TTL_SECONDS } = PERFORMANCE_CONFIG;
 
@@ -32,7 +32,7 @@ const { POI_CACHE_TTL_SECONDS } = PERFORMANCE_CONFIG;
  */
 export interface FetchPoisWithFallbackResult {
   poiData: Map<string, POI[]>;
-  actualDataSource: DataSource;
+  actualDataSource: POIDataSource;
 }
 
 /**
@@ -101,12 +101,12 @@ async function fetchFromOverpassFallback(
 export async function fetchPoisWithFallback(
   factors: FactorDef[],
   bounds: Bounds,
-  preferredSource: DataSource = 'neon',
+  preferredSource: POIDataSource = 'neon',
   existingPoiData?: Map<string, POI[]>
 ): Promise<FetchPoisWithFallbackResult> {
   const poiData = existingPoiData ? new Map(existingPoiData) : new Map<string, POI[]>();
   const uncachedFactors: FactorDef[] = [];
-  let actualDataSource: DataSource = preferredSource;
+  let actualDataSource: POIDataSource = preferredSource;
 
   // Check cache first for Neon source
   if (preferredSource === 'neon') {
@@ -171,7 +171,7 @@ export async function fetchPoisWithFallback(
 export async function fetchPOIs(
   factorTags: FactorDef[],
   bounds: Bounds,
-  source: DataSource = 'neon',
+  source: POIDataSource = 'neon',
   signal?: AbortSignal
 ): Promise<Record<string, POI[]>> {
   try {
@@ -211,7 +211,7 @@ export async function fetchPOIs(
 export async function fetchPOIsBatched(
   tiles: TileCoord[],
   factorTags: FactorDef[],
-  source: DataSource = 'neon',
+  source: POIDataSource = 'neon',
   signal?: AbortSignal
 ): Promise<Map<string, Record<string, POI[]>>> {
   if (tiles.length === 0 || factorTags.length === 0) {

@@ -7,7 +7,7 @@ import { WeightSliders, CitySearch, ProfileSelector, MapSettings, DebugInfo, App
 import { Button } from '@/components/ui/button';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { DEFAULT_FACTORS, applyProfile, FACTOR_PROFILES } from '@/config/factors';
-import { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, DataSource } from '@/types';
+import { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource } from '@/types';
 import type { HeatmapSettings } from '@/types';
 import { useHeatmapTiles, useIsMobile, useNotification } from '@/hooks';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -32,7 +32,7 @@ interface HomeContentProps {
     pointCount: number;
     computeTimeMs: number;
     factorCount: number;
-    dataSource?: DataSource;
+    dataSource?: POIDataSource;
     poiCounts: Record<string, number>;
   } | null;
   usedFallback: boolean;
@@ -291,15 +291,18 @@ function HomeContent({
     <main className="h-screen w-screen flex overflow-hidden relative">
       {/* Search Box - Floating on top center */}
       <div 
-        className={`absolute z-[${Z_INDEX.SEARCH_BOX}] ${
+        className={`absolute ${
           isMobile 
             ? 'top-4 left-14 right-24' 
             : 'top-4'
         }`}
-        style={!isMobile ? { 
-          left: `calc(${panelWidth}px + (100% - ${panelWidth}px) / 2)`,
-          transform: 'translateX(-50%)'
-        } : undefined}
+        style={{
+          zIndex: Z_INDEX.SEARCH_BOX,
+          ...(!isMobile ? { 
+            left: `calc(${panelWidth}px + (100% - ${panelWidth}px) / 2)`,
+            transform: 'translateX(-50%)'
+          } : {})
+        }}
       >
         <CitySearch onCitySelect={handleCitySelect} isMobile={isMobile} />
       </div>
@@ -309,7 +312,8 @@ function HomeContent({
         <div
           className={`${
             isPanelOpen ? 'w-80' : 'w-0'
-          } transition-all duration-300 flex-shrink-0 overflow-hidden bg-background/95 backdrop-blur-sm relative z-[${Z_INDEX.CONTROL_PANEL}]`}
+          } transition-all duration-300 flex-shrink-0 overflow-hidden bg-background/95 backdrop-blur-sm relative`}
+          style={{ zIndex: Z_INDEX.CONTROL_PANEL }}
         >
           <div className="w-80 h-full overflow-y-auto scrollbar-hidden">
             {/* Header */}
@@ -399,11 +403,11 @@ function HomeContent({
               mapRef.current?.invalidateSize();
             }, UI_CONFIG.PANEL_ANIMATION_DURATION_MS);
           }}
-          className={`absolute top-1/2 -translate-y-1/2 z-[${Z_INDEX.CONTROL_PANEL + 1}] flex items-center justify-center
+          className={`absolute top-1/2 -translate-y-1/2 flex items-center justify-center
             w-6 h-12 bg-background/95 backdrop-blur-sm border border-l-0 rounded-r-lg shadow-sm
             hover:bg-muted transition-colors
             ${isPanelOpen ? 'left-80' : 'left-0'}`}
-          style={{ transition: 'left 0.3s' }}
+          style={{ transition: 'left 0.3s', zIndex: Z_INDEX.CONTROL_PANEL + 1 }}
           title={isPanelOpen ? 'Collapse panel' : 'Expand panel'}
         >
           {isPanelOpen ? (
@@ -439,7 +443,10 @@ function HomeContent({
         {!isMobile && (
           <>
             {/* Refresh/Stop Button - Bottom Center */}
-            <div className={`absolute left-1/2 -translate-x-1/2 bottom-4 z-[${Z_INDEX.FLOATING_CONTROLS}]`}>
+            <div 
+              className="absolute left-1/2 -translate-x-1/2 bottom-4"
+              style={{ zIndex: Z_INDEX.FLOATING_CONTROLS }}
+            >
               <RefreshButton
                 isLoading={isLoading}
                 disabled={isRefreshDisabled}
@@ -475,11 +482,14 @@ function HomeContent({
         {/* Loading Overlay - centered in visible map area (above bottom sheet on mobile) */}
         {isLoading && isMobile && (
           <div 
-            className={`absolute inset-0 bg-background/30 backdrop-blur-[2px] flex items-center justify-center z-[${Z_INDEX.FLOATING_CONTROLS - 1}]`}
-            style={isMobile ? { 
-              bottom: `${bottomSheetHeight}px`,
-              alignItems: 'center',
-            } : undefined}
+            className="absolute inset-0 bg-background/30 backdrop-blur-[2px] flex items-center justify-center"
+            style={{
+              zIndex: Z_INDEX.FLOATING_CONTROLS - 1,
+              ...(isMobile ? { 
+                bottom: `${bottomSheetHeight}px`,
+                alignItems: 'center',
+              } : {})
+            }}
           >
             <div className="bg-background/95 backdrop-blur-sm px-5 py-3 rounded-2xl shadow-lg flex items-center gap-3">
               <Loader2 className="h-5 w-5 animate-spin" />

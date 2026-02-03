@@ -1,9 +1,34 @@
 import type { Bounds, Point } from '@/types';
 import { METERS_PER_DEGREE_LAT } from './constants';
 import { metersPerDegreeLng } from './distance';
-import { PERFORMANCE_CONFIG } from '@/constants/performance';
+import { PERFORMANCE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
+
+/**
+ * Grid points divisor for tile-based calculations (accounts for tile overlap)
+ */
+const TILE_GRID_DIVISOR = 4;
+
+/**
+ * Calculate grid size for tile-based heatmap calculations
+ * Uses a fixed formula based on tile size and target grid points
+ * @param tileSizeMeters - The tile size in meters (defaults to POI_TILE_CONFIG.TILE_SIZE_METERS)
+ * @param targetPoints - Target number of grid points (defaults to TARGET_GRID_POINTS)
+ * @param minCellSize - Minimum cell size in meters (defaults to MIN_CELL_SIZE)
+ * @param maxCellSize - Maximum cell size in meters (defaults to MAX_CELL_SIZE)
+ */
+export function calculateTileGridSize(
+  tileSizeMeters: number = POI_TILE_CONFIG.TILE_SIZE_METERS,
+  targetPoints: number = TARGET_GRID_POINTS,
+  minCellSize: number = MIN_CELL_SIZE,
+  maxCellSize: number = MAX_CELL_SIZE
+): number {
+  return Math.max(
+    minCellSize,
+    Math.min(maxCellSize, tileSizeMeters / Math.sqrt(targetPoints / TILE_GRID_DIVISOR))
+  );
+}
 
 /**
  * Generate a grid of sample points within the given bounds

@@ -63,9 +63,10 @@ export default function MapSettings({
   const setShowPropertyTileBorders = useMapStore((s) => s.setShowPropertyTileBorders);
 
   return (
-    <div className={`${
-      isMobile ? 'relative' : 'absolute bottom-4 right-4'
-    } z-[${Z_INDEX.FLOATING_CONTROLS}]`}>
+    <div 
+      className={isMobile ? 'relative' : 'absolute bottom-4 right-4'}
+      style={{ zIndex: Z_INDEX.FLOATING_CONTROLS }}
+    >
       {/* Expanded Panel - Absolutely positioned above the button */}
       {isOpen && (
         <div className={`absolute bottom-12 right-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-64 animate-in fade-in slide-in-from-bottom-2 duration-200 ${
@@ -106,13 +107,13 @@ export default function MapSettings({
                 <SelectTrigger className="h-7 text-xs w-[100px]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}] w-64`}>
+                <SelectContent position="popper" className="w-64" style={{ zIndex: Z_INDEX.DROPDOWN }}>
                   {CURVE_VALUES.map((curveValue) => (
                     <SelectItem key={curveValue} value={curveValue} className="text-xs py-2">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{tCurves(`${curveValue}.label`)}</span>
                         <InfoTooltip 
-                          contentClassName={`z-[${Z_INDEX.NESTED_DROPDOWN}]`}
+                          contentStyle={{ zIndex: Z_INDEX.NESTED_DROPDOWN }}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <p className="text-xs font-medium mb-1">{tCurves(`${curveValue}.description`)}</p>
@@ -182,7 +183,7 @@ export default function MapSettings({
                 <SelectTrigger className="h-7 text-xs w-[100px]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}]`}>
+                <SelectContent position="popper" style={{ zIndex: Z_INDEX.DROPDOWN }}>
                   {HEATMAP_RADIUS_VALUES.map((radiusValue) => (
                     <SelectItem key={radiusValue} value={String(radiusValue)} className="text-xs">
                       {t(`heatmapArea_${radiusValue}`)}
@@ -207,7 +208,7 @@ export default function MapSettings({
                 <SelectTrigger className="h-7 text-xs w-[100px]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}]`}>
+                <SelectContent position="popper" style={{ zIndex: Z_INDEX.DROPDOWN }}>
                   {POI_BUFFER_SCALE_VALUES.map((scaleValue) => (
                     <SelectItem key={scaleValue} value={String(scaleValue)} className="text-xs">
                       {t(`poiBuffer_${String(scaleValue).replace('.', '_')}`)}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchPOIsFromOverpass as fetchPOIs, generatePOICacheKey } from '@/lib/poi';
 import { calculateHeatmap } from '@/lib/scoring';
 import { tileToBounds, getTilesForBounds, POLAND_BOUNDS } from '@/lib/geo';
+import { type TileCoord } from '@/lib/geo/tiles';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS } from '@/config/factors';
 import { POI, PrecomputedTile, Factor } from '@/types';
@@ -21,12 +22,6 @@ interface GenerateRequest {
     west: number;
   };
   adminSecret: string;
-}
-
-interface TileCoord {
-  z: number;
-  x: number;
-  y: number;
 }
 
 interface GenerationResult {
@@ -78,11 +73,17 @@ async function generateTile(
 ): Promise<void> {
   const tileBounds = tileToBounds(tile.z, tile.x, tile.y);
 
-  // Fetch POIs for all factors
+  // Fetch POIs for all factors in parallel
+  const poiResults = await Promise.all(
+    enabledFactors.map(async (factor) => ({
+      id: factor.id,
+      pois: await fetchFactorPOIs(factor, tileBounds),
+    }))
+  );
+  
   const poiData = new Map<string, POI[]>();
-  for (const factor of enabledFactors) {
-    const pois = await fetchFactorPOIs(factor, tileBounds);
-    poiData.set(factor.id, pois);
+  for (const { id, pois } of poiResults) {
+    poiData.set(id, pois);
   }
 
   // Calculate heatmap

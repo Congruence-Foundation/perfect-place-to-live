@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Factor } from '@/types';
-import { POI_COLORS, FACTOR_ICON_MAP, DEFAULT_FACTOR_ICON } from '@/constants';
+import { POI_COLORS, FACTOR_ICON_MAP, DEFAULT_FACTOR_ICON, DEFAULT_FALLBACK_COLOR } from '@/constants';
 import { formatDistance } from '@/lib/utils';
 import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -110,7 +110,7 @@ export default function WeightSliders({ factors, onFactorChange }: WeightSliders
 
   const renderFactor = (factor: Factor) => {
     const IconComponent = FACTOR_ICON_MAP[factor.icon] || DEFAULT_FACTOR_ICON;
-    const color = POI_COLORS[factor.id] || '#6b7280';
+    const color = POI_COLORS[factor.id] || DEFAULT_FALLBACK_COLOR;
     const tagDescription = formatOsmTags(factor.osmTags);
     const isExpanded = expandedFactors.has(factor.id);
     const limits = MAX_DISTANCE_LIMITS[factor.id] || DEFAULT_LIMITS;

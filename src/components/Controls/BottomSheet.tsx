@@ -168,11 +168,12 @@ export default function BottomSheet({
       {/* Floating controls - positioned relative to bottom sheet */}
       {floatingControls && (
         <div 
-          className={`fixed left-0 right-0 z-[${Z_INDEX.SEARCH_BOX}] px-4 pb-2 pointer-events-none ${
+          className={`fixed left-0 right-0 px-4 pb-2 pointer-events-none ${
             isDragging ? '' : 'bottom-sheet'
           }`}
           style={{ 
             bottom: actualHeight,
+            zIndex: Z_INDEX.SEARCH_BOX,
           }}
         >
           <div className="flex items-center justify-between pointer-events-auto">
@@ -184,12 +185,13 @@ export default function BottomSheet({
       {/* Bottom Sheet */}
       <div
         ref={sheetRef}
-        className={`fixed bottom-0 left-0 right-0 z-[${Z_INDEX.BOTTOM_SHEET}] bg-background/95 backdrop-blur-sm rounded-t-2xl shadow-lg border-t ${
+        className={`fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm rounded-t-2xl shadow-lg border-t ${
           isDragging ? '' : 'bottom-sheet'
         }`}
         style={{ 
           height: actualHeight,
           maxHeight: '85vh',
+          zIndex: Z_INDEX.BOTTOM_SHEET,
         }}
       >
       {/* Drag Handle */}

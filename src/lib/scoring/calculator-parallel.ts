@@ -12,6 +12,7 @@ import { Worker } from 'worker_threads';
 import * as os from 'os';
 import type { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/types';
 import { generateGrid, calculateAdaptiveGridSize } from '@/lib/geo/grid';
+import { SpatialIndex } from '@/lib/geo/haversine';
 import { normalizeKValues, logKStats } from './calculator';
 import { PERFORMANCE_CONFIG } from '@/constants';
 import { createTimer } from '@/lib/profiling';
@@ -287,6 +288,7 @@ function runWorker(
 
 /**
  * Calculate heatmap in parallel using worker threads
+ * @param prebuiltSpatialIndexes - Optional pre-built spatial indexes to avoid rebuilding (for single-threaded fallback)
  */
 export async function calculateHeatmapParallel(
   bounds: Bounds,
@@ -295,7 +297,8 @@ export async function calculateHeatmapParallel(
   gridSize?: number,
   distanceCurve: DistanceCurve = 'log',
   sensitivity: number = 1,
-  normalizeToViewport: boolean = false
+  normalizeToViewport: boolean = false,
+  prebuiltSpatialIndexes?: Map<string, SpatialIndex>
 ): Promise<HeatmapPoint[]> {
   const startTime = performance.now();
   const stopTotalTimer = createTimer('calculator:total');
@@ -336,7 +339,8 @@ export async function calculateHeatmapParallel(
       gridSize,
       distanceCurve,
       sensitivity,
-      normalizeToViewport
+      normalizeToViewport,
+      prebuiltSpatialIndexes
     );
     
     const endTime = performance.now();

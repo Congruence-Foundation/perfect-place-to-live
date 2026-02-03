@@ -16,7 +16,7 @@ import { LRUCache } from 'lru-cache';
 import type { POI, Bounds, FactorDef } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { getPoiTileKey } from '@/lib/geo/tiles';
-import { fetchPOIsBatched, type DataSource } from '@/lib/poi';
+import { fetchPOIsBatched, type POIDataSource } from '@/lib/poi';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { POI_TILE_CONFIG, COORDINATE_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
@@ -121,7 +121,7 @@ async function cachePOIs(cacheKey: string, pois: POI[]): Promise<void> {
 export async function getPoiTilesForArea(
   tiles: TileCoord[],
   factors: FactorDef[],
-  dataSource: DataSource
+  dataSource: POIDataSource
 ): Promise<Map<string, POI[]>> {
   const stopTotalTimer = createTimer('poi-cache:total');
   
@@ -258,7 +258,7 @@ async function checkAllRedisCache(
  */
 async function fetchAndCacheUncached(
   uncached: CacheCheckResult[],
-  dataSource: DataSource,
+  dataSource: POIDataSource,
   result: Map<string, POI[]>
 ): Promise<void> {
   // Group uncached items by tile to determine unique tiles needed

@@ -37,3 +37,28 @@ export function distanceInMeters(
   const lngDiff = (lng2 - lng1) * metersPerDegreeLng(avgLat);
   return Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
 }
+
+/**
+ * Create a unique coordinate key from lat/lng values
+ * Uses 6 decimal places (~0.1m precision)
+ * 
+ * @param lat - Latitude
+ * @param lng - Longitude
+ * @param separator - Separator character (default: ':')
+ * @returns Coordinate key string
+ */
+export function createCoordinateKey(lat: number, lng: number, separator: string = ':'): string {
+  return `${lat.toFixed(6)}${separator}${lng.toFixed(6)}`;
+}
+
+/**
+ * Create a cluster ID from lat/lng values
+ * Uses 6 decimal places for precision
+ * 
+ * @param lat - Latitude
+ * @param lng - Longitude
+ * @returns Cluster ID string
+ */
+export function createClusterId(lat: number, lng: number): string {
+  return `cluster-${lat.toFixed(6)}-${lng.toFixed(6)}`;
+}

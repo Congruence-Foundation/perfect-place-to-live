@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchPoisWithFallback, DataSource } from '@/lib/poi';
+import { fetchPoisWithFallback, POIDataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
 import { Factor, HeatmapRequest } from '@/types';
 import { estimateGridSize, calculateAdaptiveGridSize, expandBounds, isValidBounds, filterPoisToBounds } from '@/lib/geo';
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     const useMsgpack = acceptsMsgpack(request);
 
     // Determine data source (default to Neon for performance)
-    const dataSource: DataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
+    const dataSource: POIDataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
 
     // Validate bounds
     if (!isValidBounds(bounds)) {

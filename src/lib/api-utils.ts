@@ -3,6 +3,7 @@ import { encode } from '@msgpack/msgpack';
 import { TIME_CONSTANTS } from '@/constants/performance';
 import { DEFAULT_FACTORS, getEnabledFactors } from '@/config/factors';
 import type { Factor } from '@/types';
+import type { TileCoord } from '@/lib/geo/tiles';
 
 const { SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE } = TIME_CONSTANTS;
 
@@ -85,4 +86,23 @@ export function getValidatedFactors(
   }
 
   return { factors, enabledFactors };
+}
+
+/**
+ * Type guard to validate tile coordinates
+ * 
+ * @param tile - The value to check
+ * @returns Whether the value is a valid TileCoord
+ */
+export function isValidTileCoord(tile: unknown): tile is TileCoord {
+  return (
+    tile != null &&
+    typeof tile === 'object' &&
+    typeof (tile as TileCoord).z === 'number' &&
+    typeof (tile as TileCoord).x === 'number' &&
+    typeof (tile as TileCoord).y === 'number' &&
+    !isNaN((tile as TileCoord).z) &&
+    !isNaN((tile as TileCoord).x) &&
+    !isNaN((tile as TileCoord).y)
+  );
 }

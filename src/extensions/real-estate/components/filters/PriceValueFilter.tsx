@@ -6,12 +6,12 @@ import { InfoTooltip } from '@/components/ui/info-tooltip';
 import type { PriceValueFilter as PriceValueFilterType } from '../../types/property';
 import { PRICE_CATEGORY_COLORS } from '../../lib';
 import { cn } from '@/lib/utils';
+import { DEFAULT_FALLBACK_COLOR } from '@/constants/colors';
 
 // Slider configuration constants
 const SLIDER_MIN = 0;
 const SLIDER_MAX = 100;
 const SLIDER_STEP = 20;
-const DEFAULT_COLOR = '#6b7280';
 
 interface PriceValueFilterOption {
   value: PriceValueFilterType;
@@ -59,12 +59,12 @@ function getRangeLabel(range: [number, number]): string {
 
 /** Get color for current range */
 function getRangeColor(range: [number, number]): string {
-  if (isFullRange(range)) return DEFAULT_COLOR;
+  if (isFullRange(range)) return DEFAULT_FALLBACK_COLOR;
   
   // For single step, use the end option's color
   if (isSingleStep(range)) {
     const endOption = PRICE_VALUE_OPTIONS.find(o => o.position === range[1]);
-    return endOption?.color || DEFAULT_COLOR;
+    return endOption?.color || DEFAULT_FALLBACK_COLOR;
   }
   
   // For range, use the midpoint color

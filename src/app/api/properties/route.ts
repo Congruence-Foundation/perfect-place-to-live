@@ -4,7 +4,7 @@ import { PropertyRequest, PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/ex
 import { isValidBounds, tileToBounds } from '@/lib/geo';
 import { hashFilters } from '@/lib/geo/tiles';
 import { getCachedTile, setCachedTile, generateTileCacheKey, type TileCacheEntry } from '@/lib/tile-cache';
-import { errorResponse } from '@/lib/api-utils';
+import { errorResponse, isValidTileCoord } from '@/lib/api-utils';
 import { createTimer } from '@/lib/profiling';
 
 export const runtime = 'nodejs';
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     let cacheKey: string | null = null;
     let isTileRequest = false;
 
-    if (tile && typeof tile.z === 'number' && typeof tile.x === 'number' && typeof tile.y === 'number') {
+    if (isValidTileCoord(tile)) {
       // Tile-based request
       bounds = tileToBounds(tile.z, tile.x, tile.y);
       const filterHash = hashFilters(filters);

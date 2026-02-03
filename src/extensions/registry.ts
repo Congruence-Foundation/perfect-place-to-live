@@ -21,16 +21,13 @@ function createExtensionRegistry(): ExtensionRegistry {
   };
 }
 
-// Singleton registry instance
-let globalRegistry: ExtensionRegistry | null = null;
+// Singleton registry instance - initialized immediately
+const globalRegistry = createExtensionRegistry();
 
 /**
  * Get the global extension registry
  */
 export function getExtensionRegistry(): ExtensionRegistry {
-  if (!globalRegistry) {
-    globalRegistry = createExtensionRegistry();
-  }
   return globalRegistry;
 }
 
@@ -38,5 +35,5 @@ export function getExtensionRegistry(): ExtensionRegistry {
  * Register an extension with the global registry
  */
 export function registerExtension(extension: MapExtension): void {
-  getExtensionRegistry().register(extension);
+  globalRegistry.register(extension);
 }

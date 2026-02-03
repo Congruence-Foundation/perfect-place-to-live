@@ -13,6 +13,8 @@ interface InfoTooltipProps {
   iconSize?: 'sm' | 'md';
   /** Additional class for the tooltip content (e.g., z-index) */
   contentClassName?: string;
+  /** Additional style for the tooltip content (e.g., z-index) */
+  contentStyle?: React.CSSProperties;
   /** Click handler for the button (e.g., stopPropagation) */
   onClick?: (e: React.MouseEvent) => void;
 }
@@ -32,6 +34,7 @@ export function InfoTooltip({
   className = 'max-w-xs',
   iconSize = 'sm',
   contentClassName,
+  contentStyle,
   onClick
 }: InfoTooltipProps) {
   return (
@@ -41,11 +44,12 @@ export function InfoTooltip({
           type="button" 
           className="p-0.5 hover:bg-muted rounded transition-colors"
           onClick={onClick}
+          aria-label="More information"
         >
           <Info className={cn(ICON_SIZE_CLASSES[iconSize], 'text-muted-foreground')} />
         </button>
       </TooltipTrigger>
-      <TooltipContent side={side} className={cn(className, contentClassName)}>
+      <TooltipContent side={side} className={cn(className, contentClassName)} style={contentStyle}>
         {children}
       </TooltipContent>
     </Tooltip>

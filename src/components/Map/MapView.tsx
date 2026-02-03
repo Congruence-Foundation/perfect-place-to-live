@@ -2,113 +2,39 @@
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
-import { POI_COLORS, getColorForK, Z_INDEX, DEBUG_COLORS } from '@/constants';
-import { formatDistance } from '@/lib/utils';
-import { calculateFactorBreakdown, FactorBreakdown } from '@/lib/scoring';
+import { POI_COLORS, Z_INDEX, DEBUG_COLORS } from '@/constants';
+import { calculateFactorBreakdown } from '@/lib/scoring';
 import { renderHeatmapToCanvas } from '@/lib/rendering/canvasRenderer';
 import { useMapStore } from '@/stores/mapStore';
+import { tileToBounds, METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '@/lib/geo';
+import {
+  generatePopupContent,
+  defaultPopupTranslations,
+  type PopupTranslations,
+  type FactorTranslations,
+} from './utils/popupContent';
+import { setupTouchLongPress, setupMouseLongPress } from './hooks/useLongPress';
+import {
+  MAP_INIT_DELAY_MS,
+  CANVAS_PIXELS_PER_CELL,
+  CANVAS_MAX_DIMENSION,
+  CANVAS_MIN_DIMENSION,
+  POI_MARKER_RADIUS,
+  POI_MARKER_BORDER_WIDTH,
+  POI_MARKER_FILL_OPACITY,
+  POI_TOOLTIP_OFFSET_Y,
+  FLY_TO_DURATION,
+  FIT_BOUNDS_DURATION,
+  FIT_BOUNDS_MAX_ZOOM,
+  FIT_BOUNDS_PADDING,
+  LEAFLET_ICON_URLS,
+  OSM_TILE_URL,
+  OSM_ATTRIBUTION,
+  HEATMAP_CELL_SIZE_METERS,
+} from './constants';
 
-// Popup translations interface
-export interface PopupTranslations {
-  excellent: string;
-  good: string;
-  average: string;
-  belowAverage: string;
-  poor: string;
-  footer: string;
-  goodLabel: string;
-  improveLabel: string;
-  noData: string;
-}
-
-// Factor name translations type
-export type FactorTranslations = Record<string, string>;
-
-// Get rating label for K value
-function getRatingLabel(k: number, translations: PopupTranslations): { label: string; emoji: string } {
-  if (k < 0.2) return { label: translations.excellent, emoji: '🌟' };
-  if (k < 0.4) return { label: translations.good, emoji: '👍' };
-  if (k < 0.6) return { label: translations.average, emoji: '😐' };
-  if (k < 0.8) return { label: translations.belowAverage, emoji: '👎' };
-  return { label: translations.poor, emoji: '⚠️' };
-}
-
-// Generate popup HTML content - compact version
-function generatePopupContent(
-  k: number,
-  breakdown: FactorBreakdown[],
-  translations: PopupTranslations,
-  factorTranslations: FactorTranslations
-): string {
-  const allNoPOIs = breakdown.length > 0 && breakdown.every(item => item.noPOIs);
-  
-  if (allNoPOIs) {
-    return `
-      <div style="min-width: 180px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px; text-align: center; padding: 8px;">
-        <div style="font-size: 24px; margin-bottom: 8px;">📍</div>
-        <div style="color: #6b7280;">${translations.noData}</div>
-      </div>
-    `;
-  }
-  
-  const rating = getRatingLabel(k, translations);
-  const kColor = getColorForK(k);
-  const scorePercent = Math.round((1 - k) * 100);
-
-  const breakdownRows = breakdown.map(item => {
-    const color = POI_COLORS[item.factorId] || '#6b7280';
-    const distanceText = item.noPOIs ? '—' : formatDistance(item.distance);
-    const barColor = item.score < 0.3 ? '#22c55e' : item.score < 0.6 ? '#eab308' : '#ef4444';
-    const scoreBarWidth = Math.round(item.score * 100);
-    const icon = item.isNegative 
-      ? (item.score > 0.5 ? '⚠' : '✓') 
-      : (item.score < 0.5 ? '✓' : '⚠');
-    const iconColor = icon === '✓' ? '#22c55e' : '#ef4444';
-    const weightDisplay = item.weight > 0 ? `+${item.weight}` : `${item.weight}`;
-    const weightColor = item.weight > 0 ? '#22c55e' : item.weight < 0 ? '#ef4444' : '#6b7280';
-    const nearbyText = item.nearbyCount > 1 ? `(${item.nearbyCount})` : '';
-    const factorName = factorTranslations[item.factorId] || item.factorName;
-
-    return `
-      <tr style="height: 22px;">
-        <td style="width: 10px; padding: 2px 0;">
-          <div style="width: 6px; height: 6px; border-radius: 50%; background: ${color};"></div>
-        </td>
-        <td style="padding: 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px;" title="${factorName}${item.nearbyCount > 1 ? ` - ${item.nearbyCount} nearby` : ''}">
-          ${factorName}
-        </td>
-        <td style="width: 30px; padding: 2px; text-align: right; font-size: 9px; color: ${weightColor};">${weightDisplay}</td>
-        <td style="width: 40px; padding: 2px;">
-          <div style="height: 3px; background: #e5e7eb; border-radius: 2px; overflow: hidden;">
-            <div style="height: 100%; width: ${scoreBarWidth}%; background: ${barColor};"></div>
-          </div>
-        </td>
-        <td style="width: 50px; padding: 2px 4px; text-align: right; color: #6b7280;">${distanceText} <span style="color: #9ca3af; font-size: 8px;">${nearbyText}</span></td>
-        <td style="width: 14px; text-align: center; color: ${iconColor}; font-weight: bold;">${icon}</td>
-      </tr>
-    `;
-  }).join('');
-
-  return `
-    <div style="min-width: 200px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 11px;">
-      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb;">
-        <span style="font-size: 18px;">${rating.emoji}</span>
-        <div style="flex: 1;">
-          <span style="font-weight: 600; font-size: 13px; color: ${kColor};">${rating.label}</span>
-          <span style="color: #6b7280; margin-left: 4px;">${scorePercent}%</span>
-        </div>
-      </div>
-      <table style="width: 100%; border-collapse: collapse;">
-        <tbody>
-          ${breakdownRows}
-        </tbody>
-      </table>
-      <div style="font-size: 9px; color: #9ca3af; margin-top: 4px; padding-top: 4px; border-top: 1px solid #e5e7eb;">
-        ${translations.footer} • ✓ ${translations.goodLabel} • ⚠ ${translations.improveLabel}
-      </div>
-    </div>
-  `;
-}
+// Re-export types for backward compatibility
+export type { PopupTranslations, FactorTranslations };
 
 export interface MapViewRef {
   flyTo: (lat: number, lng: number, zoom?: number) => void;
@@ -136,163 +62,6 @@ interface MapViewProps {
   heatmapTileCoords?: { z: number; x: number; y: number }[];
   /** Flag indicating if heatmap data is ready for current tiles */
   isHeatmapDataReady?: boolean;
-}
-
-// Default translations (English)
-const defaultPopupTranslations: PopupTranslations = {
-  excellent: 'Excellent',
-  good: 'Good',
-  average: 'Average',
-  belowAverage: 'Below Average',
-  poor: 'Poor',
-  footer: 'Right-click for details',
-  goodLabel: 'good',
-  improveLabel: 'improve',
-  noData: 'No data available for this area. Zoom in or pan to load POIs.',
-};
-
-// Long press configuration
-const LONG_PRESS_DURATION_MS = 500;
-const TOUCH_MOVE_THRESHOLD_PX = 10;
-const MOUSE_MOVE_THRESHOLD_PX = 5;
-
-// Map initialization
-const MAP_INIT_DELAY_MS = 100;
-
-// Canvas rendering configuration
-const CANVAS_PIXELS_PER_CELL = 4;
-const CANVAS_MAX_DIMENSION = 4096;
-const CANVAS_MIN_DIMENSION = 256;
-
-// POI marker styling
-const POI_MARKER_RADIUS = 6;
-const POI_MARKER_BORDER_WIDTH = 2;
-const POI_MARKER_FILL_OPACITY = 0.8;
-const POI_TOOLTIP_OFFSET_Y = -8;
-
-interface LongPressState {
-  timer: ReturnType<typeof setTimeout> | null;
-  startPos: { x: number; y: number } | null;
-  latLng: L.LatLng | null;
-}
-
-function setupTouchLongPress(
-  container: HTMLElement,
-  mapInstance: L.Map,
-  onLongPress: (latlng: L.LatLng) => void
-): () => void {
-  const state: LongPressState = { timer: null, startPos: null, latLng: null };
-
-  const clearState = () => {
-    if (state.timer) clearTimeout(state.timer);
-    state.timer = null;
-    state.startPos = null;
-    state.latLng = null;
-  };
-
-  const handleTouchStart = (e: TouchEvent) => {
-    clearState();
-    const touch = e.touches[0];
-    state.startPos = { x: touch.clientX, y: touch.clientY };
-    try {
-      const containerPoint = mapInstance.mouseEventToContainerPoint({
-        clientX: touch.clientX,
-        clientY: touch.clientY,
-      } as MouseEvent);
-      state.latLng = mapInstance.containerPointToLatLng(containerPoint);
-    } catch {
-      return;
-    }
-    state.timer = setTimeout(() => {
-      if (state.latLng) {
-        e.preventDefault();
-        onLongPress(state.latLng);
-      }
-      clearState();
-    }, LONG_PRESS_DURATION_MS);
-  };
-
-  const handleTouchMove = (e: TouchEvent) => {
-    if (!state.timer || !state.startPos) return;
-    const touch = e.touches[0];
-    const dx = touch.clientX - state.startPos.x;
-    const dy = touch.clientY - state.startPos.y;
-    if (Math.sqrt(dx * dx + dy * dy) > TOUCH_MOVE_THRESHOLD_PX) {
-      clearState();
-    }
-  };
-
-  const handleTouchEnd = () => clearState();
-
-  container.addEventListener('touchstart', handleTouchStart, { passive: false });
-  container.addEventListener('touchmove', handleTouchMove, { passive: true });
-  container.addEventListener('touchend', handleTouchEnd, { passive: true });
-  container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
-
-  return () => {
-    clearState();
-    container.removeEventListener('touchstart', handleTouchStart);
-    container.removeEventListener('touchmove', handleTouchMove);
-    container.removeEventListener('touchend', handleTouchEnd);
-    container.removeEventListener('touchcancel', handleTouchEnd);
-  };
-}
-
-function setupMouseLongPress(
-  container: HTMLElement,
-  mapInstance: L.Map,
-  onLongPress: (latlng: L.LatLng) => void
-): () => void {
-  const state: LongPressState = { timer: null, startPos: null, latLng: null };
-
-  const clearState = () => {
-    if (state.timer) clearTimeout(state.timer);
-    state.timer = null;
-    state.startPos = null;
-    state.latLng = null;
-  };
-
-  const handleMouseDown = (e: MouseEvent) => {
-    if (e.button !== 0) return;
-    clearState();
-    state.startPos = { x: e.clientX, y: e.clientY };
-    try {
-      const containerPoint = mapInstance.mouseEventToContainerPoint(e);
-      state.latLng = mapInstance.containerPointToLatLng(containerPoint);
-    } catch {
-      return;
-    }
-    state.timer = setTimeout(() => {
-      if (state.latLng) {
-        onLongPress(state.latLng);
-      }
-      clearState();
-    }, LONG_PRESS_DURATION_MS);
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!state.timer || !state.startPos) return;
-    const dx = e.clientX - state.startPos.x;
-    const dy = e.clientY - state.startPos.y;
-    if (Math.sqrt(dx * dx + dy * dy) > MOUSE_MOVE_THRESHOLD_PX) {
-      clearState();
-    }
-  };
-
-  const handleMouseUp = () => clearState();
-
-  container.addEventListener('mousedown', handleMouseDown);
-  container.addEventListener('mousemove', handleMouseMove);
-  container.addEventListener('mouseup', handleMouseUp);
-  container.addEventListener('mouseleave', handleMouseUp);
-
-  return () => {
-    clearState();
-    container.removeEventListener('mousedown', handleMouseDown);
-    container.removeEventListener('mousemove', handleMouseMove);
-    container.removeEventListener('mouseup', handleMouseUp);
-    container.removeEventListener('mouseleave', handleMouseUp);
-  };
 }
 
 const MapView = forwardRef<MapViewRef, MapViewProps>(({
@@ -381,12 +150,12 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
   useImperativeHandle(ref, () => ({
     flyTo: (lat: number, lng: number, zoomLevel?: number) => {
-      mapInstanceRef.current?.flyTo([lat, lng], zoomLevel ?? 13, { duration: 1.5 });
+      mapInstanceRef.current?.flyTo([lat, lng], zoomLevel ?? 13, { duration: FLY_TO_DURATION });
     },
     fitBounds: (bounds: Bounds) => {
       mapInstanceRef.current?.flyToBounds(
         [[bounds.south, bounds.west], [bounds.north, bounds.east]],
-        { padding: [50, 50], duration: 1.5, maxZoom: 14 }
+        { padding: [FIT_BOUNDS_PADDING, FIT_BOUNDS_PADDING], duration: FIT_BOUNDS_DURATION, maxZoom: FIT_BOUNDS_MAX_ZOOM }
       );
     },
     invalidateSize: () => {
@@ -421,11 +190,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         }
 
         delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
-        L.Icon.Default.mergeOptions({
-          iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-          iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-        });
+        L.Icon.Default.mergeOptions(LEAFLET_ICON_URLS);
 
         const map = L.map(containerRef.current, {
           center: initialCenterRef.current,
@@ -434,8 +199,8 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           scrollWheelZoom: true,
         });
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        L.tileLayer(OSM_TILE_URL, {
+          attribution: OSM_ATTRIBUTION,
         }).addTo(map);
 
         poiLayerGroupRef.current = L.layerGroup().addTo(map);
@@ -594,16 +359,12 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         if (heatmapTileCoords.length > 0) {
           // Use tile bounds for stable canvas sizing
           for (const tile of heatmapTileCoords) {
-            const n = Math.pow(2, tile.z);
-            const tileSouth = Math.atan(Math.sinh(Math.PI * (1 - 2 * (tile.y + 1) / n))) * 180 / Math.PI;
-            const tileNorth = Math.atan(Math.sinh(Math.PI * (1 - 2 * tile.y / n))) * 180 / Math.PI;
-            const tileWest = tile.x / n * 360 - 180;
-            const tileEast = (tile.x + 1) / n * 360 - 180;
+            const tileBounds = tileToBounds(tile.z, tile.x, tile.y);
             
-            if (tileSouth < minLat) minLat = tileSouth;
-            if (tileNorth > maxLat) maxLat = tileNorth;
-            if (tileWest < minLng) minLng = tileWest;
-            if (tileEast > maxLng) maxLng = tileEast;
+            if (tileBounds.south < minLat) minLat = tileBounds.south;
+            if (tileBounds.north > maxLat) maxLat = tileBounds.north;
+            if (tileBounds.west < minLng) minLng = tileBounds.west;
+            if (tileBounds.east > maxLng) maxLng = tileBounds.east;
           }
         } else {
           // Fallback to point bounds if no tiles available
@@ -632,14 +393,11 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
         // Calculate canvas dimensions based on geographic area and fixed cell size
         // Use 100m cells, convert to degrees at center latitude
-        const CELL_SIZE_METERS = 100;
-        const METERS_PER_DEGREE_LAT = 111320;
         const centerLat = (maxLat + minLat) / 2;
-        const metersPerDegreeLng = METERS_PER_DEGREE_LAT * Math.cos(centerLat * Math.PI / 180);
         
         // Calculate how many cells fit in the bounds
-        const cellsLng = Math.ceil((lngRange * metersPerDegreeLng) / CELL_SIZE_METERS);
-        const cellsLat = Math.ceil((latRange * METERS_PER_DEGREE_LAT) / CELL_SIZE_METERS);
+        const cellsLng = Math.ceil((lngRange * metersPerDegreeLng(centerLat)) / HEATMAP_CELL_SIZE_METERS);
+        const cellsLat = Math.ceil((latRange * METERS_PER_DEGREE_LAT) / HEATMAP_CELL_SIZE_METERS);
         
         // Use fixed pixels per cell for consistent rendering
         const pixelsPerCell = CANVAS_PIXELS_PER_CELL;
@@ -655,7 +413,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
         renderHeatmapToCanvas(ctx, heatmapPoints, bounds, canvas.width, canvas.height, {
           opacity: heatmapOpacity,
-          cellSizeMeters: 100, // Fixed cell size for consistent rendering across tiles
+          cellSizeMeters: HEATMAP_CELL_SIZE_METERS,
         });
 
         const overlayBounds: L.LatLngBoundsExpression = [
@@ -799,21 +557,9 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
               tileBorderPane.style.pointerEvents = 'none';
             }
           }
-          tileBorderLayerRef.current = L.layerGroup({ pane: 'tileBorderPane' }).addTo(map);
+          tileBorderLayerRef.current = L.layerGroup([], { pane: 'tileBorderPane' }).addTo(map);
         }
         tileBorderLayerRef.current.clearLayers();
-
-        // Helper to convert tile coords to bounds
-        const tileToBounds = (z: number, x: number, y: number) => {
-          const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
-          const north = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-          const south = (180 / Math.PI) * Math.atan(
-            0.5 * (Math.exp(n - (2 * Math.PI) / Math.pow(2, z)) - Math.exp(-(n - (2 * Math.PI) / Math.pow(2, z))))
-          );
-          const west = (x / Math.pow(2, z)) * 360 - 180;
-          const east = ((x + 1) / Math.pow(2, z)) * 360 - 180;
-          return { north, south, east, west };
-        };
 
         // Render heatmap tile borders (blue)
         if (showHeatmapTileBorders) {

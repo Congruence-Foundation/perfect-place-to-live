@@ -12,14 +12,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { decode } from '@msgpack/msgpack';
-import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, DataSource } from '@/types';
+import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource } from '@/types';
 import {
   getExpandedTilesForRadius,
   hashHeatmapConfig,
   type TileCoord,
   HEATMAP_TILE_ZOOM,
 } from '@/lib/geo/tiles';
-import { getTilesForBounds, tileToBounds } from '@/lib/geo';
+import { getTilesForBounds, tileToBounds, createCoordinateKey } from '@/lib/geo';
 import { HEATMAP_TILE_CONFIG, FETCH_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
 import { useMapStore } from '@/stores/mapStore';
@@ -41,7 +41,7 @@ interface BatchHeatmapResponse {
     computeTimeMs: number;
     poiTileCount: number;
     poiCounts: Record<string, number>;
-    dataSource: DataSource;
+    dataSource: POIDataSource;
     l1CacheStats?: {
       heatmap: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
       poi: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
@@ -58,7 +58,7 @@ export interface UseHeatmapTilesOptions {
   distanceCurve: DistanceCurve;
   sensitivity: number;
   normalizeToViewport: boolean;
-  dataSource: DataSource;
+  dataSource: POIDataSource;
   tileRadius: number;
   poiBufferScale: number;
   enabled: boolean;
@@ -78,7 +78,7 @@ export interface UseHeatmapTilesResult {
     pointCount: number;
     computeTimeMs: number;
     factorCount: number;
-    dataSource?: DataSource;
+    dataSource?: POIDataSource;
     poiCounts: Record<string, number>;
     poiTileCount?: number;
     cachedTiles?: number;
@@ -105,7 +105,7 @@ async function fetchHeatmapBatch(
   distanceCurve: DistanceCurve,
   sensitivity: number,
   normalizeToViewport: boolean,
-  dataSource: DataSource,
+  dataSource: POIDataSource,
   poiBufferScale: number,
   viewportBounds: Bounds,
   signal?: AbortSignal
@@ -398,7 +398,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     // Add new points to accumulated map (merge with existing)
     for (const tileData of Object.values(batchResult.tiles)) {
       for (const point of tileData.points) {
-        const pointKey = `${point.lat.toFixed(6)}:${point.lng.toFixed(6)}`;
+        const pointKey = createCoordinateKey(point.lat, point.lng);
         // Always update with latest score (in case settings changed)
         accumulatedPointsRef.current.set(pointKey, point);
       }
@@ -440,8 +440,8 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     if (Object.keys(batchResult.pois).length > 0) {
       for (const [factorId, factorPois] of Object.entries(batchResult.pois)) {
         const existing = lastValidPoisRef.current[factorId] || [];
-        const seenKeys = new Set(existing.map(p => `${p.lat.toFixed(6)}:${p.lng.toFixed(6)}`));
-        const newPois = factorPois.filter(p => !seenKeys.has(`${p.lat.toFixed(6)}:${p.lng.toFixed(6)}`));
+        const seenKeys = new Set(existing.map(p => createCoordinateKey(p.lat, p.lng)));
+        const newPois = factorPois.filter(p => !seenKeys.has(createCoordinateKey(p.lat, p.lng)));
         lastValidPoisRef.current[factorId] = [...existing, ...newPois];
       }
     }
@@ -464,12 +464,20 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     };
   }, [batchResult, isTooLarge, factors, allTiles]);
 
+  // Memoize tiles key calculation to avoid recomputing on every render
+  const currentTilesKey = useMemo(
+    () => allTiles.map(t => `${t.z}:${t.x}:${t.y}`).sort().join(','),
+    [allTiles]
+  );
+
   // Check if current data matches current tiles (for preventing stale renders)
   // Data is ready when:
   // 1. We have a batchResult AND it matches current tiles, OR
   // 2. There are no tiles to load (allTiles.length === 0)
-  const currentTilesKey = allTiles.map(t => `${t.z}:${t.x}:${t.y}`).sort().join(',');
-  const isDataReady = (batchResult && batchResultTilesRef.current === currentTilesKey) || allTiles.length === 0;
+  const isDataReady = useMemo(
+    () => (batchResult && batchResultTilesRef.current === currentTilesKey) || allTiles.length === 0,
+    [batchResult, currentTilesKey, allTiles.length]
+  );
 
   return {
     heatmapPoints,

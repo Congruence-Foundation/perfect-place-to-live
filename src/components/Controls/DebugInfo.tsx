@@ -73,9 +73,10 @@ export default function DebugInfo({
   const l1CacheStats = metadata?.l1CacheStats;
 
   return (
-    <div className={`${
-      isMobile ? 'relative' : 'absolute bottom-4 left-4'
-    } z-[${Z_INDEX.FLOATING_CONTROLS}]`}>
+    <div 
+      className={isMobile ? 'relative' : 'absolute bottom-4 left-4'}
+      style={{ zIndex: Z_INDEX.FLOATING_CONTROLS }}
+    >
       {/* Expanded Panel - Absolutely positioned above the button */}
       {isOpen && (
         <div className="absolute bottom-12 left-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-56 animate-in fade-in slide-in-from-bottom-2 duration-200">

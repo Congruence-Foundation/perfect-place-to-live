@@ -1,8 +1,6 @@
 'use client';
 
 import { Notification } from '@/hooks/useNotification';
-import { Z_INDEX } from '@/constants/z-index';
-
 const DEFAULT_TOAST_DURATION_MS = 3000;
 
 interface ToastProps {
@@ -16,7 +14,7 @@ export function Toast({ notification }: ToastProps) {
 
   return (
     <div 
-      className={`absolute z-[${Z_INDEX.FLOATING_CONTROLS}] top-[72px] left-0 right-0 flex justify-center pointer-events-none`}
+      className="absolute z-[1000] top-[72px] left-0 right-0 flex justify-center pointer-events-none"
       role="alert"
       aria-live="polite"
     >

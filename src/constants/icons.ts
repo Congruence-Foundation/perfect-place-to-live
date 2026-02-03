@@ -12,7 +12,6 @@ import {
   Baby,
   Factory,
   Route,
-  MapPin,
   Trophy,
   Wine,
   BookOpen,
@@ -67,7 +66,6 @@ export const FACTOR_ICON_MAP: Record<string, React.ComponentType<{ className?: s
   'train-track': TrainTrack,
   cross: Cross,
   'hard-hat': HardHat,
-  'map-pin': MapPin,
   'building-2': Building2,
   'volume-2': Volume2,
 };

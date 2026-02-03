@@ -10,11 +10,6 @@
 export type POIDataSource = 'neon' | 'overpass';
 
 /**
- * @deprecated Use POIDataSource instead
- */
-export type DataSource = POIDataSource;
-
-/**
  * Error thrown when POI fetching fails
  */
 export class POIFetchError extends Error {

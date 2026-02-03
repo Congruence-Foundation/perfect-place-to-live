@@ -26,6 +26,7 @@ export const POI_COLORS: Record<string, string> = {
   water: '#0ea5e9',        // sky
   airports: '#64748b',     // slate
   railways: '#78716c',     // stone
+  train_stations: '#3b82f6', // blue (same as transit)
   cemeteries: '#57534e',   // stone
   construction: '#fbbf24', // amber
   city_center: '#6366f1',  // indigo

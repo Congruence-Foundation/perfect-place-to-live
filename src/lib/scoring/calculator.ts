@@ -287,7 +287,28 @@ function findNearestDistanceSimple(point: Point, pois: POI[]): number {
 }
 
 /**
+ * Build spatial indexes for POI data
+ * Can be called once and shared across multiple calculateHeatmap calls
+ */
+export function buildSpatialIndexes(
+  poiData: Map<string, POI[]>,
+  factors: Factor[]
+): Map<string, SpatialIndex> {
+  const spatialIndexes = new Map<string, SpatialIndex>();
+  for (const factor of factors) {
+    if (factor.enabled && factor.weight !== 0) {
+      const pois = poiData.get(factor.id) || [];
+      if (pois.length > 0) {
+        spatialIndexes.set(factor.id, new SpatialIndex(pois));
+      }
+    }
+  }
+  return spatialIndexes;
+}
+
+/**
  * Calculate heatmap data for a given bounds and factors
+ * @param prebuiltSpatialIndexes - Optional pre-built spatial indexes to avoid rebuilding
  */
 export function calculateHeatmap(
   bounds: Bounds,
@@ -296,7 +317,8 @@ export function calculateHeatmap(
   gridSize?: number,
   distanceCurve: DistanceCurve = 'log',
   sensitivity: number = 1,
-  normalizeToViewport: boolean = false
+  normalizeToViewport: boolean = false,
+  prebuiltSpatialIndexes?: Map<string, SpatialIndex>
 ): HeatmapPoint[] {
   const startTime = performance.now();
 
@@ -307,16 +329,8 @@ export function calculateHeatmap(
   // Generate grid points
   const gridPoints = generateGrid(bounds, effectiveGridSize);
 
-  // Build spatial indexes for each factor's POIs
-  const spatialIndexes = new Map<string, SpatialIndex>();
-  for (const factor of factors) {
-    if (factor.enabled && factor.weight !== 0) {
-      const pois = poiData.get(factor.id) || [];
-      if (pois.length > 0) {
-        spatialIndexes.set(factor.id, new SpatialIndex(pois));
-      }
-    }
-  }
+  // Use pre-built spatial indexes if provided, otherwise build them
+  const spatialIndexes = prebuiltSpatialIndexes || buildSpatialIndexes(poiData, factors);
 
   // Calculate K for each grid point
   let heatmapPoints: HeatmapPoint[] = gridPoints.map((point) => ({

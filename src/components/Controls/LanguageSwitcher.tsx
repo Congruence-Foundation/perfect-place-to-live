@@ -35,7 +35,10 @@ export default function LanguageSwitcher() {
       />
       
       {isOpen && (
-        <div className={`absolute top-full right-0 mt-2 bg-background/95 backdrop-blur-sm rounded-xl shadow-lg border p-1 w-32 animate-in fade-in slide-in-from-top-2 duration-200 z-[${Z_INDEX.DROPDOWN}]`}>
+        <div 
+          className="absolute top-full right-0 mt-2 bg-background/95 backdrop-blur-sm rounded-xl shadow-lg border p-1 w-32 animate-in fade-in slide-in-from-top-2 duration-200"
+          style={{ zIndex: Z_INDEX.DROPDOWN }}
+        >
           {SUPPORTED_LOCALES.map((localeCode) => {
             const metadata = LOCALE_METADATA[localeCode];
             return (

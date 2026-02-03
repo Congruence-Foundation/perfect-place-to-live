@@ -24,6 +24,7 @@ export function PanelHeader({ title, onClose, className }: PanelHeaderProps) {
       <span className="text-sm font-semibold">{title}</span>
       <button
         onClick={onClose}
+        aria-label="Close"
         className="w-6 h-6 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
       >
         <X className="h-3.5 w-3.5 text-muted-foreground" />

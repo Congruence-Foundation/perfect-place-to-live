@@ -13,7 +13,7 @@ export {
 } from './constants';
 
 // Distance calculations
-export { metersPerDegreeLng, distanceInMeters } from './distance';
+export { metersPerDegreeLng, distanceInMeters, createCoordinateKey, createClusterId } from './distance';
 
 // Haversine distance and spatial indexing
 export { haversineDistance, SpatialIndex } from './haversine';
@@ -33,6 +33,7 @@ export {
   generateGrid,
   estimateGridSize,
   calculateAdaptiveGridSize,
+  calculateTileGridSize,
   tileToBounds,
   getTilesForBounds,
 } from './grid';

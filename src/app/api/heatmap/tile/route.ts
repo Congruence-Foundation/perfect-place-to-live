@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
-import { fetchPoisWithFallback, DataSource } from '@/lib/poi';
+import { fetchPoisWithFallback, POIDataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
 import { Factor } from '@/types';
-import { tileToBounds, expandBounds, isValidBounds, filterPoisToBounds } from '@/lib/geo';
+import { tileToBounds, expandBounds, isValidBounds, filterPoisToBounds, calculateTileGridSize } from '@/lib/geo';
 import { getHeatmapTileKey, hashHeatmapConfig } from '@/lib/geo/tiles';
 import { getCachedHeatmapTile, setCachedHeatmapTile } from '@/lib/heatmap-tile-cache';
-import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors } from '@/lib/api-utils';
+import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors, isValidTileCoord } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
@@ -34,7 +34,7 @@ interface HeatmapTileRequest {
   distanceCurve?: string;
   sensitivity?: number;
   normalizeToViewport?: boolean;
-  dataSource?: DataSource;
+  dataSource?: POIDataSource;
 }
 
 export async function POST(request: NextRequest) {
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate tile coordinates
-    if (!tile || typeof tile.z !== 'number' || typeof tile.x !== 'number' || typeof tile.y !== 'number') {
+    if (!isValidTileCoord(tile)) {
       return errorResponse(new Error('Invalid tile coordinates'), 400);
     }
 
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     const useMsgpack = acceptsMsgpack(request);
 
     // Determine data source
-    const dataSource: DataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
+    const dataSource: POIDataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
 
     // Use provided factors or defaults, validate enabled factors
     const factorResult = getValidatedFactors(requestFactors);
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     const poiBounds = expandBounds(tileBounds, POI_BUFFER_DEGREES);
 
     // Calculate adaptive grid size for this tile using configured tile size
-    const gridSize = Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, TILE_SIZE_METERS / Math.sqrt(TARGET_GRID_POINTS / 4)));
+    const gridSize = calculateTileGridSize();
 
     // Fetch POIs with automatic fallback from Neon to Overpass
     const factorDefs = enabledFactors.map(f => ({ id: f.id, osmTags: f.osmTags }));

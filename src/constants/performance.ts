@@ -2,11 +2,11 @@
  * Performance-related configuration constants
  */
 
-import { DataSource } from '@/lib/errors';
+import { POIDataSource } from '@/lib/errors';
 
 export const PERFORMANCE_CONFIG = {
   /** Default data source for POI fetching */
-  DEFAULT_DATA_SOURCE: 'neon' as DataSource,
+  DEFAULT_DATA_SOURCE: 'neon' as POIDataSource,
   
   /** Maximum grid points to prevent server overload */
   MAX_GRID_POINTS: 50000,
@@ -24,7 +24,7 @@ export const PERFORMANCE_CONFIG = {
   TARGET_GRID_POINTS: 5000,
   
   /** Minimum cell size in meters for grid calculations */
-  MIN_CELL_SIZE: 50,
+  MIN_CELL_SIZE: 100,
   
   /** Maximum cell size in meters for grid calculations */
   MAX_CELL_SIZE: 300,
@@ -270,9 +270,6 @@ export const UI_CONFIG = {
   /** Debounce delay for factor changes (ms) */
   FACTORS_DEBOUNCE_MS: 300,
   
-  /** Debounce delay for settings changes (ms) */
-  SETTINGS_DEBOUNCE_MS: 300,
-  
   /** Duration for notification display (ms) */
   NOTIFICATION_DURATION_MS: 3000,
   
@@ -283,7 +280,7 @@ export const UI_CONFIG = {
   GEOLOCATION_MAX_AGE_MS: 300000,
   
   /** Default heatmap opacity */
-  DEFAULT_HEATMAP_OPACITY: 0.15,
+  DEFAULT_HEATMAP_OPACITY: 0.30,
   
   /** Search radius multiplier for heatmap point lookup */
   SEARCH_RADIUS_MULTIPLIER: 1.5,

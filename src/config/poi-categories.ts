@@ -17,6 +17,8 @@
  * - defaultEnabled: Whether enabled by default
  */
 
+import type { FactorCategory } from '@/types/factors';
+
 export interface POICategory {
   id: string;
   name: string;
@@ -24,7 +26,7 @@ export interface POICategory {
    * Examples: "nw/shop=supermarket", "n/amenity=atm", "w/highway=motorway"
    */
   osmFilters: string[];
-  category: 'essential' | 'lifestyle' | 'environment';
+  category: FactorCategory;
   icon: string;
   defaultWeight: number;
   defaultMaxDistance: number;

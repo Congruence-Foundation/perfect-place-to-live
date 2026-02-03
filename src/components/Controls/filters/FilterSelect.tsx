@@ -40,7 +40,7 @@ export default function FilterSelect<T extends string>({
         <SelectTrigger className="h-7 text-xs w-full">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
-        <SelectContent className="z-[9999] max-h-60" position="popper" sideOffset={4}>
+        <SelectContent className="z-[1100] max-h-60" position="popper" sideOffset={4}>
           {options.map((option) => (
             <SelectItem key={option.value} value={option.value} className="text-xs">
               {option.label}

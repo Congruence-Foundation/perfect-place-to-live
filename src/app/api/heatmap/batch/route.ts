@@ -12,8 +12,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
+import { buildSpatialIndexes } from '@/lib/scoring/calculator';
 import type { Factor, POI, HeatmapPoint, Bounds } from '@/types';
-import { tileToBounds, isValidBounds } from '@/lib/geo';
+import { tileToBounds, isValidBounds, calculateTileGridSize } from '@/lib/geo';
 import { 
   getHeatmapTileKey, 
   hashHeatmapConfig, 
@@ -27,9 +28,9 @@ import {
   type HeatmapTileCacheEntry,
 } from '@/lib/heatmap-tile-cache';
 import { getPoiTilesForArea, filterPoisToViewport, getPoiTileCacheStats } from '@/lib/poi-tile-cache';
-import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors } from '@/lib/api-utils';
+import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors, isValidTileCoord } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
-import type { DataSource } from '@/lib/poi';
+import type { POIDataSource } from '@/lib/poi';
 import { createTimer } from '@/lib/profiling';
 
 export const runtime = 'nodejs';
@@ -52,7 +53,7 @@ interface BatchHeatmapRequest {
   distanceCurve?: string;
   sensitivity?: number;
   normalizeToViewport?: boolean;
-  dataSource?: DataSource;
+  dataSource?: POIDataSource;
   poiBufferScale?: number;
   viewportBounds?: Bounds;
 }
@@ -68,7 +69,7 @@ interface BatchHeatmapResponse {
     computeTimeMs: number;
     poiTileCount: number;
     poiCounts: Record<string, number>;
-    dataSource: DataSource;
+    dataSource: POIDataSource;
     l1CacheStats?: {
       heatmap: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
       poi: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     const useMsgpack = acceptsMsgpack(request);
-    const dataSource: DataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
+    const dataSource: POIDataSource = requestedDataSource || DEFAULT_DATA_SOURCE;
     
     // Use provided factors or defaults, validate enabled factors
     const factorResult = getValidatedFactors(requestFactors);
@@ -221,7 +222,7 @@ function validateRequest(body: BatchHeatmapRequest): NextResponse | null {
   }
 
   for (const tile of tiles) {
-    if (typeof tile.z !== 'number' || typeof tile.x !== 'number' || typeof tile.y !== 'number') {
+    if (!isValidTileCoord(tile)) {
       return errorResponse(new Error('Invalid tile coordinates'), 400);
     }
   }
@@ -273,6 +274,8 @@ async function checkHeatmapCacheParallel(
 
 /**
  * Compute heatmap for uncached tiles and cache the results
+ * Processes tiles in parallel for better performance
+ * Builds spatial indexes once and shares them across all tiles
  */
 async function computeUncachedTiles(
   tiles: TileCoord[],
@@ -282,23 +285,22 @@ async function computeUncachedTiles(
   distanceCurve: 'linear' | 'log' | 'exp' | 'power',
   sensitivity: number,
   normalizeToViewport: boolean,
-  dataSource: DataSource
+  dataSource: POIDataSource
 ): Promise<Record<string, { points: HeatmapPoint[]; cached: boolean }>> {
-  const tileWidthMeters = POI_TILE_CONFIG.TILE_SIZE_METERS;
-  const gridSize = Math.max(
-    MIN_CELL_SIZE, 
-    Math.min(MAX_CELL_SIZE, tileWidthMeters / Math.sqrt(TARGET_GRID_POINTS / 4))
-  );
+  const gridSize = calculateTileGridSize();
+
+  // Build spatial indexes ONCE for all tiles (major optimization)
+  const sharedSpatialIndexes = buildSpatialIndexes(poiData, enabledFactors);
 
   const results: Record<string, { points: HeatmapPoint[]; cached: boolean }> = {};
 
-  // Process tiles (could be parallelized further if needed)
-  for (const tile of tiles) {
+  // Process tiles in parallel for better performance
+  const tilePromises = tiles.map(async (tile) => {
     const tileBounds = tileToBounds(tile.z, tile.x, tile.y);
     
     if (!isValidBounds(tileBounds)) {
       console.error(`Invalid bounds for tile ${tile.z}:${tile.x}:${tile.y}`);
-      continue;
+      return null;
     }
 
     const heatmapPoints = await calculateHeatmapParallel(
@@ -308,11 +310,11 @@ async function computeUncachedTiles(
       gridSize,
       distanceCurve,
       sensitivity,
-      normalizeToViewport
+      normalizeToViewport,
+      sharedSpatialIndexes  // Pass pre-built indexes
     );
 
     const tileKey = `${tile.z}:${tile.x}:${tile.y}`;
-    results[tileKey] = { points: heatmapPoints, cached: false };
 
     // Cache the result (fire-and-forget)
     const cacheKey = getHeatmapTileKey(tile.z, tile.x, tile.y, configHash);
@@ -329,6 +331,18 @@ async function computeUncachedTiles(
       },
       fetchedAt: new Date().toISOString(),
     }).catch(err => console.error('Failed to cache heatmap tile:', err));
+
+    return { tileKey, points: heatmapPoints };
+  });
+
+  // Wait for all tiles to complete
+  const tileResults = await Promise.all(tilePromises);
+
+  // Collect results
+  for (const result of tileResults) {
+    if (result) {
+      results[result.tileKey] = { points: result.points, cached: false };
+    }
   }
 
   return results;

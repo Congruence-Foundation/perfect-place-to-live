@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cacheGet } from '@/lib/cache';
 import { tileToBounds } from '@/lib/geo';
 import { PrecomputedTile } from '@/types';
-import { errorResponse } from '@/lib/api-utils';
+import { errorResponse, isValidTileCoord } from '@/lib/api-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const x = parseInt(searchParams.get('x') || '', 10);
     const y = parseInt(searchParams.get('y') || '', 10);
 
-    if (isNaN(z) || isNaN(x) || isNaN(y)) {
+    if (!isValidTileCoord({ z, x, y })) {
       return errorResponse(new Error('Invalid tile coordinates'), 400);
     }
 

@@ -1,3 +1,8 @@
+/**
+ * Category for grouping factors
+ */
+export type FactorCategory = 'essential' | 'lifestyle' | 'environment';
+
 export interface Factor {
   id: string;
   name: string;
@@ -6,7 +11,7 @@ export interface Factor {
   enabled: boolean;
   maxDistance: number;
   icon: string;
-  category: 'essential' | 'lifestyle' | 'environment';
+  category: FactorCategory;
   defaultWeight: number; // Store original default for reset
 }
 

@@ -10,7 +10,8 @@ import type {
 import { roomCountToNumber } from '@/lib/format';
 import { createTimer } from '@/lib/profiling';
 import { findNearestHeatmapPoint } from './score-lookup';
-import { distanceInMeters } from '@/lib/geo';
+import { distanceInMeters, createClusterId } from '@/lib/geo';
+import { DEFAULT_FALLBACK_COLOR } from '@/constants/colors';
 
 /**
  * Minimum number of properties in a group for valid statistical comparison
@@ -388,7 +389,7 @@ export const PRICE_CATEGORY_COLORS: Record<PriceCategory, string> = {
   fair: '#3b82f6',        // Blue-500
   above_avg: '#f97316',   // Orange-500
   overpriced: '#ef4444',  // Red-500
-  no_data: '#6b7280',     // Gray-500
+  no_data: DEFAULT_FALLBACK_COLOR,
 };
 
 /**
@@ -404,13 +405,6 @@ export interface ClusterPriceAnalysis {
  * Map of cluster ID to its price analysis
  */
 export type ClusterAnalysisMap = Map<string, ClusterPriceAnalysis>;
-
-/**
- * Generate a unique cluster ID from its coordinates
- */
-export function getClusterId(cluster: PropertyCluster): string {
-  return `cluster-${cluster.lat.toFixed(6)}-${cluster.lng.toFixed(6)}`;
-}
 
 /**
  * Price category order for comparison (lower = better deal)
@@ -441,7 +435,7 @@ export function analyzeClusterPrices(
   const result: ClusterAnalysisMap = new Map();
 
   for (const cluster of clusters) {
-    const clusterId = getClusterId(cluster);
+    const clusterId = createClusterId(cluster.lat, cluster.lng);
     const searchRadius = cluster.radiusInMeters || defaultRadius;
 
     // Find nearby properties with price analysis
