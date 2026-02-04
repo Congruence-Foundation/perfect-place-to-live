@@ -15,6 +15,7 @@ export { default as ExtensionsPanelList } from './ExtensionsPanelList';
 export { ExtensionsDebugPanel } from './ExtensionsDebugPanel';
 export { ExtensionsSettingsPanel } from './ExtensionsSettingsPanel';
 export { PanelToggleButton } from './PanelToggleButton';
+export { FloatingPanel } from './FloatingPanel';
 
 // Reusable filter components
 export { RangeInput, ToggleButtonGroup, FilterSelect, EstateTypeToggle } from './filters';

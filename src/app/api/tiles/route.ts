@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cacheGet } from '@/lib/cache';
 import { tileToBounds } from '@/lib/geo';
 import type { PrecomputedTile } from '@/types';
-import { errorResponse, isValidTileCoord } from '@/lib/api-utils';
+import { errorResponse, isValidTileCoord, handleApiError } from '@/lib/api-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,7 +40,6 @@ export async function GET(request: NextRequest) {
       message: 'Tile not pre-computed. Use real-time mode or generate tiles.',
     });
   } catch (error) {
-    console.error('Tiles API error:', error);
-    return errorResponse(error);
+    return handleApiError(error, { context: 'Tiles API' });
   }
 }

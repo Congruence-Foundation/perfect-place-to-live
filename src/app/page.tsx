@@ -7,10 +7,8 @@ import { WeightSliders, CitySearch, ProfileSelector, MapSettings, DebugInfo, App
 import { Button } from '@/components/ui/button';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { DEFAULT_FACTORS, applyProfile, FACTOR_PROFILES } from '@/config/factors';
-import { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource } from '@/types';
-import type { HeatmapSettings } from '@/types';
-import { useHeatmapTiles, useIsMobile, useNotification } from '@/hooks';
-import { useDebounce } from '@/hooks/useDebounce';
+import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource, HeatmapSettings } from '@/types';
+import { useHeatmapTiles, useIsMobile, useNotification, useDebounce } from '@/hooks';
 import { Loader2, ChevronLeft, ChevronRight, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
 import { Toast } from '@/components/ui/toast';
 import { useMapStore } from '@/stores/mapStore';
@@ -113,8 +111,8 @@ function HomeContent({
 
   // Track bottom sheet height for mobile loading overlay positioning
   const [bottomSheetHeight, setBottomSheetHeight] = useState(() => {
-    if (typeof window === 'undefined') return 56;
-    return window.innerHeight * 0.07;
+    if (typeof window === 'undefined') return UI_CONFIG.DEFAULT_BOTTOM_SHEET_HEIGHT;
+    return window.innerHeight * UI_CONFIG.BOTTOM_SHEET_HEIGHT_RATIO;
   });
 
   const mapRef = useRef<MapContainerRef>(null);
@@ -218,7 +216,7 @@ function HomeContent({
                        (prevBoundsRef.current.north - prevBoundsRef.current.south);
       const newArea = (newBounds.east - newBounds.west) * 
                       (newBounds.north - newBounds.south);
-      if (newArea < prevArea * 0.9) {
+      if (newArea < prevArea * UI_CONFIG.ZOOM_CHANGE_THRESHOLD) {
         hasInteracted.current = true;
       }
     }
@@ -567,7 +565,7 @@ export default function Home() {
   
   // Local state for settings
   const [distanceCurve, setDistanceCurve] = useState<DistanceCurve>('exp');
-  const [sensitivity, setSensitivity] = useState(2);
+  const [sensitivity, setSensitivity] = useState<number>(UI_CONFIG.DEFAULT_SENSITIVITY);
   const [normalizeToViewport, setNormalizeToViewport] = useState(false);
   const [useOverpassAPI, setUseOverpassAPI] = useState(false);
 

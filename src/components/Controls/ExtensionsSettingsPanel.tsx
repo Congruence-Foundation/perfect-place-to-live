@@ -1,6 +1,6 @@
 'use client';
 
-import { HeatmapSettings } from '@/types';
+import type { HeatmapSettings } from '@/types';
 import { useExtensionComponents } from '@/extensions/utils';
 
 interface ExtensionsSettingsPanelProps {

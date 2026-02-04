@@ -2,7 +2,7 @@
  * Performance-related configuration constants
  */
 
-import { POIDataSource } from '@/lib/errors';
+import type { POIDataSource } from '@/types/poi';
 
 // ============================================================================
 // Shared Constants (used across multiple configs)
@@ -113,6 +113,9 @@ export const OVERPASS_CONFIG = {
   
   /** Base delay between retries (ms) */
   BASE_DELAY_MS: 1000,
+  
+  /** Base delay for combined queries (ms) - longer due to heavier load */
+  COMBINED_BASE_DELAY_MS: 2000,
   
   /** Maximum delay between retries (ms) */
   MAX_DELAY_MS: 10000,
@@ -312,6 +315,18 @@ export const UI_CONFIG = {
   
   /** Panel animation duration (ms) */
   PANEL_ANIMATION_DURATION_MS: 350,
+  
+  /** Default bottom sheet height for SSR fallback (px) */
+  DEFAULT_BOTTOM_SHEET_HEIGHT: 56,
+  
+  /** Bottom sheet height as fraction of window height */
+  BOTTOM_SHEET_HEIGHT_RATIO: 0.07,
+  
+  /** Default sensitivity for distance curve calculations */
+  DEFAULT_SENSITIVITY: 2,
+  
+  /** Threshold for detecting zoom changes (area ratio) */
+  ZOOM_CHANGE_THRESHOLD: 0.9,
 } as const;
 
 /**
@@ -356,4 +371,34 @@ export const CANVAS_CONFIG = {
 export const COORDINATE_CONFIG = {
   /** Decimal places for coordinate deduplication (~0.1m precision) */
   DEDUP_PRECISION: 6,
+} as const;
+
+/**
+ * Weight slider thresholds for label display
+ */
+export const WEIGHT_THRESHOLDS = {
+  /** Threshold for "strong" preference/avoidance */
+  STRONG: 80,
+  /** Threshold for "moderate" preference/avoidance */
+  MODERATE: 50,
+} as const;
+
+/**
+ * Parallel processing configuration for heatmap calculations
+ */
+export const PARALLEL_CONFIG = {
+  /** Minimum points per worker to justify overhead */
+  MIN_POINTS_PER_WORKER: 3000,
+  /** Minimum total points to use parallel processing (below this, single-threaded is faster) */
+  MIN_POINTS_FOR_PARALLEL: 10000,
+  /** Maximum number of workers (capped to avoid diminishing returns) */
+  MAX_WORKERS_CAP: 8,
+} as const;
+
+/**
+ * Spatial index configuration
+ */
+export const SPATIAL_INDEX_CONFIG = {
+  /** Default cell size in degrees for spatial indexing (~1.1km at equator) */
+  DEFAULT_CELL_SIZE_DEGREES: 0.01,
 } as const;

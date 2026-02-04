@@ -5,6 +5,8 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 
 import { cn } from "@/lib/utils"
 
+// Note: z-index values (z-[9999]) should match Z_INDEX.TOOLTIP from @/constants/z-index
+
 function TooltipProvider({
   delayDuration = 0,
   ...props

@@ -17,3 +17,10 @@ export interface POI {
   tags: Record<string, string>;
   name?: string;
 }
+
+/**
+ * Data source for POI fetching
+ * - neon: PostgreSQL database (fast, pre-cached)
+ * - overpass: Overpass API (real-time, slower)
+ */
+export type POIDataSource = 'neon' | 'overpass';

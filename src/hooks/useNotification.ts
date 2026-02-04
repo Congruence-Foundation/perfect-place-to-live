@@ -27,7 +27,7 @@ export function useNotification(): UseNotificationReturn {
     setNotification(null);
   }, []);
 
-  const showNotification = useCallback((message: string, duration = UI_CONFIG.NOTIFICATION_DURATION_MS) => {
+  const showNotification = useCallback((message: string, duration: number = UI_CONFIG.NOTIFICATION_DURATION_MS) => {
     // Clear any existing notification
     if (timerRef.current) {
       clearTimeout(timerRef.current);

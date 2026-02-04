@@ -404,6 +404,15 @@
       "fair": "Fair Price",
       "aboveAvg": "Above Avg",
       "overpriced": "Overpriced"
+    },
+    "popup": {
+      "house": "House",
+      "flat": "Apartment",
+      "priceNegotiable": "Price negotiable",
+      "rooms": "rooms",
+      "loadingOffers": "Loading {count} offers...",
+      "noOffersFound": "No offers found in this area",
+      "loadError": "Failed to load offers"
     }
   }
 }

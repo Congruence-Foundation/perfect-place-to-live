@@ -4,9 +4,8 @@ import { CACHE_CONFIG } from '@/constants/performance';
 // In-memory cache for development/fallback
 const memoryCache = new Map<string, { data: unknown; expiresAt: number }>();
 
-// Lazy-initialize Redis client with initialization lock
+// Lazy-initialize Redis client
 let redis: Redis | null = null;
-let redisInitPromise: Promise<Redis | null> | null = null;
 
 /**
  * Check if Upstash Redis is available
@@ -31,39 +30,6 @@ function getRedis(): Redis | null {
   });
   
   return redis;
-}
-
-/**
- * Get Redis client asynchronously (for cases where async initialization is preferred)
- * Uses a promise lock to prevent multiple concurrent initializations
- */
-async function getRedisAsync(): Promise<Redis | null> {
-  if (!isRedisAvailable()) return null;
-  
-  // Return existing client if already initialized
-  if (redis) return redis;
-  
-  // If initialization is in progress, wait for it
-  if (redisInitPromise) {
-    return redisInitPromise;
-  }
-  
-  // Start initialization with lock
-  redisInitPromise = (async () => {
-    if (!redis) {
-      redis = new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL!,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-      });
-    }
-    return redis;
-  })();
-  
-  try {
-    return await redisInitPromise;
-  } finally {
-    redisInitPromise = null;
-  }
 }
 
 /**
@@ -107,13 +73,23 @@ export async function cacheSet<T>(key: string, value: T, ttl: number = CACHE_CON
 
     // Fallback to memory cache with size limit
     if (memoryCache.size >= CACHE_CONFIG.MEMORY_CACHE_MAX_SIZE) {
-      // Simple eviction: remove oldest entries
-      const keysToDelete = Array.from(memoryCache.keys()).slice(
-        0, 
-        Math.floor(CACHE_CONFIG.MEMORY_CACHE_MAX_SIZE * CACHE_CONFIG.EVICTION_RATIO)
-      );
-      for (const k of keysToDelete) {
-        memoryCache.delete(k);
+      // First, evict expired entries
+      const now = Date.now();
+      for (const [k, v] of memoryCache) {
+        if (v.expiresAt <= now) {
+          memoryCache.delete(k);
+        }
+      }
+      
+      // If still over limit, remove oldest entries by insertion order
+      if (memoryCache.size >= CACHE_CONFIG.MEMORY_CACHE_MAX_SIZE) {
+        const keysToDelete = Array.from(memoryCache.keys()).slice(
+          0, 
+          Math.floor(CACHE_CONFIG.MEMORY_CACHE_MAX_SIZE * CACHE_CONFIG.EVICTION_RATIO)
+        );
+        for (const k of keysToDelete) {
+          memoryCache.delete(k);
+        }
       }
     }
     

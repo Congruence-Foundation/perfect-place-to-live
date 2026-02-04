@@ -1,6 +1,6 @@
 'use client';
 
-import DataSourcesPanel from './DataSourcesPanel';
+import { DataSourcesPanel } from './DataSourcesPanel';
 import { RealEstateFiltersContent } from './RealEstateFiltersContent';
 import { useRealEstateExtension } from '../hooks';
 

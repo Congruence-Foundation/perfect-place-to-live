@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchPoisWithFallback, type POIDataSource } from '@/lib/poi';
+import { fetchPOIsWithFallback, type POIDataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
 import type { HeatmapRequest } from '@/types';
 import { estimateGridSize, calculateAdaptiveGridSize, expandBounds, isValidBounds, filterPoisToBounds } from '@/lib/geo';
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch POIs with automatic fallback from Neon to Overpass
     const factorDefs = enabledFactors.map(f => ({ id: f.id, osmTags: f.osmTags }));
-    const { poiData, actualDataSource } = await fetchPoisWithFallback(
+    const { poiData, actualDataSource } = await fetchPOIsWithFallback(
       factorDefs,
       poiBounds,
       dataSource

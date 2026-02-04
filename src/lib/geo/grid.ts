@@ -1,6 +1,7 @@
 import type { Bounds, Point } from '@/types';
 import { METERS_PER_DEGREE_LAT } from './constants';
 import { metersPerDegreeLng } from './distance';
+import { latLngToTile } from './tiles';
 import { PERFORMANCE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
@@ -116,27 +117,13 @@ export function tileToBounds(z: number, x: number, y: number): Bounds {
 }
 
 /**
- * Convert geographic coordinates to tile coordinates
- */
-function coordsToTile(lat: number, lng: number, z: number): { x: number; y: number } {
-  const numTiles = Math.pow(2, z);
-  const latRad = (lat * Math.PI) / 180;
-  const x = Math.floor(((lng + 180) / 360) * numTiles);
-  const y = Math.floor(
-    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * numTiles
-  );
-
-  return { x, y };
-}
-
-/**
  * Get all tile coordinates that cover the given bounds at a specific zoom level
  */
 export function getTilesForBounds(bounds: Bounds, z: number): { x: number; y: number; z: number }[] {
   const tiles: { x: number; y: number; z: number }[] = [];
 
-  const topLeft = coordsToTile(bounds.north, bounds.west, z);
-  const bottomRight = coordsToTile(bounds.south, bounds.east, z);
+  const topLeft = latLngToTile(bounds.north, bounds.west, z);
+  const bottomRight = latLngToTile(bounds.south, bounds.east, z);
 
   for (let x = topLeft.x; x <= bottomRight.x; x++) {
     for (let y = topLeft.y; y <= bottomRight.y; y++) {

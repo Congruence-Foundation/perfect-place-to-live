@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Factor } from '@/types';
+import type { Factor } from '@/types';
 import { POI_COLORS, FACTOR_ICON_MAP, DEFAULT_FACTOR_ICON, DEFAULT_FALLBACK_COLOR } from '@/constants';
+import { WEIGHT_THRESHOLDS } from '@/constants/performance';
 import { formatDistance } from '@/lib/utils';
 import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -25,21 +26,20 @@ interface WeightSlidersProps {
   onFactorChange: (factorId: string, updates: Partial<Factor>) => void;
 }
 
-// Max distance presets for different factor types
+// Max distance presets for different factor types (in meters)
 const MAX_DISTANCE_LIMITS: Record<string, { min: number; max: number; step: number }> = {
+  // Essential services
   grocery: { min: 200, max: 5000, step: 100 },
   transit: { min: 100, max: 3000, step: 100 },
   healthcare: { min: 500, max: 10000, step: 250 },
-  parks: { min: 200, max: 3000, step: 100 },
   schools: { min: 300, max: 5000, step: 100 },
   post: { min: 200, max: 5000, step: 100 },
-  restaurants: { min: 200, max: 3000, step: 100 },
   banks: { min: 300, max: 5000, step: 100 },
+  // Lifestyle
+  parks: { min: 200, max: 3000, step: 100 },
+  restaurants: { min: 200, max: 3000, step: 100 },
   gyms: { min: 300, max: 5000, step: 100 },
   playgrounds: { min: 100, max: 2000, step: 50 },
-  industrial: { min: 100, max: 3000, step: 100 },
-  highways: { min: 50, max: 1500, step: 50 },
-  stadiums: { min: 500, max: 5000, step: 250 },
   nightlife: { min: 200, max: 3000, step: 100 },
   universities: { min: 500, max: 5000, step: 250 },
   religious: { min: 200, max: 3000, step: 100 },
@@ -48,6 +48,10 @@ const MAX_DISTANCE_LIMITS: Record<string, { min: number; max: number; step: numb
   cinemas: { min: 500, max: 5000, step: 250 },
   markets: { min: 300, max: 5000, step: 100 },
   water: { min: 200, max: 5000, step: 100 },
+  // Environment (things to avoid)
+  industrial: { min: 100, max: 3000, step: 100 },
+  highways: { min: 50, max: 1500, step: 50 },
+  stadiums: { min: 500, max: 5000, step: 250 },
   airports: { min: 500, max: 10000, step: 500 },
   railways: { min: 100, max: 2000, step: 100 },
   cemeteries: { min: 100, max: 2000, step: 100 },
@@ -82,12 +86,12 @@ export default function WeightSliders({ factors, onFactorChange }: WeightSliders
     if (weight === 0) return { text: tWeight('neutral'), color: 'text-muted-foreground' };
     
     if (weight > 0) {
-      if (absWeight >= 80) return { text: tWeight('strongPrefer'), color: 'text-green-600' };
-      if (absWeight >= 50) return { text: tWeight('prefer'), color: 'text-green-500' };
+      if (absWeight >= WEIGHT_THRESHOLDS.STRONG) return { text: tWeight('strongPrefer'), color: 'text-green-600' };
+      if (absWeight >= WEIGHT_THRESHOLDS.MODERATE) return { text: tWeight('prefer'), color: 'text-green-500' };
       return { text: tWeight('slightPrefer'), color: 'text-green-400' };
     } else {
-      if (absWeight >= 80) return { text: tWeight('strongAvoid'), color: 'text-red-600' };
-      if (absWeight >= 50) return { text: tWeight('avoid'), color: 'text-red-500' };
+      if (absWeight >= WEIGHT_THRESHOLDS.STRONG) return { text: tWeight('strongAvoid'), color: 'text-red-600' };
+      if (absWeight >= WEIGHT_THRESHOLDS.MODERATE) return { text: tWeight('avoid'), color: 'text-red-500' };
       return { text: tWeight('slightAvoid'), color: 'text-red-400' };
     }
   };

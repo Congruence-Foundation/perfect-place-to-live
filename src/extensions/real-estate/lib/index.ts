@@ -7,16 +7,15 @@ export {
   enrichPropertiesSimplified,
   filterPropertiesByPriceValue,
   analyzeClusterPrices,
+  getPricePerMeter,
 } from './price-analysis';
 export type { ClusterPriceAnalysis, ClusterAnalysisMap } from './price-analysis';
-
-// Price colors (re-export from config for backward compatibility)
-export { PRICE_CATEGORY_COLORS } from '../config/price-colors';
 
 // Property markers
 export {
   generatePropertyMarkerHtml,
   getPropertyMarkerClassName,
+  PROPERTY_MARKER_COLORS,
 } from './property-markers';
 
 // Score lookup

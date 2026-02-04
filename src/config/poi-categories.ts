@@ -474,7 +474,7 @@ export function generateOsmiumFilters(): string {
     '',
   ];
 
-  const groups = {
+  const groups: Record<FactorCategory, string> = {
     essential: '# === ESSENTIAL FACTORS ===',
     lifestyle: '# === LIFESTYLE FACTORS ===',
     environment: '# === ENVIRONMENT FACTORS ===',

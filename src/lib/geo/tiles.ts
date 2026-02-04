@@ -27,6 +27,23 @@ export function getTileKeyString(tile: TileCoord): string {
 }
 
 /**
+ * Convert latitude/longitude to tile coordinates at a given zoom level
+ * Uses Web Mercator projection (EPSG:3857)
+ * 
+ * @param lat - Latitude in degrees
+ * @param lng - Longitude in degrees
+ * @param zoom - Zoom level
+ * @returns Tile coordinates
+ */
+export function latLngToTile(lat: number, lng: number, zoom: number): TileCoord {
+  const n = Math.pow(2, zoom);
+  const x = Math.floor((lng + 180) / 360 * n);
+  const latRad = lat * Math.PI / 180;
+  const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+  return { z: zoom, x, y };
+}
+
+/**
  * Fixed zoom level for property tiles
  * Using zoom 13 provides ~2.4km x 2.4km tiles at Poland's latitude
  */

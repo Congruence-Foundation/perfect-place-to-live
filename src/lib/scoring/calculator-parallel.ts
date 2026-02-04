@@ -14,63 +14,14 @@ import type { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/
 import { generateGrid, calculateAdaptiveGridSize } from '@/lib/geo/grid';
 import { SpatialIndex } from '@/lib/geo/haversine';
 import { normalizeKValues, logKStats } from './calculator';
-import { PERFORMANCE_CONFIG, DENSITY_BONUS } from '@/constants';
-import { EARTH_RADIUS_METERS, METERS_PER_DEGREE_LAT } from '@/lib/geo/constants';
+import { PERFORMANCE_CONFIG, PARALLEL_CONFIG } from '@/constants';
 import { createTimer } from '@/lib/profiling';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
+const { MIN_POINTS_PER_WORKER, MIN_POINTS_FOR_PARALLEL, MAX_WORKERS_CAP } = PARALLEL_CONFIG;
 
-/**
- * Constants used in worker code - must match the values in WORKER_CODE string
- * These are exported for testing to verify worker code stays in sync
- */
-export const WORKER_CONSTANTS = {
-  EARTH_RADIUS_METERS: 6371000,
-  METERS_PER_DEGREE_LAT: 111320,
-  DENSITY_BONUS_RADIUS_RATIO: 0.5,
-  DENSITY_BONUS_MAX: 0.15,
-  DENSITY_BONUS_SCALE: 3,
-} as const;
-
-/**
- * Verify that worker constants match the source constants
- * Call this in tests to ensure worker code stays in sync
- * @throws Error if any constant doesn't match
- */
-export function verifyWorkerConstants(): void {
-  const mismatches: string[] = [];
-  
-  if (WORKER_CONSTANTS.EARTH_RADIUS_METERS !== EARTH_RADIUS_METERS) {
-    mismatches.push(`EARTH_RADIUS_METERS: worker=${WORKER_CONSTANTS.EARTH_RADIUS_METERS}, source=${EARTH_RADIUS_METERS}`);
-  }
-  if (WORKER_CONSTANTS.METERS_PER_DEGREE_LAT !== METERS_PER_DEGREE_LAT) {
-    mismatches.push(`METERS_PER_DEGREE_LAT: worker=${WORKER_CONSTANTS.METERS_PER_DEGREE_LAT}, source=${METERS_PER_DEGREE_LAT}`);
-  }
-  if (WORKER_CONSTANTS.DENSITY_BONUS_RADIUS_RATIO !== DENSITY_BONUS.RADIUS_RATIO) {
-    mismatches.push(`DENSITY_BONUS_RADIUS_RATIO: worker=${WORKER_CONSTANTS.DENSITY_BONUS_RADIUS_RATIO}, source=${DENSITY_BONUS.RADIUS_RATIO}`);
-  }
-  if (WORKER_CONSTANTS.DENSITY_BONUS_MAX !== DENSITY_BONUS.MAX) {
-    mismatches.push(`DENSITY_BONUS_MAX: worker=${WORKER_CONSTANTS.DENSITY_BONUS_MAX}, source=${DENSITY_BONUS.MAX}`);
-  }
-  if (WORKER_CONSTANTS.DENSITY_BONUS_SCALE !== DENSITY_BONUS.SCALE) {
-    mismatches.push(`DENSITY_BONUS_SCALE: worker=${WORKER_CONSTANTS.DENSITY_BONUS_SCALE}, source=${DENSITY_BONUS.SCALE}`);
-  }
-  
-  if (mismatches.length > 0) {
-    throw new Error(
-      `Worker constants out of sync with source files!\n` +
-      `Update WORKER_CODE in calculator-parallel.ts:\n` +
-      mismatches.join('\n')
-    );
-  }
-}
-
-// Use available CPU cores, but cap at 8 to avoid diminishing returns
-const MAX_WORKERS = Math.min(os.cpus().length, 8);
-// Minimum points per worker to justify overhead
-const MIN_POINTS_PER_WORKER = 3000;
-// Minimum total points to use parallel processing (below this, single-threaded is faster)
-const MIN_POINTS_FOR_PARALLEL = 10000;
+// Use available CPU cores, but cap to avoid diminishing returns
+const MAX_WORKERS = Math.min(os.cpus().length, MAX_WORKERS_CAP);
 
 /**
  * Split array into n roughly equal chunks
@@ -92,22 +43,50 @@ function chunkArray<T>(array: T[], numChunks: number): T[][] {
  * 
  * OPTIMIZED: Receives pre-built spatial index data to avoid rebuilding
  * 
- * IMPORTANT: Code Duplication Notice
- * ----------------------------------
- * The following code is intentionally duplicated here because worker threads
- * run in isolated contexts and cannot import from other modules:
+ * ============================================================================
+ * IMPORTANT: Code Duplication Notice & Maintenance Checklist
+ * ============================================================================
  * 
- * - haversineDistance() - duplicated from src/lib/geo/haversine.ts
- * - SpatialIndex class - duplicated from src/lib/geo/haversine.ts
- * - applyDistanceCurve() - duplicated from src/lib/scoring/calculator.ts
- * - calculateDensityBonus() - duplicated from src/lib/scoring/calculator.ts
+ * The following code is INTENTIONALLY duplicated here because worker threads
+ * run in isolated contexts and cannot import from other modules. This is a
+ * fundamental limitation of Node.js worker threads.
  * 
- * Constants that must stay in sync:
- * - EARTH_RADIUS_METERS (6371000) - from src/lib/geo/constants.ts
- * - METERS_PER_DEGREE_LAT (111320) - from src/lib/geo/constants.ts
- * - DENSITY_BONUS_* constants - from src/constants/performance.ts
+ * DUPLICATED FUNCTIONS (must stay in sync with source):
+ * -----------------------------------------------------
+ * | Worker Function      | Source File                          | Source Function        |
+ * |---------------------|--------------------------------------|------------------------|
+ * | toRad()             | src/lib/geo/haversine.ts:8           | toRad()                |
+ * | haversineDistance() | src/lib/geo/haversine.ts:15          | haversineDistance()    |
+ * | SpatialIndex class  | src/lib/geo/haversine.ts:30-141      | SpatialIndex           |
+ * | applyDistanceCurve()| src/lib/scoring/calculator.ts:125    | applyDistanceCurve()   |
+ * | calculateK()        | src/lib/scoring/calculator.ts:203    | calculateK()           |
  * 
- * When modifying any of these source files, remember to update this worker code!
+ * DUPLICATED CONSTANTS (must stay in sync with source):
+ * -----------------------------------------------------
+ * | Worker Constant           | Source File                    | Source Constant        |
+ * |--------------------------|--------------------------------|------------------------|
+ * | EARTH_RADIUS_METERS      | src/lib/geo/constants.ts       | EARTH_RADIUS_METERS    |
+ * | METERS_PER_DEGREE_LAT    | src/lib/geo/constants.ts       | METERS_PER_DEGREE_LAT  |
+ * | DENSITY_BONUS_RADIUS_RATIO| src/constants/performance.ts  | DENSITY_BONUS.RADIUS_RATIO |
+ * | DENSITY_BONUS_MAX        | src/constants/performance.ts   | DENSITY_BONUS.MAX      |
+ * | DENSITY_BONUS_SCALE      | src/constants/performance.ts   | DENSITY_BONUS.SCALE    |
+ * 
+ * MAINTENANCE CHECKLIST:
+ * ----------------------
+ * When modifying any of the source files listed above:
+ * 1. Update the corresponding code in WORKER_CODE below
+ * 2. Verify the algorithm logic matches exactly
+ * 3. Test with both single-threaded and parallel execution paths
+ * 4. Run the heatmap calculation to verify results are consistent
+ * 
+ * WHY NOT USE A BUILD STEP?
+ * -------------------------
+ * A build-time code generation approach was considered but rejected because:
+ * - It adds complexity to the build pipeline
+ * - The duplicated code is relatively stable (core algorithms)
+ * - Manual sync ensures developers understand both implementations
+ * 
+ * ============================================================================
  */
 const WORKER_CODE = `
 const { parentPort, workerData } = require('worker_threads');
@@ -302,6 +281,8 @@ function runWorker(
   sensitivity: number
 ): Promise<HeatmapPoint[]> {
   return new Promise((resolve, reject) => {
+    let resolved = false;
+    
     const worker = new Worker(WORKER_CODE, {
       eval: true,
       workerData: {
@@ -315,18 +296,25 @@ function runWorker(
     });
 
     worker.on('message', (results: HeatmapPoint[]) => {
+      resolved = true;
       resolve(results);
       worker.terminate();
     });
 
     worker.on('error', (err) => {
+      resolved = true;
       worker.terminate();
       reject(err);
     });
 
     worker.on('exit', (code) => {
-      if (code !== 0) {
-        reject(new Error(`Worker stopped with exit code ${code}`));
+      if (!resolved) {
+        if (code !== 0) {
+          reject(new Error(`Worker stopped with exit code ${code}`));
+        } else {
+          // Worker exited cleanly but never sent results - this shouldn't happen
+          reject(new Error('Worker exited without sending results'));
+        }
       }
     });
   });

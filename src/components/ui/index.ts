@@ -3,7 +3,7 @@
  * Re-exports all UI components for convenient imports
  */
 
-export { Button, buttonVariants } from './button';
+export { Button } from './button';
 export { Checkbox } from './checkbox';
 export { InfoTooltip } from './info-tooltip';
 export { Input } from './input';

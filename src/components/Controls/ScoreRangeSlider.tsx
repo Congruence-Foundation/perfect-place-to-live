@@ -2,6 +2,7 @@
 
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import { cn } from '@/lib/utils';
+import { SCORE_GRADIENT } from '@/constants/colors';
 
 interface ScoreRangeSliderProps {
   value: [number, number];
@@ -49,7 +50,7 @@ export default function ScoreRangeSlider({
         <div 
           className="absolute inset-0 rounded-full"
           style={{
-            background: 'linear-gradient(to right, #ef4444 0%, #f59e0b 50%, #22c55e 100%)',
+            background: `linear-gradient(to right, ${SCORE_GRADIENT.POOR} 0%, ${SCORE_GRADIENT.AVERAGE} 50%, ${SCORE_GRADIENT.EXCELLENT} 100%)`,
           }}
         />
         {/* Semi-transparent overlay for unselected areas */}

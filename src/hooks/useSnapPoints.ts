@@ -65,7 +65,7 @@ export function useSnapPoints(config: SnapPointConfig = DEFAULT_SNAP_CONFIG) {
   });
   const [isMounted, setIsMounted] = useState(false);
 
-  // Memoize snap heights to avoid recalculating on every callback call
+  /** Snap heights in pixels (memoized) */
   const snapHeights = useMemo(() => calculateSnapHeights(config), [config]);
 
   // Track mount state for SSR safety
@@ -74,25 +74,14 @@ export function useSnapPoints(config: SnapPointConfig = DEFAULT_SNAP_CONFIG) {
     setHeight(snapHeights.collapsed);
   }, [snapHeights.collapsed]);
 
-  /**
-   * Get snap heights in pixels
-   */
-  const getSnapHeights = useCallback((): SnapHeights => {
-    return snapHeights;
-  }, [snapHeights]);
-
-  /**
-   * Get current snap point name based on height
-   */
+  /** Get current snap point name based on height */
   const getCurrentSnapPoint = useCallback((): SnapPointName => {
     if (height < (snapHeights.collapsed + snapHeights.half) / 2) return 'collapsed';
     if (height < (snapHeights.half + snapHeights.expanded) / 2) return 'half';
     return 'expanded';
   }, [height, snapHeights]);
 
-  /**
-   * Snap to the nearest snap point
-   */
+  /** Snap to the nearest snap point */
   const snapToNearest = useCallback((currentHeight: number): SnapPointName => {
     const collapsedDist = Math.abs(currentHeight - snapHeights.collapsed);
     const halfDist = Math.abs(currentHeight - snapHeights.half);
@@ -112,9 +101,7 @@ export function useSnapPoints(config: SnapPointConfig = DEFAULT_SNAP_CONFIG) {
     }
   }, [snapHeights]);
 
-  /**
-   * Clamp height between collapsed and expanded
-   */
+  /** Clamp height between collapsed and expanded */
   const clampHeight = useCallback((newHeight: number): number => {
     return Math.max(snapHeights.collapsed, Math.min(newHeight, snapHeights.expanded));
   }, [snapHeights]);
@@ -123,7 +110,7 @@ export function useSnapPoints(config: SnapPointConfig = DEFAULT_SNAP_CONFIG) {
     height,
     setHeight,
     isMounted,
-    getSnapHeights,
+    snapHeights,
     getCurrentSnapPoint,
     snapToNearest,
     clampHeight,

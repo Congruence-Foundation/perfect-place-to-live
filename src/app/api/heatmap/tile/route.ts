@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
-import { fetchPoisWithFallback, type POIDataSource } from '@/lib/poi';
+import { fetchPOIsWithFallback, type POIDataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
 import type { Factor } from '@/types';
 import { tileToBounds, expandBounds, isValidBounds, filterPoisToBounds, calculateTileGridSize } from '@/lib/geo';
 import { getHeatmapTileKey, hashHeatmapConfig } from '@/lib/geo/tiles';
 import { getCachedHeatmapTile, setCachedHeatmapTile } from '@/lib/heatmap-tile-cache';
-import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors, isValidTileCoord } from '@/lib/api-utils';
+import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors, isValidTileCoord, handleApiError } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch POIs with automatic fallback from Neon to Overpass
     const factorDefs = enabledFactors.map(f => ({ id: f.id, osmTags: f.osmTags }));
-    const { poiData, actualDataSource } = await fetchPoisWithFallback(
+    const { poiData, actualDataSource } = await fetchPOIsWithFallback(
       factorDefs,
       poiBounds,
       dataSource
@@ -157,7 +157,6 @@ export async function POST(request: NextRequest) {
 
     return createResponse(responseData, useMsgpack);
   } catch (error) {
-    console.error('Heatmap tile API error:', error);
-    return errorResponse(error);
+    return handleApiError(error, { context: 'Heatmap tile API' });
   }
 }

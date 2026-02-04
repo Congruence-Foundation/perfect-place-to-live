@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { GripHorizontal, ChevronDown, ChevronUp, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
-import { Factor } from '@/types';
+import type { Factor } from '@/types';
 import { FACTOR_PROFILES } from '@/config/factors';
 import { useSnapPoints } from '@/hooks';
 import ProfileSelector from './ProfileSelector';
@@ -13,12 +13,15 @@ import WeightSliders from './WeightSliders';
 import ExtensionsBottomSheet from './ExtensionsBottomSheet';
 import { Z_INDEX } from '@/constants/z-index';
 
-// Snap points configuration
+// Snap points configuration (percentage of viewport height)
 const SNAP_CONFIG = {
   collapsedPercent: 7,
   halfPercent: 50,
   expandedPercent: 85,
 };
+
+// Maximum height as percentage of viewport
+const MAX_HEIGHT_PERCENT = 85;
 
 interface BottomSheetProps {
   factors: Factor[];
@@ -47,7 +50,7 @@ export default function BottomSheet({
     height: sheetHeight,
     setHeight: setSheetHeight,
     isMounted,
-    getSnapHeights,
+    snapHeights,
     getCurrentSnapPoint,
     snapToNearest,
     clampHeight,
@@ -112,10 +115,6 @@ export default function BottomSheet({
     handleDragMove(e.touches[0].clientY);
   }, [handleDragMove]);
 
-  const handleTouchEnd = useCallback(() => {
-    handleDragEnd();
-  }, [handleDragEnd]);
-
   // Mouse event handlers (for testing on desktop)
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -145,15 +144,14 @@ export default function BottomSheet({
   // Toggle between collapsed and expanded (85%)
   const handleToggle = useCallback(() => {
     const current = getCurrentSnapPoint();
-    const snaps = getSnapHeights();
     
     if (current === 'collapsed') {
-      setSheetHeight(snaps.expanded);
+      setSheetHeight(snapHeights.expanded);
     } else {
-      setSheetHeight(snaps.collapsed);
+      setSheetHeight(snapHeights.collapsed);
       setIsFactorsExpanded(false);
     }
-  }, [getCurrentSnapPoint, getSnapHeights, setSheetHeight]);
+  }, [getCurrentSnapPoint, snapHeights, setSheetHeight]);
 
   // Don't render until mounted to avoid SSR hydration issues
   if (!isMounted) {
@@ -190,7 +188,7 @@ export default function BottomSheet({
         }`}
         style={{ 
           height: actualHeight,
-          maxHeight: '85vh',
+          maxHeight: `${MAX_HEIGHT_PERCENT}vh`,
           zIndex: Z_INDEX.BOTTOM_SHEET,
         }}
       >
@@ -199,14 +197,14 @@ export default function BottomSheet({
         className="flex flex-col items-center pt-2 pb-1 cursor-grab active:cursor-grabbing touch-none"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onTouchEnd={handleDragEnd}
         onMouseDown={handleMouseDown}
         onClick={handleToggle}
         role="slider"
         aria-label="Drag to resize panel"
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={Math.round((sheetHeight / (typeof window !== 'undefined' ? window.innerHeight : 800)) * 100)}
+        aria-valuenow={Math.round((sheetHeight / window.innerHeight) * 100)}
         tabIndex={0}
       >
         <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />

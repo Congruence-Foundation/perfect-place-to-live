@@ -18,7 +18,7 @@
  *    - Configurable radius for price analysis
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Bounds } from '@/types';
 import type { OtodomProperty, PropertyCluster, PropertyFilters } from '../types';
@@ -31,6 +31,35 @@ import {
 import { getTilesForBounds, createCoordinateKey } from '@/lib/geo';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
+import { delay } from '@/lib/utils';
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Create a new AbortController and cancel any existing one.
+ * Returns the new controller and incremented fetch ID.
+ */
+function createAbortController(
+  abortControllerRef: React.MutableRefObject<AbortController | null>,
+  fetchIdRef: React.MutableRefObject<number>
+): { controller: AbortController; fetchId: number } {
+  // Cancel any pending fetch
+  if (abortControllerRef.current) {
+    abortControllerRef.current.abort();
+  }
+
+  const controller = new AbortController();
+  abortControllerRef.current = controller;
+  const fetchId = ++fetchIdRef.current;
+
+  return { controller, fetchId };
+}
+
+// =============================================================================
+// API Types
+// =============================================================================
 
 /**
  * Response from the tile API
@@ -138,12 +167,9 @@ async function fetchViewportProperties(
   return data;
 }
 
-/**
- * Delay helper for batched fetching
- */
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+// =============================================================================
+// Hook Implementation
+// =============================================================================
 
 /**
  * Hook for fetching property tiles with batching and caching
@@ -223,14 +249,7 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
       return;
     }
 
-    // Cancel any pending fetch
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    const currentFetchId = ++fetchIdRef.current;
+    const { controller, fetchId: currentFetchId } = createAbortController(abortControllerRef, fetchIdRef);
 
     const fetchViewport = async () => {
       setLoadingState('loading');
@@ -279,14 +298,7 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
       return;
     }
 
-    // Cancel any pending fetch
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    const currentFetchId = ++fetchIdRef.current;
+    const { controller, fetchId: currentFetchId } = createAbortController(abortControllerRef, fetchIdRef);
 
     const fetchTilesInBatches = async () => {
       setLoadingState('loading');

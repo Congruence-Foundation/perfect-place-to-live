@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { RealEstateSidebar } from '@/components/Controls';
-import PriceValueFilter from './filters/PriceValueFilter';
+import { PriceValueFilter } from './filters/PriceValueFilter';
 import { TransactionTypeButtons } from './TransactionTypeButtons';
 import { ScoreRangeSection } from './ScoreRangeSection';
 import { useRealEstateExtension } from '../hooks';

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { useTranslations } from 'next-intl';
 import { useMapStore } from '@/stores/mapStore';
 import { useRealEstateStore } from './store';
 import { useRealEstateMarkers } from './hooks/useRealEstateMarkers';
@@ -30,6 +31,9 @@ import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
  * This keeps the extension fully self-contained and decoupled from the core.
  */
 export function RealEstateController() {
+  // Get translations
+  const t = useTranslations('realEstate.popup');
+  
   // Get map state
   const { bounds, zoom, heatmapPoints, gridCellSize, clusterPriceDisplay, clusterPriceAnalysis, detailedModeThreshold, map, leaflet, layerGroup, isMapReady, setExtensionDebugTiles } = useMapStore(
     useShallow((s) => ({
@@ -243,6 +247,11 @@ export function RealEstateController() {
   // EFFECT: Render markers on the map
   // ============================================
   // Only render markers when map is ready
+  const markerTranslations = useMemo(() => ({
+    noOffersFound: t('noOffersFound'),
+    loadError: t('loadError'),
+  }), [t]);
+
   useRealEstateMarkers({
     L: isMapReady ? leaflet : null,
     map: isMapReady ? map : null,
@@ -258,6 +267,7 @@ export function RealEstateController() {
     gridCellSize,
     clusterPropertiesCache,
     onClusterPropertiesFetched: cacheClusterProperties,
+    translations: markerTranslations,
   });
 
   // No UI - this is a controller component

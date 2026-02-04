@@ -404,6 +404,15 @@
       "fair": "Uczciwa cena",
       "aboveAvg": "Powyżej średniej",
       "overpriced": "Zawyżona"
+    },
+    "popup": {
+      "house": "Dom",
+      "flat": "Mieszkanie",
+      "priceNegotiable": "Cena do negocjacji",
+      "rooms": "pok.",
+      "loadingOffers": "Ładowanie {count} ofert...",
+      "noOffersFound": "Nie znaleziono ofert w tym obszarze",
+      "loadError": "Błąd ładowania ofert"
     }
   }
 }

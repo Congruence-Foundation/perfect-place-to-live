@@ -5,12 +5,17 @@ import { DEFAULT_FACTORS } from '@/config/factors';
 import type { Bounds, POI } from '@/types';
 import { isValidBounds } from '@/lib/geo';
 import { PERFORMANCE_CONFIG } from '@/constants/performance';
-import { errorResponse } from '@/lib/api-utils';
+import { errorResponse, handleApiError } from '@/lib/api-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const { POI_CACHE_TTL_SECONDS } = PERFORMANCE_CONFIG;
+
+/** Error mappings for POI API */
+const POI_ERROR_MAPPINGS = [
+  { pattern: 'No valid factors found', status: 400 },
+];
 
 interface POIRequestBody {
   bounds: Bounds;
@@ -23,15 +28,6 @@ interface POIResponse {
     factorCount: number;
     totalPOIs: number;
   };
-}
-
-/**
- * Handle POI API errors with appropriate status codes
- */
-function handlePoiError(error: unknown): NextResponse {
-  console.error('POI API error:', error);
-  const status = error instanceof Error && error.message === 'No valid factors found' ? 400 : 500;
-  return errorResponse(error, status);
 }
 
 /**
@@ -107,7 +103,10 @@ export async function POST(request: NextRequest) {
     const result = await fetchPOIsWithCache(bounds, factorIds);
     return NextResponse.json(result);
   } catch (error) {
-    return handlePoiError(error);
+    return handleApiError(error, { 
+      context: 'POI API', 
+      errorMappings: POI_ERROR_MAPPINGS 
+    });
   }
 }
 
@@ -133,6 +132,9 @@ export async function GET(request: NextRequest) {
     const result = await fetchPOIsWithCache(bounds, factorIds);
     return NextResponse.json(result);
   } catch (error) {
-    return handlePoiError(error);
+    return handleApiError(error, { 
+      context: 'POI API', 
+      errorMappings: POI_ERROR_MAPPINGS 
+    });
   }
 }

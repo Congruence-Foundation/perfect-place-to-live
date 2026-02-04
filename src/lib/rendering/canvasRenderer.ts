@@ -5,9 +5,9 @@
  * instead of individual DOM elements.
  */
 
-import { HeatmapPoint, Bounds } from '@/types';
+import type { HeatmapPoint, Bounds } from '@/types';
 import { getColorForK } from '@/constants';
-import { METERS_PER_DEGREE_LAT } from '@/lib/geo';
+import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '@/lib/geo';
 import { CANVAS_CONFIG } from '@/constants/performance';
 
 interface CanvasRenderOptions {
@@ -60,10 +60,10 @@ export function renderHeatmapToCanvas(
     // Use fixed cell size based on meters - consistent regardless of point count
     // Calculate center latitude for longitude scaling
     const centerLat = (bounds.north + bounds.south) / 2;
-    const metersPerDegreeLng = METERS_PER_DEGREE_LAT * Math.cos(centerLat * Math.PI / 180);
+    const metersPerLng = metersPerDegreeLng(centerLat);
     
     cellHeightDeg = cellSizeMeters / METERS_PER_DEGREE_LAT;
-    cellWidthDeg = cellSizeMeters / metersPerDegreeLng;
+    cellWidthDeg = cellSizeMeters / metersPerLng;
   } else {
     // Fallback: Estimate grid dimensions from point count (legacy behavior)
     const estimatedGridDim = Math.sqrt(points.length);

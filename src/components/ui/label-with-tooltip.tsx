@@ -17,6 +17,11 @@ export interface LabelWithTooltipProps {
   htmlFor?: string;
 }
 
+const SIZE_CLASSES = {
+  xs: 'text-xs',
+  sm: 'text-sm',
+} as const;
+
 /**
  * A label component with an optional info tooltip
  * Commonly used in settings panels and filter controls
@@ -28,11 +33,9 @@ export function LabelWithTooltip({
   size = 'xs',
   htmlFor,
 }: LabelWithTooltipProps) {
-  const sizeClasses = size === 'xs' ? 'text-xs' : 'text-sm';
-  
   return (
     <div className={cn('flex items-center gap-1', className)}>
-      <Label className={sizeClasses} htmlFor={htmlFor}>
+      <Label className={SIZE_CLASSES[size]} htmlFor={htmlFor}>
         {label}
       </Label>
       {tooltip && (

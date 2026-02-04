@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
-import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
-import { POI_COLORS, Z_INDEX, DEBUG_COLORS, DEFAULT_FALLBACK_COLOR } from '@/constants';
+import type { HeatmapPoint, POI, Factor, Bounds } from '@/types';
+import { POI_COLORS, Z_INDEX, DEFAULT_FALLBACK_COLOR } from '@/constants';
 import { calculateFactorBreakdown } from '@/lib/scoring';
 import { renderHeatmapToCanvas } from '@/lib/rendering/canvasRenderer';
 import { useMapStore } from '@/stores/mapStore';
 import { tileToBounds, METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '@/lib/geo';
+import { useLatestRef } from '@/hooks';
 import {
   generatePopupContent,
   defaultPopupTranslations,
@@ -14,6 +15,7 @@ import {
   type FactorTranslations,
 } from './utils/popupContent';
 import { setupTouchLongPress, setupMouseLongPress } from './hooks/useLongPress';
+import { useTileBorders } from './hooks/useTileBorders';
 import {
   MAP_INIT_DELAY_MS,
   CANVAS_PIXELS_PER_CELL,
@@ -87,46 +89,40 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   const canvasOverlayRef = useRef<L.ImageOverlay | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
-  const tileBorderLayerRef = useRef<L.LayerGroup | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const initializingRef = useRef(false);
   
   // Cleanup function for long press handlers
   const longPressCleanupRef = useRef<(() => void) | null>(null);
   
-  // Read debug tile state from store
-  const showHeatmapTileBorders = useMapStore((s) => s.showHeatmapTileBorders);
-  const showPropertyTileBorders = useMapStore((s) => s.showPropertyTileBorders);
+  // Read debug tile setters from store for reset on mount
   const setShowHeatmapTileBorders = useMapStore((s) => s.setShowHeatmapTileBorders);
   const setShowPropertyTileBorders = useMapStore((s) => s.setShowPropertyTileBorders);
-  const heatmapTiles = useMapStore((s) => s.heatmapDebugTiles);
-  const propertyTiles = useMapStore((s) => s.extensionDebugTiles);
   
   // Reset debug toggles on mount to avoid stale state from devtools
   useEffect(() => {
     setShowHeatmapTileBorders(false);
     setShowPropertyTileBorders(false);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // Only run on mount - setters are stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  
+  // Use tile borders hook for debug visualization
+  useTileBorders(mapReady, mapInstanceRef.current);
   
   // Track previous heatmap data to avoid unnecessary re-renders
   const prevHeatmapHashRef = useRef<string>('');
   
-  const poisRef = useRef(pois);
-  const factorsRef = useRef(factors);
-  const popupTranslationsRef = useRef(popupTranslations);
-  const factorTranslationsRef = useRef(factorTranslations);
-  const onBoundsChangeRef = useRef(onBoundsChange);
-  const onMapReadyRef = useRef(onMapReady);
+  // Use useLatestRef for values accessed in callbacks
+  const poisRef = useLatestRef(pois);
+  const factorsRef = useLatestRef(factors);
+  const popupTranslationsRef = useLatestRef(popupTranslations);
+  const factorTranslationsRef = useLatestRef(factorTranslations);
+  const onBoundsChangeRef = useLatestRef(onBoundsChange);
+  const onMapReadyRef = useLatestRef(onMapReady);
   // Store initial center/zoom in refs to avoid re-initialization
   const initialCenterRef = useRef(center);
   const initialZoomRef = useRef(zoom);
-  
-  useEffect(() => { poisRef.current = pois; }, [pois]);
-  useEffect(() => { factorsRef.current = factors; }, [factors]);
-  useEffect(() => { popupTranslationsRef.current = popupTranslations; }, [popupTranslations]);
-  useEffect(() => { factorTranslationsRef.current = factorTranslations; }, [factorTranslations]);
-  useEffect(() => { onBoundsChangeRef.current = onBoundsChange; }, [onBoundsChange]);
-  useEffect(() => { onMapReadyRef.current = onMapReady; }, [onMapReady]);
 
   const handleMapClick = useCallback(async (e: L.LeafletMouseEvent) => {
     const L = (await import('leaflet')).default;
@@ -526,117 +522,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
 
     updatePOIs();
   }, [mapReady, pois, showPOIs, factors]);
-
-  // Render tile borders for debugging
-  useEffect(() => {
-    if (!mapReady || !mapInstanceRef.current) return;
-    
-    // If neither border type is enabled, clear and return
-    if (!showHeatmapTileBorders && !showPropertyTileBorders) {
-      if (tileBorderLayerRef.current) {
-        tileBorderLayerRef.current.clearLayers();
-      }
-      return;
-    }
-
-    const renderTileBorders = async () => {
-      try {
-        const L = (await import('leaflet')).default;
-        const map = mapInstanceRef.current;
-        if (!map) return;
-
-        // Create or clear tile border layer
-        if (!tileBorderLayerRef.current) {
-          // Create a pane for tile borders above the heatmap
-          let tileBorderPane = map.getPane('tileBorderPane');
-          if (!tileBorderPane) {
-            map.createPane('tileBorderPane');
-            tileBorderPane = map.getPane('tileBorderPane');
-            if (tileBorderPane) {
-              tileBorderPane.style.zIndex = String(Z_INDEX.MAP_TILE_BORDER_PANE);
-              tileBorderPane.style.pointerEvents = 'none';
-            }
-          }
-          tileBorderLayerRef.current = L.layerGroup([], { pane: 'tileBorderPane' }).addTo(map);
-        }
-        tileBorderLayerRef.current.clearLayers();
-
-        // Render heatmap tile borders (blue)
-        if (showHeatmapTileBorders) {
-          if (heatmapTiles.length > 0) {
-            for (const tile of heatmapTiles) {
-              const bounds = tileToBounds(tile.z, tile.x, tile.y);
-              const rect = L.rectangle(
-                [[bounds.south, bounds.west], [bounds.north, bounds.east]],
-                {
-                  color: DEBUG_COLORS.HEATMAP_TILE_BORDER,
-                  weight: 2,
-                  fill: false,
-                  dashArray: '5, 5',
-                  interactive: false,
-                  pane: 'tileBorderPane',
-                }
-              );
-              rect.addTo(tileBorderLayerRef.current!);
-              
-              // Add tile label at center
-              const center = [(bounds.north + bounds.south) / 2, (bounds.east + bounds.west) / 2] as [number, number];
-              const label = L.marker(center, {
-                icon: L.divIcon({
-                  className: '',
-                  html: `<div style="background: rgb(59, 130, 246); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-family: monospace; white-space: nowrap; transform: translate(-50%, -100%);">H ${tile.z}/${tile.x}/${tile.y}</div>`,
-                  iconSize: [0, 0],
-                  iconAnchor: [0, 0],
-                }),
-                interactive: false,
-                pane: 'tileBorderPane',
-              });
-              label.addTo(tileBorderLayerRef.current!);
-            }
-          }
-        }
-
-        // Render property tile borders (orange)
-        if (showPropertyTileBorders) {
-          if (propertyTiles.length > 0) {
-            for (const tile of propertyTiles) {
-              const bounds = tileToBounds(tile.z, tile.x, tile.y);
-              const rect = L.rectangle(
-                [[bounds.south, bounds.west], [bounds.north, bounds.east]],
-                {
-                  color: DEBUG_COLORS.PROPERTY_TILE_BORDER,
-                  weight: 2,
-                  fill: false,
-                  dashArray: '3, 3',
-                  interactive: false,
-                  pane: 'tileBorderPane',
-                }
-              );
-              rect.addTo(tileBorderLayerRef.current!);
-              
-              // Add tile label (offset below heatmap label)
-              const center = [(bounds.north + bounds.south) / 2, (bounds.east + bounds.west) / 2] as [number, number];
-              const label = L.marker(center, {
-                icon: L.divIcon({
-                  className: '',
-                  html: `<div style="background: rgb(249, 115, 22); color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-family: monospace; white-space: nowrap; transform: translate(-50%, 5px);">P ${tile.z}/${tile.x}/${tile.y}</div>`,
-                  iconSize: [0, 0],
-                  iconAnchor: [0, 0],
-                }),
-                interactive: false,
-                pane: 'tileBorderPane',
-              });
-              label.addTo(tileBorderLayerRef.current!);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error rendering tile borders:', error);
-      }
-    };
-
-    renderTileBorders();
-  }, [mapReady, showHeatmapTileBorders, showPropertyTileBorders, heatmapTiles, propertyTiles]);
 
   return (
     <div 

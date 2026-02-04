@@ -6,7 +6,7 @@ import { DEFAULT_FALLBACK_COLOR } from '@/constants/colors';
 /**
  * Property marker colors by estate type
  */
-const PROPERTY_MARKER_COLORS: Record<EstateType, string> = {
+export const PROPERTY_MARKER_COLORS: Record<EstateType, string> = {
   FLAT: '#3b82f6',      // Blue
   HOUSE: '#16a34a',     // Green
   TERRAIN: '#f59e0b',   // Amber

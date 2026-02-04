@@ -1,19 +1,7 @@
 import type { PriceCategory, EnrichedProperty, ClusterPriceDisplay } from '../types';
 import { PRICE_BADGE_COLORS, PRICE_BADGE_LABELS_EN, PRICE_CATEGORY_COLORS } from '../config/price-colors';
+import { CLUSTER_ICON_SIZE, CLUSTER_ICON_WITH_LABEL_HEIGHT } from '../config/constants';
 import { formatCompactPrice } from '@/lib/format';
-
-// Cluster icon dimensions
-export const CLUSTER_ICON_SIZE = 36;
-export const CLUSTER_ICON_WITH_LABEL_HEIGHT = 54;
-
-// Re-export for backward compatibility
-export { PRICE_BADGE_COLORS };
-
-/**
- * Price badge labels - using English fallback for non-i18n contexts
- * For i18n contexts, use PRICE_BADGE_LABEL_KEYS with useTranslations
- */
-export const PRICE_BADGE_LABELS = PRICE_BADGE_LABELS_EN;
 
 /**
  * Generate cluster price label based on display mode
@@ -26,19 +14,25 @@ export function generateClusterPriceLabel(
     return '';
   }
 
-  const sortedPrices = [...prices].sort((a, b) => a - b);
-  const minPrice = sortedPrices[0];
-  const maxPrice = sortedPrices[sortedPrices.length - 1];
-  const medianPrice = sortedPrices[Math.floor(sortedPrices.length / 2)];
+  // Use Math.min/max for efficiency when median not needed
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
 
   switch (displayMode) {
     case 'range':
       return `${formatCompactPrice(minPrice)} - ${formatCompactPrice(maxPrice)}`;
     
-    case 'median':
+    case 'median': {
+      // Only sort when median is needed
+      const sortedPrices = [...prices].sort((a, b) => a - b);
+      const medianPrice = sortedPrices[Math.floor(sortedPrices.length / 2)];
       return `~${formatCompactPrice(medianPrice)}`;
+    }
     
     case 'median_spread': {
+      // Only sort when median is needed
+      const sortedPrices = [...prices].sort((a, b) => a - b);
+      const medianPrice = sortedPrices[Math.floor(sortedPrices.length / 2)];
       // Calculate spread as percentage from median
       const spread = Math.round(((maxPrice - minPrice) / medianPrice) * 50); // ±spread%
       return `${formatCompactPrice(medianPrice)} ±${spread}%`;
@@ -173,7 +167,7 @@ export function generatePriceAnalysisBadgeHtml(priceAnalysis: EnrichedProperty['
   }
   
   const colors = PRICE_BADGE_COLORS[priceAnalysis.priceCategory] || PRICE_BADGE_COLORS.fair;
-  const label = PRICE_BADGE_LABELS[priceAnalysis.priceCategory] || 'Fair';
+  const label = PRICE_BADGE_LABELS_EN[priceAnalysis.priceCategory] || 'Fair';
   const percentSign = priceAnalysis.percentFromMedian >= 0 ? '+' : '';
   
   return `

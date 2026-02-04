@@ -1,4 +1,4 @@
-import { Bounds } from '@/types';
+import type { Bounds } from '@/types';
 import {
   OtodomProperty,
   PropertyFilters,
@@ -8,39 +8,17 @@ import {
 } from '../types';
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, snapBoundsForCacheKey } from '@/lib/geo';
 import { createTimer, logPerf } from '@/lib/profiling';
-
-/**
- * Otodom GraphQL API configuration
- */
-const OTODOM_API_URL = 'https://www.otodom.pl/api/query';
-const SEARCH_MAP_PINS_HASH = '51e8703aff1dd9b3ad3bae1ab6c543254e19b3576da1ee23eba0dca2b9341e27';
-const SEARCH_MAP_QUERY_HASH = 'cef9f63d93a284e3a896b78d67ff42139214c4317f6dfa73231cc1b136a2313d';
-
-/**
- * Cache configuration
- */
-const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
-const MAX_CACHE_ENTRIES = 50;
-
-/**
- * Cluster search radius for Otodom API requests (in meters)
- * This is used when fetching properties within a cluster area via the API.
- * Note: This differs from DEFAULT_CLUSTER_RADIUS in enrichment.ts (1000m),
- * which is used for UI-level cluster analysis and price comparison.
- */
-const OTODOM_CLUSTER_RADIUS_METERS = 500;
-
-/**
- * Default area filter bounds for Otodom API
- * These are required by the API based on HAR analysis
- */
-const DEFAULT_AREA_MIN = 1;
-const DEFAULT_AREA_MAX = 500;
-
-/**
- * Default pagination limit for cluster property fetches
- */
-const DEFAULT_CLUSTER_PAGE_LIMIT = 36;
+import {
+  OTODOM_API_URL,
+  OTODOM_SEARCH_MAP_PINS_HASH,
+  OTODOM_SEARCH_MAP_QUERY_HASH,
+  OTODOM_CACHE_TTL_MS,
+  OTODOM_MAX_CACHE_ENTRIES,
+  OTODOM_CLUSTER_RADIUS_METERS,
+  OTODOM_DEFAULT_AREA_MIN,
+  OTODOM_DEFAULT_AREA_MAX,
+  OTODOM_DEFAULT_CLUSTER_PAGE_LIMIT,
+} from '../config/constants';
 
 /**
  * Common headers for Otodom API requests
@@ -55,7 +33,18 @@ const OTODOM_API_HEADERS: HeadersInit = {
 };
 
 /**
- * Cache for property responses
+ * Module-level cache for property responses
+ * 
+ * Design note: This uses a simple Map with TTL-based eviction rather than a
+ * full LRU cache. The cache is bounded by OTODOM_MAX_CACHE_ENTRIES and entries
+ * expire after OTODOM_CACHE_TTL_MS. Old entries are evicted when the cache
+ * exceeds the maximum size.
+ * 
+ * This approach is sufficient because:
+ * 1. Property data changes infrequently (3-minute TTL is appropriate)
+ * 2. The cache size is bounded to prevent memory issues
+ * 3. A full LRU implementation would add complexity without significant benefit
+ * 
  * Key: hash of bounds + filters
  * Value: { data, timestamp }
  */
@@ -121,23 +110,9 @@ function buildGeoJsonFromBounds(bounds: Bounds): string {
 }
 
 /**
- * Build the GraphQL request body for SearchMapPins
- * Note: This function takes a single estate type for the API request
+ * Add common optional filters to filter attributes
  */
-function buildSearchMapPinsRequest(bounds: Bounds, filters: PropertyFilters, estateType: EstateType): object {
-  const geoJson = buildGeoJsonFromBounds(bounds);
-
-  const filterAttributes: Record<string, unknown> = {
-    estate: estateType,  // Single estate type for API
-    transaction: filters.transaction,
-    market: filters.market ?? 'ALL',
-    ownerTypeSingleSelect: filters.ownerType ?? 'ALL',
-    // areaMin and areaMax seem to be required based on HAR analysis
-    areaMin: filters.areaMin ?? DEFAULT_AREA_MIN,
-    areaMax: filters.areaMax ?? DEFAULT_AREA_MAX,
-  };
-
-  // Add optional common filters
+function addCommonFilters(filterAttributes: Record<string, unknown>, filters: PropertyFilters): void {
   if (filters.priceMin !== undefined) filterAttributes.priceMin = filters.priceMin;
   if (filters.priceMax !== undefined) filterAttributes.priceMax = filters.priceMax;
   if (filters.roomsNumber && filters.roomsNumber.length > 0) {
@@ -158,33 +133,75 @@ function buildSearchMapPinsRequest(bounds: Bounds, filters: PropertyFilters, est
     if (extras.length > 0) filterAttributes.extras = extras;
     if (filters.extras.includes('HAS_PHOTOS')) filterAttributes.hasPhotos = true;
   }
+}
+
+/**
+ * Add FLAT-specific filters (only when single FLAT type selected)
+ */
+function addFlatFilters(filterAttributes: Record<string, unknown>, filters: PropertyFilters): void {
+  if (filters.floors && filters.floors.length > 0) {
+    filterAttributes.floors = filters.floors;
+  }
+  if (filters.floorsNumberMin !== undefined) filterAttributes.floorsNumberMin = filters.floorsNumberMin;
+  if (filters.floorsNumberMax !== undefined) filterAttributes.floorsNumberMax = filters.floorsNumberMax;
+  if (filters.flatBuildingType && filters.flatBuildingType.length > 0) {
+    filterAttributes.buildingType = filters.flatBuildingType;
+  }
+}
+
+/**
+ * Add HOUSE-specific filters (only when single HOUSE type selected)
+ */
+function addHouseFilters(filterAttributes: Record<string, unknown>, filters: PropertyFilters): void {
+  if (filters.terrainAreaMin !== undefined) filterAttributes.terrainAreaMin = filters.terrainAreaMin;
+  if (filters.terrainAreaMax !== undefined) filterAttributes.terrainAreaMax = filters.terrainAreaMax;
+  if (filters.houseBuildingType && filters.houseBuildingType.length > 0) {
+    filterAttributes.buildingType = filters.houseBuildingType;
+  }
+  if (filters.isBungalow === true) filterAttributes.isBungalov = true;
+}
+
+/**
+ * Check if filters specify a single estate type
+ */
+function isSingleEstateType(filters: PropertyFilters, type: EstateType): boolean {
+  return filters.estate?.length === 1 && filters.estate[0] === type;
+}
+
+/**
+ * Build the GraphQL request body for SearchMapPins
+ * Note: This function takes a single estate type for the API request
+ */
+function buildSearchMapPinsRequest(bounds: Bounds, filters: PropertyFilters, estateType: EstateType): object {
+  const geoJson = buildGeoJsonFromBounds(bounds);
+
+  const filterAttributes: Record<string, unknown> = {
+    estate: estateType,  // Single estate type for API
+    transaction: filters.transaction,
+    market: filters.market ?? 'ALL',
+    ownerTypeSingleSelect: filters.ownerType ?? 'ALL',
+    // areaMin and areaMax seem to be required based on HAR analysis
+    areaMin: filters.areaMin ?? OTODOM_DEFAULT_AREA_MIN,
+    areaMax: filters.areaMax ?? OTODOM_DEFAULT_AREA_MAX,
+  };
+
+  // Add optional common filters
+  addCommonFilters(filterAttributes, filters);
 
   // FLAT-specific filters (only when single FLAT type selected)
-  if (estateType === 'FLAT' && filters.estate?.length === 1) {
-    if (filters.floors && filters.floors.length > 0) {
-      filterAttributes.floors = filters.floors;
-    }
-    if (filters.floorsNumberMin !== undefined) filterAttributes.floorsNumberMin = filters.floorsNumberMin;
-    if (filters.floorsNumberMax !== undefined) filterAttributes.floorsNumberMax = filters.floorsNumberMax;
-    if (filters.flatBuildingType && filters.flatBuildingType.length > 0) {
-      filterAttributes.buildingType = filters.flatBuildingType;
-    }
+  if (estateType === 'FLAT' && isSingleEstateType(filters, 'FLAT')) {
+    addFlatFilters(filterAttributes, filters);
   }
 
   // HOUSE-specific filters (only when single HOUSE type selected)
-  if (estateType === 'HOUSE' && filters.estate?.length === 1) {
-    if (filters.terrainAreaMin !== undefined) filterAttributes.terrainAreaMin = filters.terrainAreaMin;
-    if (filters.terrainAreaMax !== undefined) filterAttributes.terrainAreaMax = filters.terrainAreaMax;
-    if (filters.houseBuildingType && filters.houseBuildingType.length > 0) {
-      filterAttributes.buildingType = filters.houseBuildingType;
-    }
-    if (filters.isBungalow === true) filterAttributes.isBungalov = true;
+  if (estateType === 'HOUSE' && isSingleEstateType(filters, 'HOUSE')) {
+    addHouseFilters(filterAttributes, filters);
   }
 
   return {
     extensions: {
       persistedQuery: {
-        sha256Hash: SEARCH_MAP_PINS_HASH,
+        sha256Hash: OTODOM_SEARCH_MAP_PINS_HASH,
         version: 1,
       },
     },
@@ -352,7 +369,7 @@ export async function fetchOtodomProperties(
   
   // Check cache
   const cached = propertyCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+  if (cached && Date.now() - cached.timestamp < OTODOM_CACHE_TTL_MS) {
     logPerf('otodom:cache-hit', 0, { cacheKey: cacheKey.substring(0, 50) });
     return { ...cached.data, cached: true };
   }
@@ -401,10 +418,10 @@ export async function fetchOtodomProperties(
   propertyCache.set(cacheKey, { data: result, timestamp: Date.now() });
 
   // Clean old cache entries
-  if (propertyCache.size > MAX_CACHE_ENTRIES) {
+  if (propertyCache.size > OTODOM_MAX_CACHE_ENTRIES) {
     const entries = Array.from(propertyCache.entries());
     entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-    const toDelete = entries.slice(0, entries.length - MAX_CACHE_ENTRIES);
+    const toDelete = entries.slice(0, entries.length - OTODOM_MAX_CACHE_ENTRIES);
     toDelete.forEach(([key]) => propertyCache.delete(key));
   }
 
@@ -503,7 +520,7 @@ function buildSearchMapQueryRequest(
   return {
     extensions: {
       persistedQuery: {
-        sha256Hash: SEARCH_MAP_QUERY_HASH,
+        sha256Hash: OTODOM_SEARCH_MAP_QUERY_HASH,
         version: 1,
       },
     },
@@ -599,7 +616,7 @@ export async function fetchClusterProperties(
   lng: number,
   filters: PropertyFilters,
   page: number = 1,
-  limit: number = DEFAULT_CLUSTER_PAGE_LIMIT,
+  limit: number = OTODOM_DEFAULT_CLUSTER_PAGE_LIMIT,
   shape?: string,
   radiusMeters: number = OTODOM_CLUSTER_RADIUS_METERS,
   clusterEstateType?: string,
@@ -619,42 +636,49 @@ export async function fetchClusterProperties(
     ? [clusterEstateType as EstateType]
     : (filters.estate ?? ['FLAT']);
   
-  // Fetch for each estate type and merge results
+  // Fetch for each estate type in parallel and merge results
   const allProperties: OtodomProperty[] = [];
   let totalCount = 0;
   let totalPages = 1;
-  const seenIds = new Set<number>();
+  const seenPropertyIds = new Set<number>();
   
-  for (const estateType of estateTypes) {
-    const requestBody = buildSearchMapQueryRequest(geoJson, filters, estateType, page, limit);
-    
-    const response = await fetch(OTODOM_API_URL, {
-      method: 'POST',
-      headers: OTODOM_API_HEADERS,
-      body: JSON.stringify(requestBody),
-      signal,
-    });
+  const fetchResults = await Promise.all(
+    estateTypes.map(async (estateType) => {
+      const requestBody = buildSearchMapQueryRequest(geoJson, filters, estateType, page, limit);
+      
+      const response = await fetch(OTODOM_API_URL, {
+        method: 'POST',
+        headers: OTODOM_API_HEADERS,
+        body: JSON.stringify(requestBody),
+        signal,
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      console.error('Otodom SearchMapQuery API error:', response.status, errorText);
-      throw new Error(`Otodom API error: ${response.status} ${response.statusText}`);
-    }
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error('Otodom SearchMapQuery API error:', response.status, errorText);
+        throw new Error(`Otodom API error: ${response.status} ${response.statusText}`);
+      }
 
-    const data: OtodomSearchAdsResponse = await response.json();
-    
-    // Check if response has valid data structure
-    if (!data?.data?.searchAds) {
-      console.warn('Otodom API returned empty or invalid response for estate type:', estateType);
-      continue; // Skip this estate type and try the next one
-    }
-    
-    const result = transformSearchAdsResponse(data, lat, lng);
+      const data: OtodomSearchAdsResponse = await response.json();
+      
+      // Check if response has valid data structure
+      if (!data?.data?.searchAds) {
+        console.warn('Otodom API returned empty or invalid response for estate type:', estateType);
+        return null; // Skip this estate type
+      }
+      
+      return transformSearchAdsResponse(data, lat, lng);
+    })
+  );
+
+  // Merge results from all estate types
+  for (const result of fetchResults) {
+    if (!result) continue;
     
     // Deduplicate and merge
     for (const property of result.properties) {
-      if (!seenIds.has(property.id)) {
-        seenIds.add(property.id);
+      if (!seenPropertyIds.has(property.id)) {
+        seenPropertyIds.add(property.id);
         allProperties.push(property);
       }
     }

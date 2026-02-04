@@ -13,6 +13,11 @@ import { DEFAULT_PROPERTY_FILTERS } from './types';
 import type { PropertyDataSource } from './config';
 import type { ClusterAnalysisMap } from './lib';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
+import {
+  DEFAULT_SCORE_RANGE,
+  DEFAULT_PRICE_VALUE_RANGE,
+  DEFAULT_DATA_SOURCES,
+} from './config/constants';
 
 /**
  * Real estate store state interface
@@ -36,6 +41,10 @@ export interface RealEstateState {
   // Computed/filtered data (set by controller)
   properties: EnrichedProperty[];
   clusters: PropertyCluster[];
+  /** 
+   * Cluster analysis data - stored for potential future use and devtools debugging.
+   * Currently computed in RealEstateController but not read from store by any component.
+   */
   clusterAnalysisData: ClusterAnalysisMap;
   
   // API state
@@ -73,7 +82,6 @@ export interface RealEstateActions {
   
   // Cache actions
   cacheClusterProperties: (clusterId: string, properties: OtodomProperty[]) => void;
-  clearCache: () => void;
   
   // Clear all
   clearProperties: () => void;
@@ -90,9 +98,9 @@ export type RealEstateStore = RealEstateState & RealEstateActions;
 const initialState: RealEstateState = {
   enabled: false,
   filters: DEFAULT_PROPERTY_FILTERS,
-  scoreRange: [50, 100],
-  priceValueRange: [0, 100],
-  dataSources: ['otodom'],
+  scoreRange: DEFAULT_SCORE_RANGE,
+  priceValueRange: DEFAULT_PRICE_VALUE_RANGE,
+  dataSources: DEFAULT_DATA_SOURCES,
   priceAnalysisRadius: PROPERTY_TILE_CONFIG.DEFAULT_PRICE_RADIUS,
   rawProperties: [],
   rawClusters: [],
@@ -182,15 +190,6 @@ export const useRealEstateStore = create<RealEstateStore>()(
         },
         false,
         'cacheClusterProperties'
-      ),
-      
-      clearCache: () => set(
-        (state) => ({
-          clusterPropertiesCache: new Map(),
-          cacheVersion: state.cacheVersion + 1,
-        }),
-        false,
-        'clearCache'
       ),
       
       // Clear all properties

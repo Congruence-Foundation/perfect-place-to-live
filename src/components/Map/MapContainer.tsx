@@ -4,17 +4,24 @@ import { useEffect, useState, forwardRef, useImperativeHandle, useRef, useMemo }
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { POLAND_CENTER } from '@/lib/geo';
-import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
+import type { HeatmapPoint, POI, Factor, Bounds } from '@/types';
 import type { PopupTranslations, FactorTranslations, MapViewRef } from './MapView';
+
+/**
+ * Loading placeholder shown while map is initializing
+ */
+function MapLoadingPlaceholder() {
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-muted">
+      <div className="text-muted-foreground">Loading map...</div>
+    </div>
+  );
+}
 
 // Dynamically import the map to avoid SSR issues with Leaflet
 const MapWithNoSSR = dynamic(() => import('./MapView'), {
   ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-muted">
-      <div className="text-muted-foreground">Loading map...</div>
-    </div>
-  ),
+  loading: MapLoadingPlaceholder,
 });
 
 export interface MapContainerRef {
@@ -124,11 +131,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
   }));
 
   if (!isMounted) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-muted">
-        <div className="text-muted-foreground">Loading map...</div>
-      </div>
-    );
+    return <MapLoadingPlaceholder />;
   }
 
   return (

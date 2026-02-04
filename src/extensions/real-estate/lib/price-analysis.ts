@@ -11,12 +11,12 @@ import { roomCountToNumber } from '@/lib/format';
 import { createTimer } from '@/lib/profiling';
 import { findNearestHeatmapPoint } from './score-lookup';
 import { distanceInMeters, createClusterId } from '@/lib/geo';
-import { DEFAULT_FALLBACK_COLOR, PRICE_CATEGORY_COLORS } from '../config/price-colors';
-
-/**
- * Minimum number of properties in a group for valid statistical comparison
- */
-const MIN_GROUP_SIZE = 5;
+import {
+  PRICE_ANALYSIS_MIN_GROUP_SIZE,
+  PRICE_ANALYSIS_MIN_SEARCH_RADIUS,
+  PRICE_ANALYSIS_GRID_MULTIPLIER,
+  PRICE_SCORE_THRESHOLDS,
+} from '../config/constants';
 
 /**
  * Room count ranges for grouping (overlapping for smoother comparison)
@@ -141,8 +141,9 @@ function generateGroupDescription(
 
 /**
  * Calculate price per meter for a property
+ * Returns null if price is hidden, zero, or area is invalid
  */
-function getPricePerMeter(property: OtodomProperty): number | null {
+export function getPricePerMeter(property: OtodomProperty): number | null {
   // Skip properties without valid prices (hidePrice or price = 0 means negotiable)
   if (property.hidePrice || property.totalPrice.value <= 0 || property.areaInSquareMeters <= 0) {
     return null;
@@ -157,10 +158,10 @@ function getPricePerMeter(property: OtodomProperty): number | null {
  * Determine price category from price score
  */
 function getPriceCategory(priceScore: number): PriceCategory {
-  if (priceScore < -1.0) return 'great_deal';
-  if (priceScore < -0.5) return 'good_deal';
-  if (priceScore <= 0.5) return 'fair';
-  if (priceScore <= 1.0) return 'above_avg';
+  if (priceScore < PRICE_SCORE_THRESHOLDS.GREAT_DEAL) return 'great_deal';
+  if (priceScore < PRICE_SCORE_THRESHOLDS.GOOD_DEAL) return 'good_deal';
+  if (priceScore <= PRICE_SCORE_THRESHOLDS.FAIR) return 'fair';
+  if (priceScore <= PRICE_SCORE_THRESHOLDS.ABOVE_AVG) return 'above_avg';
   return 'overpriced';
 }
 
@@ -251,7 +252,7 @@ export function enrichPropertiesWithPriceScore(
   const groupStats = new Map<string, GroupStatistics>();
 
   for (const [key, members] of groups) {
-    if (members.length < MIN_GROUP_SIZE) continue;
+    if (members.length < PRICE_ANALYSIS_MIN_GROUP_SIZE) continue;
 
     const prices = members.map(m => m.pricePerMeter);
     const medianPrice = median(prices);
@@ -484,6 +485,6 @@ export function enrichPropertiesSimplified(
   gridCellSize: number
 ): EnrichedProperty[] {
   // Use extended search radius for sparse heatmap data
-  const maxSearchRadius = Math.max(gridCellSize * 10, 2000); // At least 2km
+  const maxSearchRadius = Math.max(gridCellSize * PRICE_ANALYSIS_GRID_MULTIPLIER, PRICE_ANALYSIS_MIN_SEARCH_RADIUS);
   return enrichPropertiesWithPriceScore(properties, heatmapPoints, gridCellSize, maxSearchRadius);
 }

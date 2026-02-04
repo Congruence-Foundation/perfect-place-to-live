@@ -13,17 +13,15 @@
  * - name?: string
  */
 
-import type { Bounds, POI, FactorDef } from '@/types';
+import type { Bounds, POI, FactorDef, POIDataSource } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { getPOIsFromDB, getPOIsForTilesBatched as getPOIsForTilesBatchedDB } from './db';
 import { fetchAllPOIsCombined, fetchPOIsForTilesBatched as fetchPOIsForTilesBatchedOverpass } from './overpass';
-import { POIFetchError, POIDataSource } from '@/lib/errors';
+import { POIFetchError } from '@/lib/errors';
 import { createTimer } from '@/lib/profiling';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { generatePOICacheKey } from './overpass';
 import { PERFORMANCE_CONFIG } from '@/constants/performance';
-
-export type { POIDataSource } from '@/lib/errors';
 
 const { POI_CACHE_TTL_SECONDS } = PERFORMANCE_CONFIG;
 
@@ -98,7 +96,7 @@ async function fetchFromOverpassFallback(
  * @param existingPoiData - Optional existing POI data to merge with
  * @returns POI data map and the actual data source used
  */
-export async function fetchPoisWithFallback(
+export async function fetchPOIsWithFallback(
   factors: FactorDef[],
   bounds: Bounds,
   preferredSource: POIDataSource = 'neon',
@@ -108,12 +106,17 @@ export async function fetchPoisWithFallback(
   const uncachedFactors: FactorDef[] = [];
   let actualDataSource: POIDataSource = preferredSource;
 
-  // Check cache first for Neon source
+  // Check cache first for Neon source (parallel lookups)
   if (preferredSource === 'neon') {
-    for (const factor of factors) {
-      const cacheKey = generatePOICacheKey(factor.id, bounds);
-      const cached = await cacheGet<POI[]>(cacheKey);
-      
+    const cacheResults = await Promise.all(
+      factors.map(async (factor) => {
+        const cacheKey = generatePOICacheKey(factor.id, bounds);
+        const cached = await cacheGet<POI[]>(cacheKey);
+        return { factor, cached };
+      })
+    );
+
+    for (const { factor, cached } of cacheResults) {
       if (cached) {
         poiData.set(factor.id, cached);
       } else {

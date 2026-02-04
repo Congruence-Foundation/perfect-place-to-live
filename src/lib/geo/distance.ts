@@ -5,16 +5,6 @@
 import { METERS_PER_DEGREE_LAT } from './constants';
 
 /**
- * Convert degrees to radians
- * 
- * Note: This is also duplicated in haversine.ts for internal use.
- * Exported here for use by other modules that need degree-to-radian conversion.
- */
-function toRad(degrees: number): number {
-  return degrees * (Math.PI / 180);
-}
-
-/**
  * Calculate meters per degree of longitude at a given latitude
  * Longitude degrees get smaller as you move away from the equator
  */

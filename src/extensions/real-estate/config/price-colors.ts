@@ -11,9 +11,10 @@
 import type { PriceCategory } from '../types';
 
 /**
- * Default fallback color for properties without price data
+ * Color for properties without price data (Gray-400)
+ * Internal constant - use PRICE_CATEGORY_THEME.no_data.primary for external access
  */
-export const DEFAULT_FALLBACK_COLOR = '#9ca3af'; // Gray-400
+const NO_DATA_COLOR = '#9ca3af';
 
 /**
  * Price category theme configuration
@@ -25,22 +26,8 @@ export const PRICE_CATEGORY_THEME: Record<PriceCategory, { primary: string; bg: 
   fair: { primary: '#3b82f6', bg: '#eff6ff' },        // Blue-500 / Blue-50
   above_avg: { primary: '#f97316', bg: '#fff7ed' },   // Orange-500 / Orange-50
   overpriced: { primary: '#ef4444', bg: '#fef2f2' },  // Red-500 / Red-50
-  no_data: { primary: DEFAULT_FALLBACK_COLOR, bg: '#f3f4f6' }, // Gray-400 / Gray-100
+  no_data: { primary: NO_DATA_COLOR, bg: '#f3f4f6' }, // Gray-400 / Gray-100
 };
-
-/**
- * Get the primary color for a price category (for markers, glow effects)
- */
-export function getPriceCategoryColor(category: PriceCategory): string {
-  return PRICE_CATEGORY_THEME[category].primary;
-}
-
-/**
- * Get the background color for a price category (for badges)
- */
-export function getPriceCategoryBgColor(category: PriceCategory): string {
-  return PRICE_CATEGORY_THEME[category].bg;
-}
 
 /**
  * Legacy export for backward compatibility
@@ -60,18 +47,6 @@ export const PRICE_BADGE_COLORS: Record<Exclude<PriceCategory, 'no_data'>, { bg:
   fair: { bg: PRICE_CATEGORY_THEME.fair.bg, text: PRICE_CATEGORY_THEME.fair.primary },
   above_avg: { bg: PRICE_CATEGORY_THEME.above_avg.bg, text: PRICE_CATEGORY_THEME.above_avg.primary },
   overpriced: { bg: PRICE_CATEGORY_THEME.overpriced.bg, text: PRICE_CATEGORY_THEME.overpriced.primary },
-};
-
-/**
- * Price badge labels - translation keys for i18n
- * Use these keys with useTranslations('realEstate') to get localized labels
- */
-export const PRICE_BADGE_LABEL_KEYS: Record<Exclude<PriceCategory, 'no_data'>, string> = {
-  great_deal: 'priceCategory.greatDeal',
-  good_deal: 'priceCategory.goodDeal',
-  fair: 'priceCategory.fair',
-  above_avg: 'priceCategory.aboveAvg',
-  overpriced: 'priceCategory.overpriced',
 };
 
 /**

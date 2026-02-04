@@ -5,10 +5,10 @@ import type { TileCoord } from '@/lib/geo/tiles';
 import { getCombinedBounds } from '@/lib/geo/bounds';
 import {
   initializeTileResultMap,
-  computeTileBoundsMap,
-  findTileForPoint,
   assignPOIToTile,
+  findTileForPointFast,
 } from './tile-utils';
+import { getTileKeyString } from '@/lib/geo/tiles';
 
 /**
  * Create a Neon SQL client
@@ -139,18 +139,37 @@ export async function getPOIsForTilesBatched(
 /**
  * Distribute POIs from a combined query to their respective tiles
  * Each POI is assigned to the tile that contains its coordinates
+ * Uses O(1) tile lookup for better performance
  */
 function distributePOIsToTiles(
   rows: POIRow[],
   tiles: TileCoord[],
   factorIds: string[]
 ): Map<string, Record<string, POI[]>> {
-  const tileBoundsMap = computeTileBoundsMap(tiles);
+  if (tiles.length === 0) {
+    return new Map();
+  }
+
+  // Get zoom level from first tile (all tiles should have same zoom)
+  const zoom = tiles[0].z;
+  
+  // Validate all tiles have the same zoom level
+  const invalidTile = tiles.find(t => t.z !== zoom);
+  if (invalidTile) {
+    throw new Error(`All tiles must have the same zoom level. Expected ${zoom}, found ${invalidTile.z}`);
+  }
+  
+  // Build set of valid tile keys for O(1) lookup
+  const validTileKeys = new Set<string>();
+  for (const tile of tiles) {
+    validTileKeys.add(getTileKeyString(tile));
+  }
+
   const result = initializeTileResultMap(tiles, factorIds);
 
   for (const row of rows) {
     const poi = rowToPOI(row);
-    const tileKey = findTileForPoint(poi.lat, poi.lng, tileBoundsMap);
+    const tileKey = findTileForPointFast(poi.lat, poi.lng, zoom, validTileKeys);
     
     if (tileKey) {
       assignPOIToTile(poi, row.factor_id, tileKey, result);

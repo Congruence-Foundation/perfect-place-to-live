@@ -1,10 +1,108 @@
 import type { HeatmapPoint } from '@/types/heatmap';
 import type { OtodomProperty, PropertyCluster } from '../types/property';
-import { distanceInMeters } from '@/lib/geo';
+import { distanceInMeters, METERS_PER_DEGREE_LAT } from '@/lib/geo';
 import { UI_CONFIG } from '@/constants/performance';
+import {
+  SPATIAL_INDEX_CELL_SIZE_METERS,
+  SPATIAL_INDEX_LINEAR_THRESHOLD,
+} from '../config/constants';
+
+/**
+ * Simple grid-based spatial index for heatmap points
+ * Provides O(1) average lookup instead of O(n) linear search
+ */
+class HeatmapSpatialIndex {
+  private cells: Map<string, HeatmapPoint[]> = new Map();
+  private cellSize: number;
+
+  constructor(points: HeatmapPoint[], cellSizeMeters: number = SPATIAL_INDEX_CELL_SIZE_METERS) {
+    // Convert cell size from meters to degrees (approximate)
+    this.cellSize = cellSizeMeters / METERS_PER_DEGREE_LAT;
+    
+    // Build the index
+    for (const point of points) {
+      const key = this.getCellKey(point.lat, point.lng);
+      const cell = this.cells.get(key) || [];
+      cell.push(point);
+      this.cells.set(key, cell);
+    }
+  }
+
+  private getCellKey(lat: number, lng: number): string {
+    const cellLat = Math.floor(lat / this.cellSize);
+    const cellLng = Math.floor(lng / this.cellSize);
+    return `${cellLat},${cellLng}`;
+  }
+
+  /**
+   * Find the nearest point within a search radius
+   */
+  findNearest(lat: number, lng: number, searchRadiusMeters: number): HeatmapPoint | null {
+    // Convert search radius to cell units
+    const searchRadiusCells = Math.ceil(searchRadiusMeters / METERS_PER_DEGREE_LAT / this.cellSize) + 1;
+    const centerCellLat = Math.floor(lat / this.cellSize);
+    const centerCellLng = Math.floor(lng / this.cellSize);
+
+    let nearestPoint: HeatmapPoint | null = null;
+    let nearestDistance = Infinity;
+
+    // Search in expanding rings from center
+    for (let dLat = -searchRadiusCells; dLat <= searchRadiusCells; dLat++) {
+      for (let dLng = -searchRadiusCells; dLng <= searchRadiusCells; dLng++) {
+        const key = `${centerCellLat + dLat},${centerCellLng + dLng}`;
+        const cellPoints = this.cells.get(key);
+        
+        if (cellPoints) {
+          for (const point of cellPoints) {
+            const distance = distanceInMeters(lat, lng, point.lat, point.lng);
+            if (distance < nearestDistance && distance <= searchRadiusMeters) {
+              nearestDistance = distance;
+              nearestPoint = point;
+            }
+          }
+        }
+      }
+    }
+
+    return nearestPoint;
+  }
+}
+
+/**
+ * Module-level cache for spatial indexes
+ * 
+ * Design note: This uses simple module-level state rather than a full LRU cache
+ * because we only ever need one spatial index at a time (for the current heatmap).
+ * The cache is invalidated when heatmap points change (detected via hash).
+ * 
+ * This approach is simpler and sufficient for the use case. A full LRU cache
+ * would add complexity without significant benefit since we don't need to
+ * cache multiple spatial indexes simultaneously.
+ */
+let cachedIndex: HeatmapSpatialIndex | null = null;
+let cachedPointsHash: string | null = null;
+
+/**
+ * Get or create a spatial index for the given heatmap points
+ */
+function getSpatialIndex(heatmapPoints: HeatmapPoint[]): HeatmapSpatialIndex {
+  // Simple hash based on first and last points and length
+  const hash = heatmapPoints.length > 0
+    ? `${heatmapPoints.length}:${heatmapPoints[0].lat}:${heatmapPoints[heatmapPoints.length - 1].lat}`
+    : '';
+  
+  if (cachedIndex && cachedPointsHash === hash) {
+    return cachedIndex;
+  }
+  
+  cachedIndex = new HeatmapSpatialIndex(heatmapPoints);
+  cachedPointsHash = hash;
+  return cachedIndex;
+}
 
 /**
  * Find the nearest heatmap point to a given location within a search radius.
+ * Uses spatial indexing for O(1) average lookup instead of O(n) linear search.
  * 
  * @param lat - Latitude of the location
  * @param lng - Longitude of the location
@@ -22,18 +120,25 @@ export function findNearestHeatmapPoint(
     return null;
   }
 
-  let nearestPoint: HeatmapPoint | null = null;
-  let nearestDistance = Infinity;
+  // For small arrays, linear search is faster than building an index
+  if (heatmapPoints.length < SPATIAL_INDEX_LINEAR_THRESHOLD) {
+    let nearestPoint: HeatmapPoint | null = null;
+    let nearestDistance = Infinity;
 
-  for (const point of heatmapPoints) {
-    const distance = distanceInMeters(lat, lng, point.lat, point.lng);
-    if (distance < nearestDistance && distance <= searchRadius) {
-      nearestDistance = distance;
-      nearestPoint = point;
+    for (const point of heatmapPoints) {
+      const distance = distanceInMeters(lat, lng, point.lat, point.lng);
+      if (distance < nearestDistance && distance <= searchRadius) {
+        nearestDistance = distance;
+        nearestPoint = point;
+      }
     }
+
+    return nearestPoint;
   }
 
-  return nearestPoint;
+  // Use spatial index for larger arrays
+  const index = getSpatialIndex(heatmapPoints);
+  return index.findNearest(lat, lng, searchRadius);
 }
 
 /**

@@ -1,4 +1,4 @@
-import { Factor } from '@/types/factors';
+import type { Factor } from '@/types/factors';
 import { POI_CATEGORIES, POICategory, getOsmTags } from './poi-categories';
 
 /**

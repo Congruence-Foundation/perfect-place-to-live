@@ -257,7 +257,7 @@ async function checkHeatmapCacheParallel(
   const cachedResults: Record<string, { points: HeatmapPoint[]; cached: boolean }> = {};
   const uncachedTiles: TileCoord[] = [];
 
-  for (const { tile, cacheKey: _, cached } of cacheChecks) {
+  for (const { tile, cached } of cacheChecks) {
     const tileKey = `${tile.z}:${tile.x}:${tile.y}`;
     if (cached) {
       cachedResults[tileKey] = { points: cached.points, cached: true };

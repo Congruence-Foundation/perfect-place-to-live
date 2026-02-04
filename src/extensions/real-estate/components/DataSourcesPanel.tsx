@@ -16,7 +16,7 @@ const DATA_SOURCES: { id: PropertyDataSource; name: string; available: boolean }
   { id: 'gratka', name: 'Gratka', available: false },
 ];
 
-export default function DataSourcesPanel({
+export function DataSourcesPanel({
   enabledSources,
   onSourcesChange,
 }: DataSourcesPanelProps) {
@@ -34,15 +34,14 @@ export default function DataSourcesPanel({
     }
   };
 
-  const enabledCount = enabledSources.length;
-  const toggleExpanded = () => setIsExpanded(!isExpanded);
+  const handleToggleExpanded = () => setIsExpanded(prev => !prev);
 
   return (
     <div className="rounded-xl bg-muted/50 transition-colors">
       {/* Header - always visible */}
       <div className="flex items-center justify-between p-3">
         <button
-          onClick={toggleExpanded}
+          onClick={handleToggleExpanded}
           className="flex items-center gap-3 flex-1"
         >
           <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm bg-background">
@@ -53,12 +52,12 @@ export default function DataSourcesPanel({
               {t('dataSources')}
             </span>
             <span className="text-xs text-muted-foreground">
-              {t('dataSourcesActive', { count: enabledCount })}
+              {t('dataSourcesActive', { count: enabledSources.length })}
             </span>
           </div>
         </button>
         <button
-          onClick={toggleExpanded}
+          onClick={handleToggleExpanded}
           className="p-1 hover:bg-background/50 rounded transition-colors"
         >
           <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />

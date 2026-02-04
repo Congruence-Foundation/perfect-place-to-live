@@ -112,20 +112,20 @@ async function processTileBatch(
   enabledFactors: Factor[],
   gridSize: number
 ): Promise<GenerationResult> {
-  let generated = 0;
-  let errors = 0;
-
-  await Promise.all(
-    batch.map(async (tile) => {
+  const results = await Promise.all(
+    batch.map(async (tile): Promise<boolean> => {
       try {
         await generateTile(tile, enabledFactors, gridSize);
-        generated++;
+        return true;
       } catch (error) {
         console.error(`Error generating tile ${tile.z}/${tile.x}/${tile.y}:`, error);
-        errors++;
+        return false;
       }
     })
   );
+
+  const generated = results.filter(Boolean).length;
+  const errors = results.length - generated;
 
   return { generated, errors };
 }

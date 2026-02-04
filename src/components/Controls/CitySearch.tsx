@@ -10,6 +10,9 @@ import { UI_CONFIG } from '@/constants/performance';
 
 const SEARCH_DEBOUNCE_MS = UI_CONFIG.FACTORS_DEBOUNCE_MS;
 const MIN_SEARCH_LENGTH = 2;
+const BLUR_FOCUS_DELAY_MS = 150;
+const GEOLOCATION_TIMEOUT_MS = 10000;
+const GEOLOCATION_MAX_AGE_MS = 60000;
 
 interface SearchResult {
   place_id: number;
@@ -162,8 +165,8 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000,
+        timeout: GEOLOCATION_TIMEOUT_MS,
+        maximumAge: GEOLOCATION_MAX_AGE_MS,
       }
     );
   }, [onCitySelect, t]);
@@ -200,7 +203,7 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
               if (!containerRef.current?.contains(document.activeElement)) {
                 setIsFocused(false);
               }
-            }, 150);
+            }, BLUR_FOCUS_DELAY_MS);
           }}
           onKeyDown={handleKeyDown}
           className="pl-8 pr-16 bg-background border-0 shadow-none h-8 text-base rounded-full"

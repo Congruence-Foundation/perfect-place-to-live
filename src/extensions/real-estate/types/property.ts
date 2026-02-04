@@ -280,7 +280,5 @@ export type PriceValueFilter = 'all' | 'great_deal' | 'good_deal' | 'fair' | 'ab
  */
 export type PriceValueRange = [number, number];
 
-/**
- * Cluster price display mode
- */
-export type ClusterPriceDisplay = 'none' | 'range' | 'median' | 'median_spread';
+// Re-export ClusterPriceDisplay from core types for backward compatibility
+export type { ClusterPriceDisplay } from '@/types/heatmap';

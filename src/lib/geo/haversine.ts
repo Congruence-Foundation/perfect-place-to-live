@@ -1,5 +1,6 @@
 import type { Point, POI } from '@/types';
 import { EARTH_RADIUS_METERS, METERS_PER_DEGREE_LAT } from './constants';
+import { SPATIAL_INDEX_CONFIG } from '@/constants/performance';
 
 /**
  * Convert degrees to radians
@@ -31,7 +32,7 @@ export class SpatialIndex {
   private cells: Map<string, POI[]> = new Map();
   private cellSize: number;
 
-  constructor(pois: POI[], cellSizeDegrees: number = 0.01) {
+  constructor(pois: POI[], cellSizeDegrees: number = SPATIAL_INDEX_CONFIG.DEFAULT_CELL_SIZE_DEGREES) {
     this.cellSize = cellSizeDegrees;
     this.buildIndex(pois);
   }

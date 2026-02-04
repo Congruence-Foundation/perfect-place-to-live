@@ -6,8 +6,10 @@ import { POI_COLORS, getColorForK, DEFAULT_FALLBACK_COLOR, SCORE_COLORS, SCORE_T
 import { formatDistance } from '@/lib/utils';
 import type { FactorBreakdown } from '@/lib/scoring';
 
-// Popup translations interface
-export interface PopupTranslations {
+/**
+ * Translations for heatmap/location analysis popups
+ */
+export interface HeatmapPopupTranslations {
   excellent: string;
   good: string;
   average: string;
@@ -19,11 +21,14 @@ export interface PopupTranslations {
   noData: string;
 }
 
+// Legacy alias for backwards compatibility
+export type PopupTranslations = HeatmapPopupTranslations;
+
 // Factor name translations type
 export type FactorTranslations = Record<string, string>;
 
 // Default translations (English)
-export const defaultPopupTranslations: PopupTranslations = {
+export const defaultPopupTranslations: HeatmapPopupTranslations = {
   excellent: 'Excellent',
   good: 'Good',
   average: 'Average',
@@ -36,7 +41,7 @@ export const defaultPopupTranslations: PopupTranslations = {
 };
 
 // Get rating label for K value
-function getRatingLabel(k: number, translations: PopupTranslations): { label: string; emoji: string } {
+function getRatingLabel(k: number, translations: HeatmapPopupTranslations): { label: string; emoji: string } {
   if (k < SCORE_THRESHOLDS.EXCELLENT) return { label: translations.excellent, emoji: '🌟' };
   if (k < SCORE_THRESHOLDS.GOOD) return { label: translations.good, emoji: '👍' };
   if (k < SCORE_THRESHOLDS.AVERAGE) return { label: translations.average, emoji: '😐' };
@@ -50,7 +55,7 @@ function getRatingLabel(k: number, translations: PopupTranslations): { label: st
 export function generatePopupContent(
   k: number,
   breakdown: FactorBreakdown[],
-  translations: PopupTranslations,
+  translations: HeatmapPopupTranslations,
   factorTranslations: FactorTranslations
 ): string {
   const allNoPOIs = breakdown.length > 0 && breakdown.every(item => item.noPOIs);
@@ -104,7 +109,7 @@ export function generatePopupContent(
 
   return `
     <div style="min-width: 200px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 11px;">
-      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb;">
+      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid ${UI_COLORS.BORDER};">
         <span style="font-size: 18px;">${rating.emoji}</span>
         <div style="flex: 1;">
           <span style="font-weight: 600; font-size: 13px; color: ${kColor};">${rating.label}</span>
@@ -116,7 +121,7 @@ export function generatePopupContent(
           ${breakdownRows}
         </tbody>
       </table>
-      <div style="font-size: 9px; color: #9ca3af; margin-top: 4px; padding-top: 4px; border-top: 1px solid #e5e7eb;">
+      <div style="font-size: 9px; color: #9ca3af; margin-top: 4px; padding-top: 4px; border-top: 1px solid ${UI_COLORS.BORDER};">
         ${translations.footer} • ✓ ${translations.goodLabel} • ⚠ ${translations.improveLabel}
       </div>
     </div>

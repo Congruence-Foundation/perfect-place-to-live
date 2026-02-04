@@ -2,8 +2,7 @@
 
 import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
-import type { Bounds, HeatmapPoint, Factor, ClusterPriceAnalysisMode, TileCoordinates } from '@/types';
-import type { ClusterPriceDisplay } from '@/extensions/real-estate/types';
+import type { Bounds, HeatmapPoint, Factor, ClusterPriceAnalysisMode, TileCoordinates, ClusterPriceDisplay } from '@/types';
 import { HEATMAP_TILE_CONFIG, POI_TILE_CONFIG, UI_CONFIG } from '@/constants/performance';
 
 /**

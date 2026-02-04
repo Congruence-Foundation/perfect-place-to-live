@@ -12,12 +12,12 @@
  * instead of making individual requests per tile.
  */
 
-import { LRUCache } from 'lru-cache';
 import type { POI, Bounds, FactorDef } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { getPoiTileKey } from '@/lib/geo/tiles';
+import { filterPoisToBounds } from '@/lib/geo/bounds';
 import { fetchPOIsBatched, type POIDataSource } from '@/lib/poi';
-import { cacheGet, cacheSet } from '@/lib/cache';
+import { createTwoLevelCache, type CacheStats } from './two-level-cache';
 import { POI_TILE_CONFIG, COORDINATE_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
 
@@ -36,68 +36,18 @@ interface CacheCheckResult {
 }
 
 // ============================================================================
-// LRU Cache (Request-local optimization)
+// Cache Instance
 // ============================================================================
 
 /**
- * In-memory LRU cache for POI tiles
- * Used for request-local deduplication to avoid repeated Redis calls
+ * Two-level cache for POI tiles (Redis + LRU)
  * Key format: poi-tile:{z}:{x}:{y}:{factorId}
  */
-const poiTileLRU = new LRUCache<string, POI[]>({
-  max: POI_TILE_CONFIG.SERVER_LRU_MAX,
-  ttl: POI_TILE_CONFIG.SERVER_TTL_SECONDS * 1000,
+const poiTileCache = createTwoLevelCache<POI[]>({
+  name: 'POI tile',
+  maxSize: POI_TILE_CONFIG.SERVER_LRU_MAX,
+  ttlSeconds: POI_TILE_CONFIG.SERVER_TTL_SECONDS,
 });
-
-// Track cache hits for stats
-let l1Hits = 0;
-let l2Hits = 0;
-let misses = 0;
-
-// ============================================================================
-// Cache Operations (Redis-first)
-// ============================================================================
-
-/**
- * Check L1 (LRU) cache for a tile+factor combination
- */
-function checkL1Cache(cacheKey: string): POI[] | undefined {
-  const result = poiTileLRU.get(cacheKey);
-  if (result !== undefined) {
-    l1Hits++;
-  }
-  return result;
-}
-
-/**
- * Check Redis cache for a tile+factor combination
- */
-async function checkRedisCache(cacheKey: string): Promise<POI[] | null> {
-  const cached = await cacheGet<POI[]>(cacheKey);
-  if (cached) {
-    l2Hits++;
-    // Populate L1 for subsequent reads in same request
-    poiTileLRU.set(cacheKey, cached);
-  } else {
-    misses++;
-  }
-  return cached;
-}
-
-/**
- * Store POIs in cache (Redis-first)
- */
-async function cachePOIs(cacheKey: string, pois: POI[]): Promise<void> {
-  try {
-    // Write to Redis first (primary, persistent)
-    await cacheSet(cacheKey, pois, POI_TILE_CONFIG.SERVER_TTL_SECONDS);
-    // Then populate L1 for same-request reads
-    poiTileLRU.set(cacheKey, pois);
-  } catch (error) {
-    // Still set L1 even if Redis fails
-    poiTileLRU.set(cacheKey, pois);
-  }
-}
 
 // ============================================================================
 // Main API
@@ -107,11 +57,10 @@ async function cachePOIs(cacheKey: string, pois: POI[]): Promise<void> {
  * Get POIs for multiple tiles and factors with efficient batched fetching.
  * 
  * Algorithm:
- * 1. Check LRU cache for all tile+factor combinations (parallel)
- * 2. Check Redis cache for LRU misses (parallel)
- * 3. Batch fetch all remaining uncached combinations in a single query
- * 4. Populate caches with fetched data
- * 5. Merge and deduplicate results
+ * 1. Check cache for all tile+factor combinations (parallel)
+ * 2. Batch fetch all remaining uncached combinations in a single query
+ * 3. Populate caches with fetched data
+ * 4. Merge and deduplicate results
  * 
  * @param tiles - Array of tile coordinates
  * @param factors - Array of factor definitions
@@ -136,53 +85,38 @@ export async function getPoiTilesForArea(
     return result;
   }
 
-  // Step 1: Check L1 cache for all combinations
-  const stopLRUTimer = createTimer('poi-cache:l1-check');
-  const { cached: l1Cached, uncached: l1Misses } = checkAllL1Cache(tiles, factors);
-  stopLRUTimer({ 
+  // Step 1: Check cache for all combinations (parallel)
+  const stopCacheTimer = createTimer('poi-cache:check');
+  const { cached, uncached } = await checkAllCache(tiles, factors);
+  stopCacheTimer({ 
     total: tiles.length * factors.length, 
-    hits: l1Cached.length, 
-    misses: l1Misses.length 
+    hits: cached.length, 
+    misses: uncached.length 
   });
 
-  // Add L1 cached POIs to result
-  for (const item of l1Cached) {
+  // Add cached POIs to result
+  for (const item of cached) {
     if (item.pois) {
-      const existing = result.get(item.factor.id) || [];
-      result.set(item.factor.id, [...existing, ...item.pois]);
-    }
-  }
-
-  // Step 2: Check Redis cache for L1 misses (parallel)
-  if (l1Misses.length > 0) {
-    const stopRedisTimer = createTimer('poi-cache:redis-check');
-    const { cached: redisCached, uncached: stillUncached } = await checkAllRedisCache(l1Misses);
-    stopRedisTimer({ 
-      checked: l1Misses.length, 
-      hits: redisCached.length, 
-      misses: stillUncached.length 
-    });
-
-    // Add Redis cached POIs to result
-    for (const item of redisCached) {
-      if (item.pois) {
-        const existing = result.get(item.factor.id) || [];
-        result.set(item.factor.id, [...existing, ...item.pois]);
+      const existing = result.get(item.factor.id);
+      if (existing) {
+        existing.push(...item.pois);
+      } else {
+        result.set(item.factor.id, [...item.pois]);
       }
     }
-
-    // Step 3: Batch fetch all remaining uncached tiles
-    if (stillUncached.length > 0) {
-      const stopFetchTimer = createTimer('poi-cache:batch-fetch');
-      await fetchAndCacheUncached(stillUncached, dataSource, result);
-      stopFetchTimer({ 
-        combinations: stillUncached.length,
-        dataSource 
-      });
-    }
   }
 
-  // Step 4: Deduplicate results
+  // Step 2: Batch fetch all remaining uncached tiles
+  if (uncached.length > 0) {
+    const stopFetchTimer = createTimer('poi-cache:batch-fetch');
+    await fetchAndCacheUncached(uncached, dataSource, result);
+    stopFetchTimer({ 
+      combinations: uncached.length,
+      dataSource 
+    });
+  }
+
+  // Step 3: Deduplicate results
   const stopDedupTimer = createTimer('poi-cache:dedup');
   const dedupedResult = deduplicateResults(result);
   stopDedupTimer({ factors: factors.length });
@@ -190,54 +124,36 @@ export async function getPoiTilesForArea(
   stopTotalTimer({ 
     tiles: tiles.length, 
     factors: factors.length, 
-    allCached: l1Misses.length === 0 
+    allCached: uncached.length === 0 
   });
   
   return dedupedResult;
 }
 
 // ============================================================================
-// Cache Checking Helpers
+// Cache Checking
 // ============================================================================
 
 /**
- * Check L1 cache for all tile+factor combinations
+ * Check cache for all tile+factor combinations (parallel)
  */
-function checkAllL1Cache(
+async function checkAllCache(
   tiles: TileCoord[],
   factors: FactorDef[]
-): { cached: CacheCheckResult[]; uncached: CacheCheckResult[] } {
-  const cached: CacheCheckResult[] = [];
-  const uncached: CacheCheckResult[] = [];
-
+): Promise<{ cached: CacheCheckResult[]; uncached: CacheCheckResult[] }> {
+  // Build all cache check items
+  const items: Omit<CacheCheckResult, 'pois'>[] = [];
   for (const tile of tiles) {
     for (const factor of factors) {
       const cacheKey = getPoiTileKey(tile.z, tile.x, tile.y, factor.id);
-      const pois = checkL1Cache(cacheKey);
-      
-      const item: CacheCheckResult = { tile, factor, cacheKey, pois: pois ?? null };
-      
-      if (pois !== undefined) {
-        cached.push(item);
-      } else {
-        uncached.push(item);
-      }
+      items.push({ tile, factor, cacheKey });
     }
   }
 
-  return { cached, uncached };
-}
-
-/**
- * Check Redis cache for all uncached combinations (parallel)
- */
-async function checkAllRedisCache(
-  items: CacheCheckResult[]
-): Promise<{ cached: CacheCheckResult[]; uncached: CacheCheckResult[] }> {
-  // Parallel Redis lookups
+  // Parallel cache lookups
   const results = await Promise.all(
     items.map(async (item) => {
-      const pois = await checkRedisCache(item.cacheKey);
+      const pois = await poiTileCache.get(item.cacheKey);
       return { ...item, pois };
     })
   );
@@ -276,11 +192,15 @@ async function fetchAndCacheUncached(
     const pois = tileData?.[item.factor.id] || [];
 
     // Cache the result (async)
-    cachePromises.push(cachePOIs(item.cacheKey, pois));
+    cachePromises.push(poiTileCache.set(item.cacheKey, pois));
 
     // Add to result
-    const existing = result.get(item.factor.id) || [];
-    result.set(item.factor.id, [...existing, ...pois]);
+    const existing = result.get(item.factor.id);
+    if (existing) {
+      existing.push(...pois);
+    } else {
+      result.set(item.factor.id, [...pois]);
+    }
   }
   
   // Wait for all cache writes to complete
@@ -349,6 +269,9 @@ function deduplicateResults(result: Map<string, POI[]>): Map<string, POI[]> {
 // Viewport Filtering
 // ============================================================================
 
+/** Default buffer for viewport filtering (~100m) */
+const DEFAULT_VIEWPORT_BUFFER = 0.001;
+
 /**
  * Filter POIs to viewport bounds with optional buffer
  * 
@@ -360,27 +283,9 @@ function deduplicateResults(result: Map<string, POI[]>): Map<string, POI[]> {
 export function filterPoisToViewport(
   poiData: Map<string, POI[]>,
   bounds: Bounds,
-  buffer: number = 0.001
+  buffer: number = DEFAULT_VIEWPORT_BUFFER
 ): Record<string, POI[]> {
-  const result: Record<string, POI[]> = {};
-  
-  const expandedBounds = {
-    south: bounds.south - buffer,
-    north: bounds.north + buffer,
-    west: bounds.west - buffer,
-    east: bounds.east + buffer,
-  };
-
-  for (const [factorId, pois] of poiData) {
-    result[factorId] = pois.filter(poi =>
-      poi.lat >= expandedBounds.south &&
-      poi.lat <= expandedBounds.north &&
-      poi.lng >= expandedBounds.west &&
-      poi.lng <= expandedBounds.east
-    );
-  }
-
-  return result;
+  return filterPoisToBounds(poiData, bounds, buffer);
 }
 
 // ============================================================================
@@ -390,18 +295,6 @@ export function filterPoisToViewport(
 /**
  * Get cache statistics
  */
-export function getPoiTileCacheStats(): { 
-  size: number; 
-  max: number;
-  l1Hits: number;
-  l2Hits: number;
-  misses: number;
-} {
-  return {
-    size: poiTileLRU.size,
-    max: POI_TILE_CONFIG.SERVER_LRU_MAX,
-    l1Hits,
-    l2Hits,
-    misses,
-  };
+export function getPoiTileCacheStats(): CacheStats {
+  return poiTileCache.getStats();
 }

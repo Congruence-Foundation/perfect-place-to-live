@@ -2,12 +2,7 @@
  * Custom error classes for consistent error handling across the application
  */
 
-/**
- * Data source for POI fetching
- * - neon: PostgreSQL database (fast, pre-cached)
- * - overpass: Overpass API (real-time, slower)
- */
-export type POIDataSource = 'neon' | 'overpass';
+import type { POIDataSource } from '@/types/poi';
 
 /**
  * Error thrown when POI fetching fails

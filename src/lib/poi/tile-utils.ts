@@ -2,11 +2,9 @@
  * Shared utilities for distributing POIs to tiles
  */
 
-import type { Bounds, POI } from '@/types';
+import type { POI } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
-import { tileToBounds } from '@/lib/geo/grid';
-import { isPointInBounds } from '@/lib/geo/bounds';
-import { getTileKeyString } from '@/lib/geo/tiles';
+import { getTileKeyString, latLngToTile } from '@/lib/geo/tiles';
 
 /**
  * Initialize an empty result map with arrays for each tile and factor
@@ -30,34 +28,24 @@ export function initializeTileResultMap(
 }
 
 /**
- * Pre-compute tile bounds for efficient lookup
+ * Find which tile contains a given point using direct coordinate calculation.
+ * O(1) lookup instead of O(tiles) linear search.
+ * 
+ * @param lat - Latitude of the point
+ * @param lng - Longitude of the point
+ * @param zoom - Zoom level of the tiles
+ * @param validTileKeys - Set of valid tile keys to check against
+ * @returns The tile key or undefined if not in any valid tile
  */
-export function computeTileBoundsMap(tiles: TileCoord[]): Map<string, Bounds> {
-  const tileBoundsMap = new Map<string, Bounds>();
-  
-  for (const tile of tiles) {
-    const key = getTileKeyString(tile);
-    tileBoundsMap.set(key, tileToBounds(tile.z, tile.x, tile.y));
-  }
-  
-  return tileBoundsMap;
-}
-
-/**
- * Find which tile contains a given point
- * Returns the tile key or undefined if not found
- */
-export function findTileForPoint(
+export function findTileForPointFast(
   lat: number,
   lng: number,
-  tileBoundsMap: Map<string, Bounds>
+  zoom: number,
+  validTileKeys: Set<string>
 ): string | undefined {
-  for (const [tileKey, bounds] of tileBoundsMap) {
-    if (isPointInBounds(lat, lng, bounds)) {
-      return tileKey;
-    }
-  }
-  return undefined;
+  const tile = latLngToTile(lat, lng, zoom);
+  const key = getTileKeyString(tile);
+  return validTileKeys.has(key) ? key : undefined;
 }
 
 /**
@@ -77,19 +65,31 @@ export function assignPOIToTile(
 
 /**
  * Distribute POIs from a factor-keyed object to their respective tiles
- * Generic version that can be used by both db.ts and overpass.ts
+ * Uses O(1) tile lookup for better performance with large POI sets
  */
 export function distributePOIsByFactorToTiles(
   poisByFactor: Record<string, POI[]>,
   tiles: TileCoord[],
   factorIds: string[]
 ): Map<string, Record<string, POI[]>> {
-  const tileBoundsMap = computeTileBoundsMap(tiles);
+  if (tiles.length === 0) {
+    return new Map();
+  }
+
+  // Get zoom level from first tile (all tiles should have same zoom)
+  const zoom = tiles[0].z;
+  
+  // Build set of valid tile keys for O(1) lookup
+  const validTileKeys = new Set<string>();
+  for (const tile of tiles) {
+    validTileKeys.add(getTileKeyString(tile));
+  }
+  
   const result = initializeTileResultMap(tiles, factorIds);
 
   for (const [factorId, pois] of Object.entries(poisByFactor)) {
     for (const poi of pois) {
-      const tileKey = findTileForPoint(poi.lat, poi.lng, tileBoundsMap);
+      const tileKey = findTileForPointFast(poi.lat, poi.lng, zoom, validTileKeys);
       
       if (tileKey) {
         assignPOIToTile(poi, factorId, tileKey, result);

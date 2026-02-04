@@ -10,11 +10,11 @@
 
 // Calculator functions
 export {
-  calculateK,
   calculateHeatmap,
   calculateFactorBreakdown,
   normalizeKValues,
   logKStats,
+  buildSpatialIndexes,
 } from './calculator';
 
 export type { FactorBreakdown, FactorBreakdownResult } from './calculator';

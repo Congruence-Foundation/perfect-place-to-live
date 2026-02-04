@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchClusterProperties } from '@/extensions/real-estate/lib';
 import { PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/extensions/real-estate/types';
-import { errorResponse } from '@/lib/api-utils';
+import { errorResponse, handleApiError } from '@/lib/api-utils';
 import { CLUSTER_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
@@ -60,7 +60,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Cluster properties API error:', error);
-    return errorResponse(error, 500);
+    return handleApiError(error, { context: 'Cluster properties API' });
   }
 }

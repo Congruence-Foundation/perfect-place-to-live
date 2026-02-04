@@ -2,17 +2,46 @@ import type { OtodomProperty, EnrichedProperty } from '../types';
 import { isEnrichedProperty } from '../types';
 import { formatPrice, roomCountToNumber } from '@/lib/format';
 import { generatePriceAnalysisBadgeHtml } from './markers';
+import { PROPERTY_MARKER_COLORS, getPricePerMeter } from '../lib';
+
+/**
+ * Translations for property popups
+ */
+export interface PropertyPopupTranslations {
+  house: string;
+  flat: string;
+  priceNegotiable: string;
+  rooms: string;
+  loadingOffers: string;
+  noOffersFound: string;
+}
+
+// Legacy alias for backwards compatibility
+export type PopupTranslations = PropertyPopupTranslations;
+
+/**
+ * Default English translations for popups
+ * Used when translations are not provided
+ */
+export const DEFAULT_POPUP_TRANSLATIONS: PropertyPopupTranslations = {
+  house: 'House',
+  flat: 'Apartment',
+  priceNegotiable: 'Price negotiable',
+  rooms: 'rooms',
+  loadingOffers: 'Loading {count} offers...',
+  noOffersFound: 'No offers found in this area',
+};
 
 /**
  * Generate popup HTML for a single property
  */
 export function generatePropertyPopupHtml(
   property: EnrichedProperty,
-  galleryId: string
+  galleryId: string,
+  translations: PropertyPopupTranslations = DEFAULT_POPUP_TRANSLATIONS
 ): string {
-  const pricePerMeter = property.areaInSquareMeters > 0
-    ? Math.round(property.totalPrice.value / property.areaInSquareMeters)
-    : null;
+  const pricePerMeter = getPricePerMeter(property);
+  const pricePerMeterRounded = pricePerMeter !== null ? Math.round(pricePerMeter) : null;
 
   // Create image gallery HTML if multiple images
   const imageCount = property.images.length;
@@ -20,8 +49,8 @@ export function generatePropertyPopupHtml(
 
   // Property type badge
   const isHouse = property.estate === 'HOUSE';
-  const typeBadgeColor = isHouse ? '#16a34a' : '#3b82f6';
-  const typeBadgeText = isHouse ? 'Dom' : 'Mieszkanie';
+  const typeBadgeColor = PROPERTY_MARKER_COLORS[property.estate] || PROPERTY_MARKER_COLORS.FLAT;
+  const typeBadgeText = isHouse ? translations.house : translations.flat;
   
   if (imageCount > 0) {
     const imagesJson = JSON.stringify(property.images.map(img => img.medium)).replace(/"/g, '&quot;');
@@ -100,15 +129,15 @@ export function generatePropertyPopupHtml(
         </a>
         <!-- Price -->
         <div style="font-size: 16px; font-weight: 700; color: #16a34a; margin-bottom: 8px;">
-          ${property.hidePrice ? 'Cena do negocjacji' : formatPrice(property.totalPrice.value, property.totalPrice.currency)}
+          ${property.hidePrice ? translations.priceNegotiable : formatPrice(property.totalPrice.value, property.totalPrice.currency)}
         </div>
         <!-- Price Analysis Badge -->
         ${priceAnalysisBadgeHtml}
         <!-- Property details -->
         <div style="display: flex; align-items: center; gap: 4px; color: #4b5563; font-size: 12px;">
           <span style="font-weight: 500;">${property.areaInSquareMeters} m²</span>
-          ${roomsDisplay ? `<span style="color: #9ca3af;">•</span><span style="font-weight: 500;">${roomsDisplay} pok.</span>` : ''}
-          ${pricePerMeter ? `<span style="color: #9ca3af;">•</span><span style="color: #6b7280;">${pricePerMeter.toLocaleString('pl-PL')} PLN/m²</span>` : ''}
+          ${roomsDisplay ? `<span style="color: #9ca3af;">•</span><span style="font-weight: 500;">${roomsDisplay} ${translations.rooms}</span>` : ''}
+          ${pricePerMeterRounded ? `<span style="color: #9ca3af;">•</span><span style="color: #6b7280;">${pricePerMeterRounded.toLocaleString('pl-PL')} PLN/m²</span>` : ''}
         </div>
       </div>
     </div>
@@ -124,15 +153,15 @@ export function generateClusterPropertyPopupHtml(
   currentIndex: number,
   totalCount: number,
   fetchedCount: number,
-  imageIndex: number = 0
+  imageIndex: number = 0,
+  translations: PopupTranslations = DEFAULT_POPUP_TRANSLATIONS
 ): string {
   const isHouse = property.estate === 'HOUSE';
-  const typeBadgeColor = isHouse ? '#16a34a' : '#3b82f6';
-  const typeBadgeText = isHouse ? 'Dom' : 'Mieszkanie';
+  const typeBadgeColor = PROPERTY_MARKER_COLORS[property.estate] || PROPERTY_MARKER_COLORS.FLAT;
+  const typeBadgeText = isHouse ? translations.house : translations.flat;
   const roomsDisplay = property.roomsNumber ? roomCountToNumber(property.roomsNumber) : null;
-  const pricePerMeter = property.areaInSquareMeters > 0
-    ? Math.round(property.totalPrice.value / property.areaInSquareMeters)
-    : null;
+  const pricePerMeter = getPricePerMeter(property);
+  const pricePerMeterRounded = pricePerMeter !== null ? Math.round(pricePerMeter) : null;
   
   const hasMultipleImages = property.images.length > 1;
   const currentImage = property.images[imageIndex] || property.images[0];
@@ -202,13 +231,13 @@ export function generateClusterPropertyPopupHtml(
           </svg>
         </a>
         <div style="font-size: 15px; font-weight: 700; color: #16a34a; margin-bottom: 6px;">
-          ${property.hidePrice ? 'Cena do negocjacji' : `${property.totalPrice.value.toLocaleString('pl-PL')} ${property.totalPrice.currency}`}
+          ${property.hidePrice ? translations.priceNegotiable : `${property.totalPrice.value.toLocaleString('pl-PL')} ${property.totalPrice.currency}`}
         </div>
         ${clusterPriceAnalysisBadgeHtml}
         <div style="display: flex; align-items: center; gap: 4px; color: #4b5563; margin-bottom: 8px; font-size: 11px;">
           <span style="font-weight: 500;">${property.areaInSquareMeters} m²</span>
-          ${roomsDisplay ? `<span style="color: #9ca3af;">•</span><span style="font-weight: 500;">${roomsDisplay} pok.</span>` : ''}
-          ${pricePerMeter ? `<span style="color: #9ca3af;">•</span><span style="color: #6b7280;">${pricePerMeter.toLocaleString('pl-PL')} PLN/m²</span>` : ''}
+          ${roomsDisplay ? `<span style="color: #9ca3af;">•</span><span style="font-weight: 500;">${roomsDisplay} ${translations.rooms}</span>` : ''}
+          ${pricePerMeterRounded ? `<span style="color: #9ca3af;">•</span><span style="color: #6b7280;">${pricePerMeterRounded.toLocaleString('pl-PL')} PLN/m²</span>` : ''}
         </div>
         
         <!-- Subtle pagination at bottom -->
@@ -231,11 +260,15 @@ export function generateClusterPropertyPopupHtml(
 /**
  * Generate loading popup HTML for clusters
  */
-export function generateLoadingPopupHtml(count: number): string {
+export function generateLoadingPopupHtml(
+  count: number,
+  translations: PopupTranslations = DEFAULT_POPUP_TRANSLATIONS
+): string {
+  const loadingText = translations.loadingOffers.replace('{count}', String(count));
   return `
     <div style="min-width: 200px; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
       <div style="display: inline-block; width: 24px; height: 24px; border: 2px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-      <div style="margin-top: 12px; color: #6b7280; font-size: 12px;">Ładowanie ${count} ofert...</div>
+      <div style="margin-top: 12px; color: #6b7280; font-size: 12px;">${loadingText}</div>
       <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
     </div>
   `;

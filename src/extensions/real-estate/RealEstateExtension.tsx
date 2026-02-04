@@ -1,7 +1,7 @@
 'use client';
 
 import type { MapExtension } from '@/extensions/types';
-import { RealEstateSidebarPanel, RealEstateBottomSheetContent, RealEstateDebugPanel, RealEstateSettingsPanel } from './components';
+import { RealEstateSidebarPanel, RealEstateFiltersContent, RealEstateDebugPanel, RealEstateSettingsPanel } from './components';
 import { RealEstateController } from './RealEstateController';
 
 // Extension ID
@@ -17,7 +17,7 @@ export function createRealEstateExtension(): MapExtension {
     description: 'Display property listings from Otodom on the map',
     Controller: RealEstateController,
     SidebarPanel: RealEstateSidebarPanel,
-    BottomSheetContent: RealEstateBottomSheetContent,
+    BottomSheetContent: RealEstateFiltersContent,
     DebugPanel: RealEstateDebugPanel,
     SettingsPanel: RealEstateSettingsPanel,
   };

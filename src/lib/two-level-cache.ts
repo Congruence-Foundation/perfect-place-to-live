@@ -52,7 +52,7 @@ export interface TwoLevelCache<T> {
  * @param config - Cache configuration
  * @returns Cache instance with get, set, and getStats methods
  */
-export function createTwoLevelCache<T>(config: CacheConfig): TwoLevelCache<T> {
+export function createTwoLevelCache<T extends object>(config: CacheConfig): TwoLevelCache<T> {
   const { name, maxSize, ttlSeconds } = config;
 
   const lruCache = new LRUCache<string, T>({
@@ -142,9 +142,8 @@ export function createTwoLevelCache<T>(config: CacheConfig): TwoLevelCache<T> {
  * @param config - Cache configuration
  * @returns Cache instance with get, set, and getStats methods
  */
-export function createLRUCache<T>(config: CacheConfig): TwoLevelCache<T> {
-  const { name, maxSize, ttlSeconds } = config;
-  void name; // Unused but kept for API consistency with createTwoLevelCache
+export function createLRUCache<T extends object>(config: CacheConfig): TwoLevelCache<T> {
+  const { maxSize, ttlSeconds } = config;
 
   const lruCache = new LRUCache<string, T>({
     max: maxSize,

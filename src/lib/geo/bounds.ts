@@ -75,8 +75,13 @@ export function isPointInBounds(lat: number, lng: number, bounds: Bounds): boole
  * 
  * @param tiles - Array of tile coordinates
  * @returns Combined bounds covering all tiles
+ * @throws Error if tiles array is empty
  */
 export function getCombinedBounds(tiles: TileCoord[]): Bounds {
+  if (tiles.length === 0) {
+    throw new Error('Cannot compute bounds for empty tile array');
+  }
+
   let north = -Infinity;
   let south = Infinity;
   let east = -Infinity;
@@ -99,15 +104,25 @@ export function getCombinedBounds(tiles: TileCoord[]): Bounds {
  * 
  * @param poiData - Map of factor ID to POI array
  * @param bounds - Geographic bounds to filter by
+ * @param buffer - Optional buffer distance in degrees (default 0)
  * @returns Record of factor ID to filtered POI array
  */
 export function filterPoisToBounds(
   poiData: Map<string, POI[]>,
-  bounds: Bounds
+  bounds: Bounds,
+  buffer: number = 0
 ): Record<string, POI[]> {
   const result: Record<string, POI[]> = {};
+  
+  const effectiveBounds = buffer > 0 ? {
+    south: bounds.south - buffer,
+    north: bounds.north + buffer,
+    west: bounds.west - buffer,
+    east: bounds.east + buffer,
+  } : bounds;
+  
   poiData.forEach((pois, factorId) => {
-    result[factorId] = pois.filter((poi) => isPointInBounds(poi.lat, poi.lng, bounds));
+    result[factorId] = pois.filter((poi) => isPointInBounds(poi.lat, poi.lng, effectiveBounds));
   });
   return result;
 }

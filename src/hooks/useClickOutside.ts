@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, RefObject } from 'react';
+import { useEffect, RefObject } from 'react';
+import { useLatestRef } from './useLatestRef';
 
 /**
  * Hook that detects clicks outside of a referenced element
  * 
- * Uses a ref pattern for the callback to avoid re-subscribing
+ * Uses useLatestRef for the callback to avoid re-subscribing
  * to the event listener when the callback changes.
  * 
  * @param ref - React ref to the element to monitor
@@ -19,13 +20,8 @@ export function useClickOutside(
   ref: RefObject<HTMLElement | null>,
   callback: () => void
 ): void {
-  // Store callback in a ref to avoid re-subscribing on every render
-  const callbackRef = useRef(callback);
-  
-  // Update the ref when callback changes
-  useEffect(() => {
-    callbackRef.current = callback;
-  });
+  // Use useLatestRef to keep callback up-to-date without re-subscribing
+  const callbackRef = useLatestRef(callback);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -36,5 +32,5 @@ export function useClickOutside(
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [ref]); // Only ref in deps - callback is accessed via ref
+  }, [ref, callbackRef]); // callbackRef is stable, so this won't cause re-subscriptions
 }

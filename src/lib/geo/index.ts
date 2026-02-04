@@ -23,7 +23,6 @@ export {
   snapBoundsForCacheKey,
   isValidBounds,
   expandBounds,
-  isPointInBounds,
   getCombinedBounds,
   filterPoisToBounds,
 } from './bounds';
@@ -42,6 +41,7 @@ export {
 export {
   type TileCoord,
   getTileKeyString,
+  latLngToTile,
   PROPERTY_TILE_ZOOM,
   getExpandedTilesForRadius,
   hashFilters,

@@ -7,10 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RangeInput, ToggleButtonGroup, FilterSelect, EstateTypeToggle } from './filters';
-import {
+import type {
   PropertyFilters,
   RoomCount,
-  EstateType,
   MarketType,
   OwnerType,
   FloorLevel,

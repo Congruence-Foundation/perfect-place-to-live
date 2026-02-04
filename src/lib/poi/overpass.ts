@@ -1,27 +1,37 @@
 import type { Bounds, POI, FactorDef } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
-import { getCombinedBounds, OVERPASS_API_URL } from '@/lib/geo';
+import { getCombinedBounds, OVERPASS_API_URL, snapBoundsForCacheKey } from '@/lib/geo';
 import { OVERPASS_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
 import {
   distributePOIsByFactorToTiles,
 } from './tile-utils';
 
-// Rate limiting: track last request time
+// Rate limiting: track last request time and pending promise for request coalescing
 let lastRequestTime = 0;
+let rateLimitPromise: Promise<void> | null = null;
 
 /** Minimum interval between Overpass API requests (ms) */
 const MIN_REQUEST_INTERVAL_MS = 200;
 
 /**
- * Wait for rate limit
+ * Wait for rate limit with mutex pattern to prevent race conditions
+ * Multiple concurrent calls will queue up properly
  */
 async function waitForRateLimit(): Promise<void> {
+  // Wait for any pending rate limit to complete first
+  while (rateLimitPromise) {
+    await rateLimitPromise;
+  }
+  
   const now = Date.now();
   const timeSinceLastRequest = now - lastRequestTime;
   
   if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
-    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest));
+    const waitTime = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
+    rateLimitPromise = new Promise(resolve => setTimeout(resolve, waitTime));
+    await rateLimitPromise;
+    rateLimitPromise = null;
   }
   
   lastRequestTime = Date.now();
@@ -158,12 +168,27 @@ function formatBbox(bounds: Bounds): string {
 }
 
 /**
+ * Parse an OSM tag string into key and value
+ * Handles tags that may contain '=' in the value (e.g., "name=Café=Bar")
+ */
+function parseOsmTag(tag: string): { key: string; value: string } {
+  const eqIndex = tag.indexOf('=');
+  if (eqIndex === -1) {
+    return { key: tag, value: '' };
+  }
+  return {
+    key: tag.slice(0, eqIndex),
+    value: tag.slice(eqIndex + 1),
+  };
+}
+
+/**
  * Build tag queries for a set of OSM tags
  */
 function buildTagQueries(osmTags: string[], bbox: string): string {
   return osmTags
     .map(tag => {
-      const [key, value] = tag.split('=');
+      const { key, value } = parseOsmTag(tag);
       return `
         node["${key}"="${value}"](${bbox});
         way["${key}"="${value}"](${bbox});
@@ -221,7 +246,7 @@ function categorizePOIsByFactor(
  */
 function matchesAnyTag(poiTags: Record<string, string>, osmTags: string[]): boolean {
   return osmTags.some(tagStr => {
-    const [key, value] = tagStr.split('=');
+    const { key, value } = parseOsmTag(tagStr);
     return poiTags[key] === value;
   });
 }
@@ -274,7 +299,7 @@ export async function fetchAllPOIsCombined(
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `data=${encodeURIComponent(query)}`,
     },
-    { retries, signal, baseDelayMs: 2000 }
+    { retries, signal, baseDelayMs: OVERPASS_CONFIG.COMBINED_BASE_DELAY_MS }
   );
 
   const data: OverpassResponse = await response.json();
@@ -325,14 +350,7 @@ const CACHE_KEY_PRECISION = 2;
  * Generate a cache key for POI queries
  */
 export function generatePOICacheKey(factorId: string, bounds: Bounds): string {
-  // Round bounds to reduce cache fragmentation
-  const multiplier = 10 ** CACHE_KEY_PRECISION;
-  const roundedBounds = {
-    south: Math.floor(bounds.south * multiplier) / multiplier,
-    west: Math.floor(bounds.west * multiplier) / multiplier,
-    north: Math.ceil(bounds.north * multiplier) / multiplier,
-    east: Math.ceil(bounds.east * multiplier) / multiplier,
-  };
-
-  return `poi:${factorId}:${roundedBounds.south},${roundedBounds.west},${roundedBounds.north},${roundedBounds.east}`;
+  // Use shared bounds snapping utility
+  const snapped = snapBoundsForCacheKey(bounds, CACHE_KEY_PRECISION);
+  return `poi:${factorId}:${snapped.south},${snapped.west},${snapped.north},${snapped.east}`;
 }

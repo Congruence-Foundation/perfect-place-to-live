@@ -15,5 +15,7 @@ export {
   FETCH_CONFIG,
   CANVAS_CONFIG,
   COORDINATE_CONFIG,
+  PARALLEL_CONFIG,
+  WEIGHT_THRESHOLDS,
 } from './performance';
 export { Z_INDEX } from './z-index';

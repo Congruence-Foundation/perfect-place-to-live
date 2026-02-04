@@ -1,7 +1,8 @@
 'use client';
 
 import { Notification } from '@/hooks/useNotification';
-const DEFAULT_TOAST_DURATION_MS = 3000;
+import { UI_CONFIG } from '@/constants/performance';
+import { Z_INDEX } from '@/constants/z-index';
 
 interface ToastProps {
   notification: Notification | null;
@@ -10,11 +11,12 @@ interface ToastProps {
 export function Toast({ notification }: ToastProps) {
   if (!notification) return null;
 
-  const duration = notification.duration || DEFAULT_TOAST_DURATION_MS;
+  const duration = notification.duration || UI_CONFIG.NOTIFICATION_DURATION_MS;
 
   return (
     <div 
-      className="absolute z-[1000] top-[72px] left-0 right-0 flex justify-center pointer-events-none"
+      className="absolute top-[72px] left-0 right-0 flex justify-center pointer-events-none"
+      style={{ zIndex: Z_INDEX.FLOATING_CONTROLS }}
       role="alert"
       aria-live="polite"
     >

@@ -46,10 +46,24 @@ export const DEFAULT_FALLBACK_COLOR = '#6b7280';
 export const SCORE_COLORS = {
   /** Good score (low K value) - Green-500 */
   GOOD: '#22c55e',
-  /** Average score - Yellow-500 */
-  AVERAGE: '#eab308',
+  /** Average score - Amber-500 (aligned with SCORE_GRADIENT) */
+  AVERAGE: '#f59e0b',
   /** Poor score (high K value) - Red-500 */
   POOR: '#ef4444',
+} as const;
+
+/**
+ * Score gradient colors for range sliders and visualizations
+ * Red (poor) -> Amber (average) -> Green (excellent)
+ * Uses SCREAMING_SNAKE_CASE for consistency with SCORE_COLORS
+ */
+export const SCORE_GRADIENT = {
+  /** Poor score color - Red-500 */
+  POOR: '#ef4444',
+  /** Average score color - Amber-500 */
+  AVERAGE: '#f59e0b',
+  /** Excellent score color - Green-500 */
+  EXCELLENT: '#22c55e',
 } as const;
 
 /**

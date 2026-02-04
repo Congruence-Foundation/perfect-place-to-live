@@ -1,8 +1,5 @@
-import { Bounds } from './poi';
-import { Factor } from './factors';
-import { POI } from './poi';
-import { POIDataSource } from '@/lib/errors';
-import type { ClusterPriceDisplay } from '@/extensions/real-estate/types';
+import type { Bounds, POIDataSource } from './poi';
+import type { Factor } from './factors';
 
 export type DistanceCurve = 'linear' | 'log' | 'exp' | 'power';
 
@@ -14,8 +11,13 @@ export type DistanceCurve = 'linear' | 'log' | 'exp' | 'power';
  */
 export type ClusterPriceAnalysisMode = 'off' | 'simplified' | 'detailed';
 
+/**
+ * Cluster price display mode
+ */
+export type ClusterPriceDisplay = 'none' | 'range' | 'median' | 'median_spread';
+
 // Re-export POIDataSource type for convenience
-export type { POIDataSource } from '@/lib/errors';
+export type { POIDataSource } from './poi';
 
 export interface HeatmapPoint {
   lat: number;

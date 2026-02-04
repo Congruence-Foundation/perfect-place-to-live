@@ -6,6 +6,7 @@ import { Bug, AlertCircle } from 'lucide-react';
 import { ExtensionsDebugPanel } from './ExtensionsDebugPanel';
 import { PanelHeader } from '@/components/ui/panel-header';
 import { PanelToggleButton } from './PanelToggleButton';
+import { FloatingPanel } from './FloatingPanel';
 import { Z_INDEX } from '@/constants/z-index';
 
 interface L2CacheStatus {
@@ -59,7 +60,8 @@ export default function DebugInfo({
           redisKeyCount: data.cache.redisStats?.keyCount,
         });
       })
-      .catch(() => {});
+      // Silently ignore errors - cache status is non-critical debug info
+      .catch(() => setL2Status(null));
   }, [isOpen, l2Status]);
 
   // Reset L2 status when panel closes so it refetches on next open
@@ -77,110 +79,111 @@ export default function DebugInfo({
       className={isMobile ? 'relative' : 'absolute bottom-4 left-4'}
       style={{ zIndex: Z_INDEX.FLOATING_CONTROLS }}
     >
-      {/* Expanded Panel - Absolutely positioned above the button */}
-      {isOpen && (
-        <div className="absolute bottom-12 left-0 bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 w-56 animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <PanelHeader title={t('title')} onClose={() => setIsOpen(false)} />
+      <FloatingPanel
+        isOpen={isOpen}
+        position="bottom-left"
+        width="w-56"
+      >
+        <PanelHeader title={t('title')} onClose={() => setIsOpen(false)} />
 
-          <div className="space-y-2 text-xs">
-            {/* Map Info Section */}
-            {zoomLevel !== undefined && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{t('zoomLevel')}</span>
-                <span className="font-mono font-medium">{zoomLevel.toFixed(1)}</span>
-              </div>
-            )}
-            
-            {/* Heatmap Section */}
+        <div className="space-y-2 text-xs">
+          {/* Map Info Section */}
+          {zoomLevel !== undefined && (
             <div className="flex justify-between">
-              <span className="text-muted-foreground">{t('activeFactors')}</span>
-              <span className="font-mono font-medium">{enabledFactorCount}</span>
+              <span className="text-muted-foreground">{t('zoomLevel')}</span>
+              <span className="font-mono font-medium">{zoomLevel.toFixed(1)}</span>
             </div>
-            {metadata && (
-              <>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{t('gridPoints')}</span>
-                  <span className="font-mono font-medium">{metadata.pointCount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{t('poisLoaded')}</span>
-                  <span className="font-mono font-medium">{totalPOICount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{t('computeTime')}</span>
-                  <span className="font-mono font-medium">{metadata.computeTimeMs}ms</span>
-                </div>
-              </>
-            )}
-            {error && (
-              <div className="flex items-center gap-1.5 text-destructive mt-2 pt-2 border-t">
-                <AlertCircle className="h-3 w-3 flex-shrink-0" />
-                <span className="truncate">{error}</span>
-              </div>
-            )}
-            
-            {/* Extension Debug Panels - Self-contained (rendered at the end) */}
-            <ExtensionsDebugPanel />
-            
-            {/* Cache Section */}
-            {(l2Status || l1CacheStats) && (
-              <>
-                <div className="border-t pt-2 mt-2">
-                  <span className="text-muted-foreground text-[10px] uppercase tracking-wide">{t('cache')}</span>
-                </div>
-                
-                {/* L2 - Redis/Memory (fetched once on panel open) */}
-                {l2Status && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">L2</span>
-                      <span className={`font-mono font-medium ${l2Status.type === 'redis' && l2Status.connected ? 'text-green-500' : 'text-yellow-500'}`}>
-                        {l2Status.type === 'redis' 
-                          ? `Redis ${l2Status.connected ? `(${l2Status.latencyMs}ms)` : '(err)'}`
-                          : 'Memory'
-                        }
-                      </span>
-                    </div>
-                    {l2Status.type === 'redis' && l2Status.redisKeyCount !== undefined && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">L2 Keys</span>
-                        <span className="font-mono font-medium">{l2Status.redisKeyCount.toLocaleString()}</span>
-                      </div>
-                    )}
-                  </>
-                )}
-                
-                {/* Cache hit stats (from heatmap API response - no extra requests) */}
-                {l1CacheStats && (
-                  <div className="mt-1 space-y-1">
-                    {/* Header row */}
-                    <div className="grid grid-cols-4 gap-1 text-[10px] text-muted-foreground">
-                      <span></span>
-                      <span className="text-right">L1</span>
-                      <span className="text-right">L2</span>
-                      <span className="text-right">Miss</span>
-                    </div>
-                    {/* Heatmap row */}
-                    <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
-                      <span className="text-muted-foreground">Heatmap</span>
-                      <span className="text-right font-medium">{l1CacheStats.heatmap.l1Hits}</span>
-                      <span className="text-right font-medium">{l1CacheStats.heatmap.l2Hits}</span>
-                      <span className="text-right font-medium">{l1CacheStats.heatmap.misses}</span>
-                    </div>
-                    {/* POI row */}
-                    <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
-                      <span className="text-muted-foreground">POI</span>
-                      <span className="text-right font-medium">{l1CacheStats.poi.l1Hits}</span>
-                      <span className="text-right font-medium">{l1CacheStats.poi.l2Hits}</span>
-                      <span className="text-right font-medium">{l1CacheStats.poi.misses}</span>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+          )}
+          
+          {/* Heatmap Section */}
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">{t('activeFactors')}</span>
+            <span className="font-mono font-medium">{enabledFactorCount}</span>
           </div>
+          {metadata && (
+            <>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('gridPoints')}</span>
+                <span className="font-mono font-medium">{metadata.pointCount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('poisLoaded')}</span>
+                <span className="font-mono font-medium">{totalPOICount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('computeTime')}</span>
+                <span className="font-mono font-medium">{metadata.computeTimeMs}ms</span>
+              </div>
+            </>
+          )}
+          {error && (
+            <div className="flex items-center gap-1.5 text-destructive mt-2 pt-2 border-t">
+              <AlertCircle className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{error}</span>
+            </div>
+          )}
+          
+          {/* Extension Debug Panels - Self-contained (rendered at the end) */}
+          <ExtensionsDebugPanel />
+          
+          {/* Cache Section */}
+          {(l2Status || l1CacheStats) && (
+            <>
+              <div className="border-t pt-2 mt-2">
+                <span className="text-muted-foreground text-[10px] uppercase tracking-wide">{t('cache')}</span>
+              </div>
+              
+              {/* L2 - Redis/Memory (fetched once on panel open) */}
+              {l2Status && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">L2</span>
+                    <span className={`font-mono font-medium ${l2Status.type === 'redis' && l2Status.connected ? 'text-green-500' : 'text-yellow-500'}`}>
+                      {l2Status.type === 'redis' 
+                        ? `Redis ${l2Status.connected ? `(${l2Status.latencyMs}ms)` : '(err)'}`
+                        : 'Memory'
+                      }
+                    </span>
+                  </div>
+                  {l2Status.type === 'redis' && l2Status.redisKeyCount !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">L2 Keys</span>
+                      <span className="font-mono font-medium">{l2Status.redisKeyCount.toLocaleString()}</span>
+                    </div>
+                  )}
+                </>
+              )}
+              
+              {/* Cache hit stats (from heatmap API response - no extra requests) */}
+              {l1CacheStats && (
+                <div className="mt-1 space-y-1">
+                  {/* Header row */}
+                  <div className="grid grid-cols-4 gap-1 text-[10px] text-muted-foreground">
+                    <span></span>
+                    <span className="text-right">L1</span>
+                    <span className="text-right">L2</span>
+                    <span className="text-right">Miss</span>
+                  </div>
+                  {/* Heatmap row */}
+                  <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
+                    <span className="text-muted-foreground">Heatmap</span>
+                    <span className="text-right font-medium">{l1CacheStats.heatmap.l1Hits}</span>
+                    <span className="text-right font-medium">{l1CacheStats.heatmap.l2Hits}</span>
+                    <span className="text-right font-medium">{l1CacheStats.heatmap.misses}</span>
+                  </div>
+                  {/* POI row */}
+                  <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
+                    <span className="text-muted-foreground">POI</span>
+                    <span className="text-right font-medium">{l1CacheStats.poi.l1Hits}</span>
+                    <span className="text-right font-medium">{l1CacheStats.poi.l2Hits}</span>
+                    <span className="text-right font-medium">{l1CacheStats.poi.misses}</span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
-      )}
+      </FloatingPanel>
 
       {/* Toggle Button */}
       <PanelToggleButton
