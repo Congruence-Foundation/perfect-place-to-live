@@ -11,7 +11,7 @@ import { roomCountToNumber } from '@/lib/format';
 import { createTimer } from '@/lib/profiling';
 import { findNearestHeatmapPoint } from './score-lookup';
 import { distanceInMeters, createClusterId } from '@/lib/geo';
-import { DEFAULT_FALLBACK_COLOR } from '@/constants/colors';
+import { DEFAULT_FALLBACK_COLOR, PRICE_CATEGORY_COLORS } from '../config/price-colors';
 
 /**
  * Minimum number of properties in a group for valid statistical comparison
@@ -379,18 +379,6 @@ export function filterPropertiesByPriceValue(
     return position > range[0] && position <= range[1];
   });
 }
-
-/**
- * Price category colors for markers and glow effects
- */
-export const PRICE_CATEGORY_COLORS: Record<PriceCategory, string> = {
-  great_deal: '#16a34a',  // Green-600
-  good_deal: '#22c55e',   // Green-500
-  fair: '#3b82f6',        // Blue-500
-  above_avg: '#f97316',   // Orange-500
-  overpriced: '#ef4444',  // Red-500
-  no_data: DEFAULT_FALLBACK_COLOR,
-};
 
 /**
  * Result of cluster price analysis

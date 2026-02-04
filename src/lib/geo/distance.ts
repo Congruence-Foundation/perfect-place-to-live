@@ -6,8 +6,11 @@ import { METERS_PER_DEGREE_LAT } from './constants';
 
 /**
  * Convert degrees to radians
+ * 
+ * Note: This is also duplicated in haversine.ts for internal use.
+ * Exported here for use by other modules that need degree-to-radian conversion.
  */
-export function toRad(degrees: number): number {
+function toRad(degrees: number): number {
   return degrees * (Math.PI / 180);
 }
 

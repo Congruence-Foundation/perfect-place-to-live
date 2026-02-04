@@ -2,7 +2,7 @@
  * Popup content generation utilities for MapView
  */
 
-import { POI_COLORS, getColorForK } from '@/constants';
+import { POI_COLORS, getColorForK, DEFAULT_FALLBACK_COLOR, SCORE_COLORS, SCORE_THRESHOLDS, UI_COLORS } from '@/constants';
 import { formatDistance } from '@/lib/utils';
 import type { FactorBreakdown } from '@/lib/scoring';
 
@@ -35,15 +35,12 @@ export const defaultPopupTranslations: PopupTranslations = {
   noData: 'No data available for this area. Zoom in or pan to load POIs.',
 };
 
-// Default fallback color
-const DEFAULT_FALLBACK_COLOR = '#6b7280';
-
 // Get rating label for K value
 function getRatingLabel(k: number, translations: PopupTranslations): { label: string; emoji: string } {
-  if (k < 0.2) return { label: translations.excellent, emoji: '🌟' };
-  if (k < 0.4) return { label: translations.good, emoji: '👍' };
-  if (k < 0.6) return { label: translations.average, emoji: '😐' };
-  if (k < 0.8) return { label: translations.belowAverage, emoji: '👎' };
+  if (k < SCORE_THRESHOLDS.EXCELLENT) return { label: translations.excellent, emoji: '🌟' };
+  if (k < SCORE_THRESHOLDS.GOOD) return { label: translations.good, emoji: '👍' };
+  if (k < SCORE_THRESHOLDS.AVERAGE) return { label: translations.average, emoji: '😐' };
+  if (k < SCORE_THRESHOLDS.BELOW_AVERAGE) return { label: translations.belowAverage, emoji: '👎' };
   return { label: translations.poor, emoji: '⚠️' };
 }
 
@@ -74,14 +71,14 @@ export function generatePopupContent(
   const breakdownRows = breakdown.map(item => {
     const color = POI_COLORS[item.factorId] || DEFAULT_FALLBACK_COLOR;
     const distanceText = item.noPOIs ? '—' : formatDistance(item.distance);
-    const barColor = item.score < 0.3 ? '#22c55e' : item.score < 0.6 ? '#eab308' : '#ef4444';
+    const barColor = item.score < SCORE_THRESHOLDS.BAR_GOOD ? SCORE_COLORS.GOOD : item.score < SCORE_THRESHOLDS.BAR_AVERAGE ? SCORE_COLORS.AVERAGE : SCORE_COLORS.POOR;
     const scoreBarWidth = Math.round(item.score * 100);
     const icon = item.isNegative 
       ? (item.score > 0.5 ? '⚠' : '✓') 
       : (item.score < 0.5 ? '✓' : '⚠');
-    const iconColor = icon === '✓' ? '#22c55e' : '#ef4444';
+    const iconColor = icon === '✓' ? SCORE_COLORS.GOOD : SCORE_COLORS.POOR;
     const weightDisplay = item.weight > 0 ? `+${item.weight}` : `${item.weight}`;
-    const weightColor = item.weight > 0 ? '#22c55e' : item.weight < 0 ? '#ef4444' : DEFAULT_FALLBACK_COLOR;
+    const weightColor = item.weight > 0 ? SCORE_COLORS.GOOD : item.weight < 0 ? SCORE_COLORS.POOR : DEFAULT_FALLBACK_COLOR;
     const nearbyText = item.nearbyCount > 1 ? `(${item.nearbyCount})` : '';
     const factorName = factorTranslations[item.factorId] || item.factorName;
 
@@ -95,11 +92,11 @@ export function generatePopupContent(
         </td>
         <td style="width: 30px; padding: 2px; text-align: right; font-size: 9px; color: ${weightColor};">${weightDisplay}</td>
         <td style="width: 40px; padding: 2px;">
-          <div style="height: 3px; background: #e5e7eb; border-radius: 2px; overflow: hidden;">
+          <div style="height: 3px; background: ${UI_COLORS.BORDER}; border-radius: 2px; overflow: hidden;">
             <div style="height: 100%; width: ${scoreBarWidth}%; background: ${barColor};"></div>
           </div>
         </td>
-        <td style="width: 50px; padding: 2px 4px; text-align: right; color: ${DEFAULT_FALLBACK_COLOR};">${distanceText} <span style="color: #9ca3af; font-size: 8px;">${nearbyText}</span></td>
+        <td style="width: 50px; padding: 2px 4px; text-align: right; color: ${DEFAULT_FALLBACK_COLOR};">${distanceText} <span style="color: ${UI_COLORS.MUTED_TEXT}; font-size: 8px;">${nearbyText}</span></td>
         <td style="width: 14px; text-align: center; color: ${iconColor}; font-weight: bold;">${icon}</td>
       </tr>
     `;

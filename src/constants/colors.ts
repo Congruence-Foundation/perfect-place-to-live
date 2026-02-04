@@ -40,6 +40,48 @@ export const POI_COLORS: Record<string, string> = {
 export const DEFAULT_FALLBACK_COLOR = '#6b7280';
 
 /**
+ * Score-based colors for heatmap and popup displays
+ * Used for rating bars, score indicators, and quality badges
+ */
+export const SCORE_COLORS = {
+  /** Good score (low K value) - Green-500 */
+  GOOD: '#22c55e',
+  /** Average score - Yellow-500 */
+  AVERAGE: '#eab308',
+  /** Poor score (high K value) - Red-500 */
+  POOR: '#ef4444',
+} as const;
+
+/**
+ * Score thresholds for categorizing K values
+ * K is 0-1 where 0 = excellent, 1 = poor
+ */
+export const SCORE_THRESHOLDS = {
+  /** Threshold for excellent rating (K < 0.2) */
+  EXCELLENT: 0.2,
+  /** Threshold for good rating (K < 0.4) */
+  GOOD: 0.4,
+  /** Threshold for average rating (K < 0.6) */
+  AVERAGE: 0.6,
+  /** Threshold for below average rating (K < 0.8) */
+  BELOW_AVERAGE: 0.8,
+  /** Threshold for good bar color (K < 0.3) */
+  BAR_GOOD: 0.3,
+  /** Threshold for average bar color (K < 0.6) */
+  BAR_AVERAGE: 0.6,
+} as const;
+
+/**
+ * UI colors for common elements
+ */
+export const UI_COLORS = {
+  /** Border color - Gray-200 */
+  BORDER: '#e5e7eb',
+  /** Muted text color - Gray-400 */
+  MUTED_TEXT: '#9ca3af',
+} as const;
+
+/**
  * Debug visualization colors
  */
 export const DEBUG_COLORS = {

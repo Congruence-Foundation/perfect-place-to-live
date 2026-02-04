@@ -1,6 +1,13 @@
 import type { Point, POI } from '@/types';
 import { EARTH_RADIUS_METERS, METERS_PER_DEGREE_LAT } from './constants';
-import { toRad } from './distance';
+
+/**
+ * Convert degrees to radians
+ * Note: Duplicated here to avoid circular dependency with distance.ts
+ */
+function toRad(degrees: number): number {
+  return degrees * (Math.PI / 180);
+}
 
 /**
  * Calculate the Haversine distance between two points in meters

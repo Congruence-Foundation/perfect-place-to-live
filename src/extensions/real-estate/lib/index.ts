@@ -7,9 +7,11 @@ export {
   enrichPropertiesSimplified,
   filterPropertiesByPriceValue,
   analyzeClusterPrices,
-  PRICE_CATEGORY_COLORS,
 } from './price-analysis';
 export type { ClusterPriceAnalysis, ClusterAnalysisMap } from './price-analysis';
+
+// Price colors (re-export from config for backward compatibility)
+export { PRICE_CATEGORY_COLORS } from '../config/price-colors';
 
 // Property markers
 export {

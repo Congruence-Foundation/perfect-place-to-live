@@ -1,64 +1,13 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
-import { RealEstateSidebar } from '@/components/Controls';
-import PriceValueFilter from './filters/PriceValueFilter';
-import { TransactionTypeButtons } from './TransactionTypeButtons';
-import { ScoreRangeSection } from './ScoreRangeSection';
-import { useRealEstateExtension } from '../hooks';
+import { RealEstateFiltersContent } from './RealEstateFiltersContent';
 
 /**
  * Real Estate Bottom Sheet Content Component
  * 
  * This component renders the real estate controls in the mobile bottom sheet.
- * It is self-contained and uses the useRealEstateExtension hook to access state and actions.
+ * Uses the shared RealEstateFiltersContent component.
  */
 export function RealEstateBottomSheetContent() {
-  const tRealEstate = useTranslations('realEstate');
-  const realEstate = useRealEstateExtension();
-
-  return (
-    <>
-      {/* Transaction Type Buttons */}
-      <TransactionTypeButtons
-        enabled={realEstate.enabled}
-        transaction={realEstate.filters.transaction}
-        onDisable={() => realEstate.setEnabled(false)}
-        onSelectRent={() => realEstate.selectTransaction('RENT')}
-        onSelectSell={() => realEstate.selectTransaction('SELL')}
-      />
-
-      {/* Score Range Slider (only when real estate is enabled) */}
-      {realEstate.enabled && (
-        <ScoreRangeSection
-          scoreRange={realEstate.scoreRange}
-          onScoreRangeChange={realEstate.setScoreRange}
-        />
-      )}
-
-      {/* Price Value Filter (only when real estate is enabled) */}
-      {realEstate.enabled && (
-        <div className="mb-3">
-          <PriceValueFilter
-            label={tRealEstate('priceValue')}
-            tooltip={tRealEstate('priceValueTooltip')}
-            range={realEstate.priceValueRange}
-            onChange={realEstate.setPriceValueRange}
-          />
-        </div>
-      )}
-
-      {/* Real Estate Filters (only when enabled) */}
-      {realEstate.enabled && (
-        <RealEstateSidebar
-          filters={realEstate.filters}
-          onFiltersChange={realEstate.setFilters}
-          propertyCount={realEstate.totalCount}
-          isLoading={realEstate.isLoading}
-          isBelowMinZoom={realEstate.isBelowMinZoom}
-          error={realEstate.error}
-        />
-      )}
-    </>
-  );
+  return <RealEstateFiltersContent />;
 }

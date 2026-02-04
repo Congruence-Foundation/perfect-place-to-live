@@ -434,7 +434,10 @@ function HomeContent({
         />
 
         {/* Top Right Controls - Language Switcher and App Info */}
-        <div className="absolute top-4 right-4 z-[1000] flex items-center gap-2">
+        <div 
+          className="absolute top-4 right-4 flex items-center gap-2"
+          style={{ zIndex: Z_INDEX.FLOATING_CONTROLS }}
+        >
           <LanguageSwitcher />
           <AppInfo isMobile={isMobile} />
         </div>
@@ -485,10 +488,7 @@ function HomeContent({
             className="absolute inset-0 bg-background/30 backdrop-blur-[2px] flex items-center justify-center"
             style={{
               zIndex: Z_INDEX.FLOATING_CONTROLS - 1,
-              ...(isMobile ? { 
-                bottom: `${bottomSheetHeight}px`,
-                alignItems: 'center',
-              } : {})
+              bottom: `${bottomSheetHeight}px`,
             }}
           >
             <div className="bg-background/95 backdrop-blur-sm px-5 py-3 rounded-2xl shadow-lg flex items-center gap-3">

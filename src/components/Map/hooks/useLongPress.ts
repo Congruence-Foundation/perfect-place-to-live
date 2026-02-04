@@ -15,6 +15,37 @@ interface LongPressState {
 }
 
 /**
+ * Creates a fresh long press state object
+ */
+function createLongPressState(): LongPressState {
+  return { timer: null, startPos: null, latLng: null };
+}
+
+/**
+ * Clears the long press state and cancels any pending timer
+ */
+function clearLongPressState(state: LongPressState): void {
+  if (state.timer) clearTimeout(state.timer);
+  state.timer = null;
+  state.startPos = null;
+  state.latLng = null;
+}
+
+/**
+ * Checks if movement exceeds threshold, returns true if long press should be cancelled
+ */
+function hasMovedBeyondThreshold(
+  currentX: number,
+  currentY: number,
+  startPos: { x: number; y: number },
+  threshold: number
+): boolean {
+  const dx = currentX - startPos.x;
+  const dy = currentY - startPos.y;
+  return Math.sqrt(dx * dx + dy * dy) > threshold;
+}
+
+/**
  * Setup touch long press handler for mobile devices
  */
 export function setupTouchLongPress(
@@ -22,17 +53,10 @@ export function setupTouchLongPress(
   mapInstance: L.Map,
   onLongPress: (latlng: L.LatLng) => void
 ): () => void {
-  const state: LongPressState = { timer: null, startPos: null, latLng: null };
-
-  const clearState = () => {
-    if (state.timer) clearTimeout(state.timer);
-    state.timer = null;
-    state.startPos = null;
-    state.latLng = null;
-  };
+  const state = createLongPressState();
 
   const handleTouchStart = (e: TouchEvent) => {
-    clearState();
+    clearLongPressState(state);
     const touch = e.touches[0];
     state.startPos = { x: touch.clientX, y: touch.clientY };
     try {
@@ -49,21 +73,19 @@ export function setupTouchLongPress(
         e.preventDefault();
         onLongPress(state.latLng);
       }
-      clearState();
+      clearLongPressState(state);
     }, LONG_PRESS_DURATION_MS);
   };
 
   const handleTouchMove = (e: TouchEvent) => {
     if (!state.timer || !state.startPos) return;
     const touch = e.touches[0];
-    const dx = touch.clientX - state.startPos.x;
-    const dy = touch.clientY - state.startPos.y;
-    if (Math.sqrt(dx * dx + dy * dy) > TOUCH_MOVE_THRESHOLD_PX) {
-      clearState();
+    if (hasMovedBeyondThreshold(touch.clientX, touch.clientY, state.startPos, TOUCH_MOVE_THRESHOLD_PX)) {
+      clearLongPressState(state);
     }
   };
 
-  const handleTouchEnd = () => clearState();
+  const handleTouchEnd = () => clearLongPressState(state);
 
   container.addEventListener('touchstart', handleTouchStart, { passive: false });
   container.addEventListener('touchmove', handleTouchMove, { passive: true });
@@ -71,7 +93,7 @@ export function setupTouchLongPress(
   container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
   return () => {
-    clearState();
+    clearLongPressState(state);
     container.removeEventListener('touchstart', handleTouchStart);
     container.removeEventListener('touchmove', handleTouchMove);
     container.removeEventListener('touchend', handleTouchEnd);
@@ -87,18 +109,11 @@ export function setupMouseLongPress(
   mapInstance: L.Map,
   onLongPress: (latlng: L.LatLng) => void
 ): () => void {
-  const state: LongPressState = { timer: null, startPos: null, latLng: null };
-
-  const clearState = () => {
-    if (state.timer) clearTimeout(state.timer);
-    state.timer = null;
-    state.startPos = null;
-    state.latLng = null;
-  };
+  const state = createLongPressState();
 
   const handleMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return;
-    clearState();
+    clearLongPressState(state);
     state.startPos = { x: e.clientX, y: e.clientY };
     try {
       const containerPoint = mapInstance.mouseEventToContainerPoint(e);
@@ -110,20 +125,18 @@ export function setupMouseLongPress(
       if (state.latLng) {
         onLongPress(state.latLng);
       }
-      clearState();
+      clearLongPressState(state);
     }, LONG_PRESS_DURATION_MS);
   };
 
   const handleMouseMove = (e: MouseEvent) => {
     if (!state.timer || !state.startPos) return;
-    const dx = e.clientX - state.startPos.x;
-    const dy = e.clientY - state.startPos.y;
-    if (Math.sqrt(dx * dx + dy * dy) > MOUSE_MOVE_THRESHOLD_PX) {
-      clearState();
+    if (hasMovedBeyondThreshold(e.clientX, e.clientY, state.startPos, MOUSE_MOVE_THRESHOLD_PX)) {
+      clearLongPressState(state);
     }
   };
 
-  const handleMouseUp = () => clearState();
+  const handleMouseUp = () => clearLongPressState(state);
 
   container.addEventListener('mousedown', handleMouseDown);
   container.addEventListener('mousemove', handleMouseMove);
@@ -131,7 +144,7 @@ export function setupMouseLongPress(
   container.addEventListener('mouseleave', handleMouseUp);
 
   return () => {
-    clearState();
+    clearLongPressState(state);
     container.removeEventListener('mousedown', handleMouseDown);
     container.removeEventListener('mousemove', handleMouseMove);
     container.removeEventListener('mouseup', handleMouseUp);

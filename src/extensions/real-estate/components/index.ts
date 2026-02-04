@@ -10,6 +10,7 @@ export {
   getDefaultPriceRange,
 } from './TransactionTypeButtons';
 export { ScoreRangeSection } from './ScoreRangeSection';
+export { RealEstateFiltersContent } from './RealEstateFiltersContent';
 
 // Panel components
 export { RealEstateSidebarPanel } from './RealEstateSidebarPanel';

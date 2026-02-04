@@ -1,13 +1,7 @@
 import type { OtodomProperty, EnrichedProperty } from '../types';
+import { isEnrichedProperty } from '../types';
 import { formatPrice, roomCountToNumber } from '@/lib/format';
 import { generatePriceAnalysisBadgeHtml } from './markers';
-
-/**
- * Type guard to check if a property is enriched with price analysis
- */
-function isEnrichedProperty(property: OtodomProperty | EnrichedProperty): property is EnrichedProperty {
-  return 'priceAnalysis' in property;
-}
 
 /**
  * Generate popup HTML for a single property

@@ -4,7 +4,7 @@ import { PropertyRequest, PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/ex
 import { isValidBounds, tileToBounds } from '@/lib/geo';
 import { hashFilters } from '@/lib/geo/tiles';
 import { getCachedTile, setCachedTile, generateTileCacheKey, type TileCacheEntry } from '@/lib/tile-cache';
-import { errorResponse, isValidTileCoord } from '@/lib/api-utils';
+import { errorResponse, handleApiError, isValidTileCoord } from '@/lib/api-utils';
 import { createTimer } from '@/lib/profiling';
 
 export const runtime = 'nodejs';
@@ -103,14 +103,14 @@ export async function POST(request: NextRequest) {
       cached: false,
     });
   } catch (error) {
-    console.error('Properties API error:', error);
-
-    // Check if it's an Otodom API error
-    if (error instanceof Error && error.message.includes('Otodom API error')) {
-      return errorResponse(error, 502);
-    }
-
-    return errorResponse(error);
+    return handleApiError(error, {
+      context: 'Properties API',
+      errorMappings: [
+        { pattern: 'Otodom API error', status: 502 },
+        { pattern: 'Invalid filters', status: 400 },
+        { pattern: 'Invalid bounds', status: 400 },
+      ],
+    });
   }
 }
 

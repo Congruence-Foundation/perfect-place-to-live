@@ -6,7 +6,9 @@ import { PERFORMANCE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
 
 /**
- * Grid points divisor for tile-based calculations (accounts for tile overlap)
+ * Grid points divisor for tile-based calculations
+ * Accounts for tile overlap when calculating grid size from tile dimensions.
+ * A value of 4 means we expect ~4 tiles worth of overlap in a typical viewport.
  */
 const TILE_GRID_DIVISOR = 4;
 

@@ -364,7 +364,7 @@ export interface FactorBreakdown {
   factorName: string;
   distance: number;
   maxDistance: number;
-  score: number; // 0-1, lower is better
+  score: number; // 0-1, lower is better (uses linear normalization for display clarity)
   isNegative: boolean; // derived from weight sign
   weight: number;
   contribution: number; // weighted contribution to final K
@@ -383,6 +383,12 @@ export interface FactorBreakdownResult {
 /**
  * Calculate detailed factor breakdown for a specific location
  * Used for showing location details in popups
+ * 
+ * Note: This function uses linear distance normalization for the score field
+ * to provide intuitive, easy-to-understand values in the UI. The actual K value
+ * calculation uses the configurable distance curve (log/exp/power) which may
+ * produce different results. The K value returned here is calculated using
+ * linear normalization for consistency with the breakdown scores.
  * 
  * @param lat - Latitude of the location
  * @param lng - Longitude of the location

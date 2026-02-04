@@ -397,6 +397,13 @@
     "priceValueGoodDeal": "Good Deal",
     "priceValueFair": "Fair Price",
     "priceValueAboveAvg": "Above Avg",
-    "priceValueOverpriced": "Overpriced"
+    "priceValueOverpriced": "Overpriced",
+    "priceCategory": {
+      "greatDeal": "Great Deal",
+      "goodDeal": "Good Deal",
+      "fair": "Fair Price",
+      "aboveAvg": "Above Avg",
+      "overpriced": "Overpriced"
+    }
   }
 }

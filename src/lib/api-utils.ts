@@ -8,6 +8,76 @@ import type { TileCoord } from '@/lib/geo/tiles';
 const { SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE } = TIME_CONSTANTS;
 
 /**
+ * Error mapping configuration for API error handling
+ * Maps error message patterns to HTTP status codes
+ */
+export interface ErrorMapping {
+  /** Pattern to match in error message */
+  pattern: string;
+  /** HTTP status code to return */
+  status: number;
+}
+
+/**
+ * Options for handleApiError
+ */
+export interface HandleApiErrorOptions {
+  /** Context string for logging (e.g., 'Heatmap API', 'POI API') */
+  context: string;
+  /** Optional error mappings to determine status code based on error message */
+  errorMappings?: ErrorMapping[];
+  /** Default status code if no mapping matches (default: 500) */
+  defaultStatus?: number;
+}
+
+/**
+ * Standardized API error handler
+ * Logs the error and returns a consistent error response
+ * 
+ * @param error - The error object or unknown value
+ * @param options - Error handling options
+ * @returns NextResponse with error message and appropriate status code
+ * 
+ * @example
+ * ```ts
+ * // Simple usage
+ * catch (error) {
+ *   return handleApiError(error, { context: 'Heatmap API' });
+ * }
+ * 
+ * // With error mappings
+ * catch (error) {
+ *   return handleApiError(error, {
+ *     context: 'Properties API',
+ *     errorMappings: [
+ *       { pattern: 'Otodom API error', status: 502 },
+ *       { pattern: 'Invalid bounds', status: 400 },
+ *     ],
+ *   });
+ * }
+ * ```
+ */
+export function handleApiError(error: unknown, options: HandleApiErrorOptions): NextResponse {
+  const { context, errorMappings = [], defaultStatus = 500 } = options;
+  
+  // Log the error with context
+  console.error(`${context} error:`, error);
+  
+  // Determine status code based on error mappings
+  let status = defaultStatus;
+  if (error instanceof Error && errorMappings.length > 0) {
+    for (const mapping of errorMappings) {
+      if (error.message.includes(mapping.pattern)) {
+        status = mapping.status;
+        break;
+      }
+    }
+  }
+  
+  return errorResponse(error, status);
+}
+
+/**
  * Create a standardized error response for API routes
  * 
  * @param error - The error object or unknown value

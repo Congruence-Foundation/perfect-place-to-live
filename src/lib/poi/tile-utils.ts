@@ -11,9 +11,9 @@ import { getTileKeyString } from '@/lib/geo/tiles';
 /**
  * Initialize an empty result map with arrays for each tile and factor
  */
-export function initializeTileResultMap<T extends string>(
+export function initializeTileResultMap(
   tiles: TileCoord[],
-  factorIds: T[]
+  factorIds: string[]
 ): Map<string, Record<string, POI[]>> {
   const result = new Map<string, Record<string, POI[]>>();
   

@@ -118,6 +118,12 @@ export function useRealEstateMarkers({
   
   // Track property price analysis changes
   const prevPropertiesPriceHashRef = useRef<string>('');
+  
+  // Track current cluster request to prevent race conditions
+  const currentClusterRequestRef = useRef<string | null>(null);
+  
+  // Track cluster icon update locks to prevent background/click fetch races
+  const clusterUpdateLockRef = useRef<Set<string>>(new Set());
 
   // Create property icon
   const createPropertyIcon = useCallback((
@@ -303,6 +309,10 @@ export function useRealEstateMarkers({
         // Background fetch for detailed mode
         if (useDetailedMode && !cachedClusterProps) {
           (async () => {
+            // Acquire lock to prevent race with click fetch
+            if (clusterUpdateLockRef.current.has(clusterId)) return;
+            clusterUpdateLockRef.current.add(clusterId);
+            
             try {
               const response = await fetch('/api/properties/cluster', {
                 method: 'POST',
@@ -332,14 +342,24 @@ export function useRealEstateMarkers({
               if (clusterMarkersRef.current.has(clusterId)) {
                 clusterMarker.setIcon(newIcon);
               }
-            } catch {
-              // Silently fail background fetch
+            } catch (error) {
+              // Log background fetch errors for debugging
+              console.warn('Background cluster fetch failed:', clusterId, error);
+            } finally {
+              clusterUpdateLockRef.current.delete(clusterId);
             }
           })();
         }
 
         // Click handler for cluster
         clusterMarker.on('click', async () => {
+          // Generate unique request ID to track this specific request
+          const requestId = `${clusterId}-${Date.now()}`;
+          currentClusterRequestRef.current = requestId;
+          
+          // Acquire lock to prevent race with background fetch
+          clusterUpdateLockRef.current.add(clusterId);
+          
           map.closePopup();
           clusterMarkersRef.current.forEach(cm => {
             if (cm !== clusterMarker) cm.closePopup();
@@ -361,6 +381,11 @@ export function useRealEstateMarkers({
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(buildClusterFetchBody(cluster, filters, CLICK_FETCH_LIMIT)),
             });
+            
+            // Check if this is still the current request (prevent stale updates)
+            if (currentClusterRequestRef.current !== requestId) {
+              return;
+            }
 
             if (!response.ok) {
               const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -368,6 +393,11 @@ export function useRealEstateMarkers({
             }
 
             const data: ClusterPropertiesResponse = await response.json();
+            
+            // Check again after parsing response
+            if (currentClusterRequestRef.current !== requestId) {
+              return;
+            }
 
             if (data.properties.length === 0) {
               clusterMarker.setPopupContent(generateErrorPopupHtml('Nie znaleziono ofert w tym obszarze'));
@@ -474,14 +504,24 @@ export function useRealEstateMarkers({
 
             updatePopup();
           } catch (error) {
-            console.error('Error fetching cluster properties:', error);
-            const errorMessage = error instanceof Error ? error.message : 'Błąd ładowania ofert';
-            clusterMarker.setPopupContent(generateErrorPopupHtml(errorMessage));
+            // Only show error if this is still the current request
+            if (currentClusterRequestRef.current === requestId) {
+              console.error('Error fetching cluster properties:', error);
+              const errorMessage = error instanceof Error ? error.message : 'Błąd ładowania ofert';
+              clusterMarker.setPopupContent(generateErrorPopupHtml(errorMessage));
+            }
+          } finally {
+            clusterUpdateLockRef.current.delete(clusterId);
           }
         });
 
         clusterMarker.addTo(layerGroup);
         clusterMarkersRef.current.set(clusterId, clusterMarker);
+        
+        // Clean up popup data when popup closes to prevent memory leaks
+        clusterMarker.on('popupclose', () => {
+          clusterPopupDataRef.current.delete(clusterId);
+        });
       }
 
       // Remove stale cluster markers

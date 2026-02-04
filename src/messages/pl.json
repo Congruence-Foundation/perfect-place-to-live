@@ -397,6 +397,13 @@
     "priceValueGoodDeal": "Dobra cena",
     "priceValueFair": "Uczciwa cena",
     "priceValueAboveAvg": "Powyżej średniej",
-    "priceValueOverpriced": "Zawyżona"
+    "priceValueOverpriced": "Zawyżona",
+    "priceCategory": {
+      "greatDeal": "Świetna okazja",
+      "goodDeal": "Dobra cena",
+      "fair": "Uczciwa cena",
+      "aboveAvg": "Powyżej średniej",
+      "overpriced": "Zawyżona"
+    }
   }
 }

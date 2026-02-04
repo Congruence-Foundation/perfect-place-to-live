@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchPoisWithFallback, POIDataSource } from '@/lib/poi';
+import { fetchPoisWithFallback, type POIDataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
-import { Factor, HeatmapRequest } from '@/types';
+import type { HeatmapRequest } from '@/types';
 import { estimateGridSize, calculateAdaptiveGridSize, expandBounds, isValidBounds, filterPoisToBounds } from '@/lib/geo';
-import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors } from '@/lib/api-utils';
+import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors, handleApiError } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     if (factorResult instanceof Response) {
       return factorResult;
     }
-    const { factors, enabledFactors } = factorResult;
+    const { enabledFactors } = factorResult;
 
     // Expand bounds for grid/canvas to extend beyond viewport (prevents reload on small scrolls)
     const gridBounds = expandBounds(bounds, GRID_BUFFER_DEGREES);
@@ -130,7 +130,12 @@ export async function POST(request: NextRequest) {
 
     return createResponse(responseData, useMsgpack);
   } catch (error) {
-    console.error('Heatmap API error:', error);
-    return errorResponse(error);
+    return handleApiError(error, {
+      context: 'Heatmap API',
+      errorMappings: [
+        { pattern: 'Invalid bounds', status: 400 },
+        { pattern: 'No enabled factors', status: 400 },
+      ],
+    });
   }
 }

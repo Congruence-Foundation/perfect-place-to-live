@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
-import { fetchPoisWithFallback, POIDataSource } from '@/lib/poi';
+import { fetchPoisWithFallback, type POIDataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
-import { Factor } from '@/types';
+import type { Factor } from '@/types';
 import { tileToBounds, expandBounds, isValidBounds, filterPoisToBounds, calculateTileGridSize } from '@/lib/geo';
 import { getHeatmapTileKey, hashHeatmapConfig } from '@/lib/geo/tiles';
 import { getCachedHeatmapTile, setCachedHeatmapTile } from '@/lib/heatmap-tile-cache';
 import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors, isValidTileCoord } from '@/lib/api-utils';
-import { PERFORMANCE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
+import { PERFORMANCE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,12 +14,7 @@ export const dynamic = 'force-dynamic';
 const { 
   POI_BUFFER_DEGREES,
   DEFAULT_DATA_SOURCE,
-  TARGET_GRID_POINTS,
-  MIN_CELL_SIZE,
-  MAX_CELL_SIZE,
 } = PERFORMANCE_CONFIG;
-
-const { TILE_SIZE_METERS } = POI_TILE_CONFIG;
 
 /**
  * Request body for heatmap tile endpoint

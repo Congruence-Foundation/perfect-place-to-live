@@ -4,14 +4,6 @@ import { distanceInMeters } from '@/lib/geo';
 import { UI_CONFIG } from '@/constants/performance';
 
 /**
- * Interface for items that have geographic coordinates
- */
-interface GeoLocated {
-  lat: number;
-  lng: number;
-}
-
-/**
  * Find the nearest heatmap point to a given location within a search radius.
  * 
  * @param lat - Latitude of the location
@@ -70,6 +62,14 @@ function getScoreForLocation(
  */
 function qualityToKValue(quality: number): number {
   return 1 - (quality / 100);
+}
+
+/**
+ * Interface for items that have geographic coordinates
+ */
+interface GeoLocated {
+  lat: number;
+  lng: number;
 }
 
 /**

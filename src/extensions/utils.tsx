@@ -2,7 +2,7 @@
 
 import { getExtensionRegistry } from './registry';
 import type { MapExtension, ExtensionSettingsPanelProps } from './types';
-import './init';
+import './init'; // Side-effect import: registers extensions on module load
 
 /** Component keys that extensions can provide */
 type ExtensionComponentKey = keyof Pick<

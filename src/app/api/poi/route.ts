@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchPOIsFromOverpass as fetchPOIs, generatePOICacheKey } from '@/lib/poi';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS } from '@/config/factors';
-import { Bounds, POI } from '@/types';
+import type { Bounds, POI } from '@/types';
 import { isValidBounds } from '@/lib/geo';
-import { PERFORMANCE_CONFIG } from '@/constants';
+import { PERFORMANCE_CONFIG } from '@/constants/performance';
 import { errorResponse } from '@/lib/api-utils';
 
 export const runtime = 'nodejs';

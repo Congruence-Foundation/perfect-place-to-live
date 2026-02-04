@@ -1,27 +1,19 @@
 import type { PriceCategory, EnrichedProperty, ClusterPriceDisplay } from '../types';
-import { PRICE_CATEGORY_COLORS } from '../lib';
+import { PRICE_BADGE_COLORS, PRICE_BADGE_LABELS_EN, PRICE_CATEGORY_COLORS } from '../config/price-colors';
 import { formatCompactPrice } from '@/lib/format';
 
 // Cluster icon dimensions
 export const CLUSTER_ICON_SIZE = 36;
 export const CLUSTER_ICON_WITH_LABEL_HEIGHT = 54;
 
-// Price analysis badge configuration with proper typing
-export const PRICE_BADGE_COLORS: Record<Exclude<PriceCategory, 'no_data'>, { bg: string; text: string }> = {
-  great_deal: { bg: '#f0fdf4', text: '#16a34a' },
-  good_deal: { bg: '#f0fdf4', text: '#059669' },
-  fair: { bg: '#f8fafc', text: '#64748b' },
-  above_avg: { bg: '#fff7ed', text: '#ea580c' },
-  overpriced: { bg: '#fef2f2', text: '#dc2626' },
-};
+// Re-export for backward compatibility
+export { PRICE_BADGE_COLORS };
 
-export const PRICE_BADGE_LABELS: Record<Exclude<PriceCategory, 'no_data'>, string> = {
-  great_deal: 'Great Deal',
-  good_deal: 'Good Deal',
-  fair: 'Fair Price',
-  above_avg: 'Above Avg',
-  overpriced: 'Overpriced',
-};
+/**
+ * Price badge labels - using English fallback for non-i18n contexts
+ * For i18n contexts, use PRICE_BADGE_LABEL_KEYS with useTranslations
+ */
+export const PRICE_BADGE_LABELS = PRICE_BADGE_LABELS_EN;
 
 /**
  * Generate cluster price label based on display mode

@@ -9,7 +9,9 @@ import {
 
 // Rate limiting: track last request time
 let lastRequestTime = 0;
-const MIN_REQUEST_INTERVAL = 200; // ms between requests
+
+/** Minimum interval between Overpass API requests (ms) */
+const MIN_REQUEST_INTERVAL_MS = 200;
 
 /**
  * Wait for rate limit
@@ -18,8 +20,8 @@ async function waitForRateLimit(): Promise<void> {
   const now = Date.now();
   const timeSinceLastRequest = now - lastRequestTime;
   
-  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest));
   }
   
   lastRequestTime = Date.now();
@@ -316,13 +318,15 @@ export async function fetchPOIsForTilesBatched(
   return distributePOIsByFactorToTiles(allPOIsByFactor, tiles, factorIds);
 }
 
+/** Precision for cache key bounds rounding (2 = ~1km precision) */
+const CACHE_KEY_PRECISION = 2;
+
 /**
- * Generate a cache key for POI queries (legacy)
+ * Generate a cache key for POI queries
  */
 export function generatePOICacheKey(factorId: string, bounds: Bounds): string {
   // Round bounds to reduce cache fragmentation
-  const precision = 2;
-  const multiplier = 10 ** precision;
+  const multiplier = 10 ** CACHE_KEY_PRECISION;
   const roundedBounds = {
     south: Math.floor(bounds.south * multiplier) / multiplier,
     west: Math.floor(bounds.west * multiplier) / multiplier,

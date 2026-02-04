@@ -4,8 +4,9 @@ import { CACHE_CONFIG } from '@/constants/performance';
 // In-memory cache for development/fallback
 const memoryCache = new Map<string, { data: unknown; expiresAt: number }>();
 
-// Lazy-initialize Redis client
+// Lazy-initialize Redis client with initialization lock
 let redis: Redis | null = null;
+let redisInitPromise: Promise<Redis | null> | null = null;
 
 /**
  * Check if Upstash Redis is available
@@ -15,19 +16,54 @@ function isRedisAvailable(): boolean {
 }
 
 /**
- * Get Redis client (lazy initialization)
+ * Get Redis client (lazy initialization with race condition protection)
  */
 function getRedis(): Redis | null {
   if (!isRedisAvailable()) return null;
   
-  if (!redis) {
-    redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    });
-  }
+  // Return existing client if already initialized
+  if (redis) return redis;
+  
+  // Synchronous initialization (safe because Redis constructor is synchronous)
+  redis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL!,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  });
   
   return redis;
+}
+
+/**
+ * Get Redis client asynchronously (for cases where async initialization is preferred)
+ * Uses a promise lock to prevent multiple concurrent initializations
+ */
+async function getRedisAsync(): Promise<Redis | null> {
+  if (!isRedisAvailable()) return null;
+  
+  // Return existing client if already initialized
+  if (redis) return redis;
+  
+  // If initialization is in progress, wait for it
+  if (redisInitPromise) {
+    return redisInitPromise;
+  }
+  
+  // Start initialization with lock
+  redisInitPromise = (async () => {
+    if (!redis) {
+      redis = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL!,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+      });
+    }
+    return redis;
+  })();
+  
+  try {
+    return await redisInitPromise;
+  } finally {
+    redisInitPromise = null;
+  }
 }
 
 /**

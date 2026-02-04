@@ -264,6 +264,13 @@ export interface EnrichedProperty extends OtodomProperty {
 }
 
 /**
+ * Type guard to check if a property is enriched with price analysis
+ */
+export function isEnrichedProperty(property: OtodomProperty | EnrichedProperty): property is EnrichedProperty {
+  return 'priceAnalysis' in property;
+}
+
+/**
  * Price value filter options
  */
 export type PriceValueFilter = 'all' | 'great_deal' | 'good_deal' | 'fair' | 'above_avg' | 'overpriced';

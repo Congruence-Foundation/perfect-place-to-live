@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchPOIsFromOverpass as fetchPOIs, generatePOICacheKey } from '@/lib/poi';
 import { calculateHeatmap } from '@/lib/scoring';
 import { tileToBounds, getTilesForBounds, POLAND_BOUNDS } from '@/lib/geo';
-import { type TileCoord } from '@/lib/geo/tiles';
+import type { TileCoord } from '@/lib/geo/tiles';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS } from '@/config/factors';
-import { POI, PrecomputedTile, Factor } from '@/types';
+import type { POI, PrecomputedTile, Factor } from '@/types';
 import { errorResponse } from '@/lib/api-utils';
 import { TILE_CONFIG } from '@/constants/performance';
 

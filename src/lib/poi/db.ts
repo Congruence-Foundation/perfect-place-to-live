@@ -17,9 +17,9 @@ import {
 const sql = neon(process.env.DATABASE_URL!);
 
 /**
- * Full POI row type including name and tags (for popups)
+ * Database row type for POI queries
  */
-interface POIRowFull {
+interface POIRow {
   id: number;
   factor_id: string;
   lat: number;
@@ -31,7 +31,7 @@ interface POIRowFull {
 /**
  * Convert a database row to a POI object
  */
-function rowToPOI(row: POIRowFull): POI {
+function rowToPOI(row: POIRow): POI {
   return {
     id: row.id,
     lat: row.lat,
@@ -44,7 +44,7 @@ function rowToPOI(row: POIRowFull): POI {
 /**
  * Group POI rows by factor_id
  */
-function groupByFactor(rows: POIRowFull[], factorIds: string[]): Record<string, POI[]> {
+function groupByFactor(rows: POIRow[], factorIds: string[]): Record<string, POI[]> {
   const grouped: Record<string, POI[]> = {};
   
   // Initialize empty arrays for all requested factors
@@ -86,7 +86,7 @@ export async function getPOIsFromDB(
   `;
   stopQueryTimer({ factors: factorIds.length, rows: result.length });
 
-  return groupByFactor(result as POIRowFull[], factorIds);
+  return groupByFactor(result as POIRow[], factorIds);
 }
 
 /**
@@ -133,7 +133,7 @@ export async function getPOIsForTilesBatched(
   });
 
   // Distribute POIs to their respective tiles
-  return distributePOIsToTiles(result as POIRowFull[], tiles, factorIds);
+  return distributePOIsToTiles(result as POIRow[], tiles, factorIds);
 }
 
 /**
@@ -141,7 +141,7 @@ export async function getPOIsForTilesBatched(
  * Each POI is assigned to the tile that contains its coordinates
  */
 function distributePOIsToTiles(
-  rows: POIRowFull[],
+  rows: POIRow[],
   tiles: TileCoord[],
   factorIds: string[]
 ): Map<string, Record<string, POI[]>> {

@@ -14,10 +14,56 @@ import type { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/
 import { generateGrid, calculateAdaptiveGridSize } from '@/lib/geo/grid';
 import { SpatialIndex } from '@/lib/geo/haversine';
 import { normalizeKValues, logKStats } from './calculator';
-import { PERFORMANCE_CONFIG } from '@/constants';
+import { PERFORMANCE_CONFIG, DENSITY_BONUS } from '@/constants';
+import { EARTH_RADIUS_METERS, METERS_PER_DEGREE_LAT } from '@/lib/geo/constants';
 import { createTimer } from '@/lib/profiling';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
+
+/**
+ * Constants used in worker code - must match the values in WORKER_CODE string
+ * These are exported for testing to verify worker code stays in sync
+ */
+export const WORKER_CONSTANTS = {
+  EARTH_RADIUS_METERS: 6371000,
+  METERS_PER_DEGREE_LAT: 111320,
+  DENSITY_BONUS_RADIUS_RATIO: 0.5,
+  DENSITY_BONUS_MAX: 0.15,
+  DENSITY_BONUS_SCALE: 3,
+} as const;
+
+/**
+ * Verify that worker constants match the source constants
+ * Call this in tests to ensure worker code stays in sync
+ * @throws Error if any constant doesn't match
+ */
+export function verifyWorkerConstants(): void {
+  const mismatches: string[] = [];
+  
+  if (WORKER_CONSTANTS.EARTH_RADIUS_METERS !== EARTH_RADIUS_METERS) {
+    mismatches.push(`EARTH_RADIUS_METERS: worker=${WORKER_CONSTANTS.EARTH_RADIUS_METERS}, source=${EARTH_RADIUS_METERS}`);
+  }
+  if (WORKER_CONSTANTS.METERS_PER_DEGREE_LAT !== METERS_PER_DEGREE_LAT) {
+    mismatches.push(`METERS_PER_DEGREE_LAT: worker=${WORKER_CONSTANTS.METERS_PER_DEGREE_LAT}, source=${METERS_PER_DEGREE_LAT}`);
+  }
+  if (WORKER_CONSTANTS.DENSITY_BONUS_RADIUS_RATIO !== DENSITY_BONUS.RADIUS_RATIO) {
+    mismatches.push(`DENSITY_BONUS_RADIUS_RATIO: worker=${WORKER_CONSTANTS.DENSITY_BONUS_RADIUS_RATIO}, source=${DENSITY_BONUS.RADIUS_RATIO}`);
+  }
+  if (WORKER_CONSTANTS.DENSITY_BONUS_MAX !== DENSITY_BONUS.MAX) {
+    mismatches.push(`DENSITY_BONUS_MAX: worker=${WORKER_CONSTANTS.DENSITY_BONUS_MAX}, source=${DENSITY_BONUS.MAX}`);
+  }
+  if (WORKER_CONSTANTS.DENSITY_BONUS_SCALE !== DENSITY_BONUS.SCALE) {
+    mismatches.push(`DENSITY_BONUS_SCALE: worker=${WORKER_CONSTANTS.DENSITY_BONUS_SCALE}, source=${DENSITY_BONUS.SCALE}`);
+  }
+  
+  if (mismatches.length > 0) {
+    throw new Error(
+      `Worker constants out of sync with source files!\n` +
+      `Update WORKER_CODE in calculator-parallel.ts:\n` +
+      mismatches.join('\n')
+    );
+  }
+}
 
 // Use available CPU cores, but cap at 8 to avoid diminishing returns
 const MAX_WORKERS = Math.min(os.cpus().length, 8);

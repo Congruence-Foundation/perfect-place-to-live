@@ -35,13 +35,14 @@ export default function DataSourcesPanel({
   };
 
   const enabledCount = enabledSources.length;
+  const toggleExpanded = () => setIsExpanded(!isExpanded);
 
   return (
     <div className="rounded-xl bg-muted/50 transition-colors">
       {/* Header - always visible */}
       <div className="flex items-center justify-between p-3">
         <button
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={toggleExpanded}
           className="flex items-center gap-3 flex-1"
         >
           <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm bg-background">
@@ -57,7 +58,7 @@ export default function DataSourcesPanel({
           </div>
         </button>
         <button
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={toggleExpanded}
           className="p-1 hover:bg-background/50 rounded transition-colors"
         >
           <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />

@@ -50,6 +50,13 @@ interface BatchHeatmapResponse {
 }
 
 /**
+ * Generate a stable cache key from tiles array
+ */
+function getTilesKey(tiles: TileCoord[]): string {
+  return tiles.map(t => `${t.z}:${t.x}:${t.y}`).sort().join(',');
+}
+
+/**
  * Options for the useHeatmapTiles hook
  */
 export interface UseHeatmapTilesOptions {
@@ -82,6 +89,10 @@ export interface UseHeatmapTilesResult {
     poiCounts: Record<string, number>;
     poiTileCount?: number;
     cachedTiles?: number;
+    l1CacheStats?: {
+      heatmap: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
+      poi: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
+    };
   } | null;
   tileCount: number;
   viewportTileCount: number;
@@ -330,7 +341,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
         }
 
         // Track which tiles this batch result corresponds to
-        const tilesKey = allTiles.map(t => `${t.z}:${t.x}:${t.y}`).sort().join(',');
+        const tilesKey = getTilesKey(allTiles);
         batchResultTilesRef.current = tilesKey;
         
         setBatchResult(result);
@@ -373,7 +384,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
   const { heatmapPoints, pois, metadata } = useMemo(() => {
     // Check if batchResult corresponds to current tiles
     // This prevents rendering stale/pruned data when tiles changed but API hasn't responded yet
-    const currentTilesKey = allTiles.map(t => `${t.z}:${t.x}:${t.y}`).sort().join(',');
+    const currentTilesKey = getTilesKey(allTiles);
     const tilesMatch = batchResultTilesRef.current === currentTilesKey;
     
     if (!batchResult || isTooLarge) {
@@ -466,7 +477,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
 
   // Memoize tiles key calculation to avoid recomputing on every render
   const currentTilesKey = useMemo(
-    () => allTiles.map(t => `${t.z}:${t.x}:${t.y}`).sort().join(','),
+    () => getTilesKey(allTiles),
     [allTiles]
   );
 

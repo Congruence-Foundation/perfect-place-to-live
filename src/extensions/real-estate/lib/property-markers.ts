@@ -1,5 +1,5 @@
 import type { EstateType, PriceCategory } from '../types/property';
-import { PRICE_CATEGORY_COLORS } from './price-analysis';
+import { PRICE_CATEGORY_COLORS } from '../config/price-colors';
 import { formatCompactPrice } from '@/lib/format';
 import { DEFAULT_FALLBACK_COLOR } from '@/constants/colors';
 

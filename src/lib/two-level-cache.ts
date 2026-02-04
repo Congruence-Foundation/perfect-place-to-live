@@ -47,6 +47,7 @@ export interface TwoLevelCache<T> {
 /**
  * Creates a two-level cache with Redis as primary and LRU as secondary.
  * Use for slow operations (POI fetches, Property fetches) where persistence matters.
+ * Includes request coalescing to prevent cache stampede.
  * 
  * @param config - Cache configuration
  * @returns Cache instance with get, set, and getStats methods
@@ -61,33 +62,54 @@ export function createTwoLevelCache<T>(config: CacheConfig): TwoLevelCache<T> {
     updateAgeOnHas: true,
   });
 
+  // Track pending requests to prevent cache stampede
+  const pendingRequests = new Map<string, Promise<T | null>>();
+
   let l1Hits = 0;
   let l2Hits = 0;
   let misses = 0;
 
+  async function doGet(key: string): Promise<T | null> {
+    try {
+      // Check L1 first
+      const local = lruCache.get(key);
+      if (local !== undefined) {
+        l1Hits++;
+        return local;
+      }
+
+      // Check Redis (primary cache)
+      const redis = await cacheGet<T>(key);
+      if (redis) {
+        l2Hits++;
+        lruCache.set(key, redis);
+        return redis;
+      }
+
+      misses++;
+      return null;
+    } catch (error) {
+      console.error(`${name} cache get error:`, error);
+      return null;
+    }
+  }
+
   return {
     async get(key: string): Promise<T | null> {
+      // Check if there's already a pending request for this key (request coalescing)
+      const pending = pendingRequests.get(key);
+      if (pending) {
+        return pending;
+      }
+
+      // Create new request and track it
+      const promise = doGet(key);
+      pendingRequests.set(key, promise);
+
       try {
-        // Check L1 first
-        const local = lruCache.get(key);
-        if (local !== undefined) {
-          l1Hits++;
-          return local;
-        }
-
-        // Check Redis (primary cache)
-        const redis = await cacheGet<T>(key);
-        if (redis) {
-          l2Hits++;
-          lruCache.set(key, redis);
-          return redis;
-        }
-
-        misses++;
-        return null;
-      } catch (error) {
-        console.error(`${name} cache get error:`, error);
-        return null;
+        return await promise;
+      } finally {
+        pendingRequests.delete(key);
       }
     },
 
@@ -121,7 +143,8 @@ export function createTwoLevelCache<T>(config: CacheConfig): TwoLevelCache<T> {
  * @returns Cache instance with get, set, and getStats methods
  */
 export function createLRUCache<T>(config: CacheConfig): TwoLevelCache<T> {
-  const { maxSize, ttlSeconds } = config;
+  const { name, maxSize, ttlSeconds } = config;
+  void name; // Unused but kept for API consistency with createTwoLevelCache
 
   const lruCache = new LRUCache<string, T>({
     max: maxSize,

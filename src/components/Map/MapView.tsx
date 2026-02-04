@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { HeatmapPoint, POI, Factor, Bounds } from '@/types';
-import { POI_COLORS, Z_INDEX, DEBUG_COLORS } from '@/constants';
+import { POI_COLORS, Z_INDEX, DEBUG_COLORS, DEFAULT_FALLBACK_COLOR } from '@/constants';
 import { calculateFactorBreakdown } from '@/lib/scoring';
 import { renderHeatmapToCanvas } from '@/lib/rendering/canvasRenderer';
 import { useMapStore } from '@/stores/mapStore';
@@ -498,7 +498,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         factors.forEach((f) => { factorNames[f.id] = f.name; });
 
         Object.entries(pois).forEach(([factorId, poiList]) => {
-          const color = POI_COLORS[factorId] || '#6b7280';
+          const color = POI_COLORS[factorId] || DEFAULT_FALLBACK_COLOR;
           const factorName = factorNames[factorId] || factorId;
 
           poiList.forEach((poi) => {

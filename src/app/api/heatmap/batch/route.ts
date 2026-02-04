@@ -28,7 +28,7 @@ import {
   type HeatmapTileCacheEntry,
 } from '@/lib/heatmap-tile-cache';
 import { getPoiTilesForArea, filterPoisToViewport, getPoiTileCacheStats } from '@/lib/poi-tile-cache';
-import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors, isValidTileCoord } from '@/lib/api-utils';
+import { errorResponse, createResponse, acceptsMsgpack, getValidatedFactors, isValidTileCoord, handleApiError } from '@/lib/api-utils';
 import { PERFORMANCE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 import type { POIDataSource } from '@/lib/poi';
 import { createTimer } from '@/lib/profiling';
@@ -36,12 +36,7 @@ import { createTimer } from '@/lib/profiling';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const { 
-  DEFAULT_DATA_SOURCE,
-  TARGET_GRID_POINTS,
-  MIN_CELL_SIZE,
-  MAX_CELL_SIZE,
-} = PERFORMANCE_CONFIG;
+const { DEFAULT_DATA_SOURCE } = PERFORMANCE_CONFIG;
 
 // ============================================================================
 // Types
@@ -205,8 +200,14 @@ export async function POST(request: NextRequest) {
 
     return createResponse(responseData, useMsgpack);
   } catch (error) {
-    console.error('Batch heatmap API error:', error);
-    return errorResponse(error);
+    return handleApiError(error, {
+      context: 'Batch heatmap API',
+      errorMappings: [
+        { pattern: 'No tiles provided', status: 400 },
+        { pattern: 'Invalid tile coordinates', status: 400 },
+        { pattern: 'No enabled factors', status: 400 },
+      ],
+    });
   }
 }
 
@@ -256,7 +257,7 @@ async function checkHeatmapCacheParallel(
   const cachedResults: Record<string, { points: HeatmapPoint[]; cached: boolean }> = {};
   const uncachedTiles: TileCoord[] = [];
 
-  for (const { tile, cached } of cacheChecks) {
+  for (const { tile, cacheKey: _, cached } of cacheChecks) {
     const tileKey = `${tile.z}:${tile.x}:${tile.y}`;
     if (cached) {
       cachedResults[tileKey] = { points: cached.points, cached: true };

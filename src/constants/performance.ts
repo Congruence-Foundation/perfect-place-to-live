@@ -4,6 +4,19 @@
 
 import { POIDataSource } from '@/lib/errors';
 
+// ============================================================================
+// Shared Constants (used across multiple configs)
+// ============================================================================
+
+/** Shared tile zoom level for all tile-based systems */
+const SHARED_TILE_ZOOM = 13;
+
+/** Shared batch size for parallel tile processing */
+const SHARED_BATCH_SIZE = 5;
+
+/** 24 hours in seconds - common TTL for server caches */
+const TTL_24_HOURS = 86400;
+
 export const PERFORMANCE_CONFIG = {
   /** Default data source for POI fetching */
   DEFAULT_DATA_SOURCE: 'neon' as POIDataSource,
@@ -44,13 +57,13 @@ export const PERFORMANCE_CONFIG = {
  */
 export const TILE_CONFIG = {
   /** Cache TTL for POIs during tile generation (seconds) - 24 hours */
-  POI_CACHE_TTL_SECONDS: 86400,
+  POI_CACHE_TTL_SECONDS: TTL_24_HOURS,
   
   /** Cache TTL for generated tiles (seconds) - 7 days */
   TILE_CACHE_TTL_SECONDS: 604800,
   
   /** Number of tiles to process in parallel */
-  BATCH_SIZE: 5,
+  BATCH_SIZE: SHARED_BATCH_SIZE,
   
   /** Delay between batches (ms) */
   BATCH_DELAY_MS: 1000,
@@ -129,7 +142,7 @@ export const DENSITY_BONUS = {
  */
 export const PROPERTY_TILE_CONFIG = {
   /** Fixed tile zoom level for property fetching (~2.4km x 2.4km tiles at Poland's latitude) */
-  TILE_ZOOM: 13,
+  TILE_ZOOM: SHARED_TILE_ZOOM,
   
   /** Minimum zoom level to display properties */
   MIN_DISPLAY_ZOOM: 10,
@@ -144,7 +157,7 @@ export const PROPERTY_TILE_CONFIG = {
   MAX_TOTAL_TILES: 50,
   
   /** Number of tiles to fetch per batch (to respect Otodom API limits) */
-  BATCH_SIZE: 5,
+  BATCH_SIZE: SHARED_BATCH_SIZE,
   
   /** Delay between batches in milliseconds */
   BATCH_DELAY_MS: 100,
@@ -174,7 +187,7 @@ export const PROPERTY_TILE_CONFIG = {
  */
 export const HEATMAP_TILE_CONFIG = {
   /** Fixed tile zoom level for heatmap (~2.4km x 2.4km tiles at Poland's latitude) */
-  TILE_ZOOM: 13,
+  TILE_ZOOM: SHARED_TILE_ZOOM,
   
   /** Maximum viewport tiles before showing "zoom in" message */
   MAX_VIEWPORT_TILES: 36,
@@ -183,7 +196,7 @@ export const HEATMAP_TILE_CONFIG = {
   MAX_TOTAL_TILES: 64,
   
   /** Number of tiles to fetch per batch */
-  BATCH_SIZE: 5,
+  BATCH_SIZE: SHARED_BATCH_SIZE,
   
   /** Delay between batches in milliseconds */
   BATCH_DELAY_MS: 1,
@@ -198,7 +211,7 @@ export const HEATMAP_TILE_CONFIG = {
   SERVER_LRU_MAX: 10000,
   
   /** Server-side cache TTL in seconds - 24 hours (aligned with POI cache) */
-  SERVER_TTL_SECONDS: 86400,
+  SERVER_TTL_SECONDS: TTL_24_HOURS,
   
   /** Client-side cache stale time (React Query) - 10 minutes */
   CLIENT_STALE_TIME_MS: 10 * 60 * 1000,
@@ -213,7 +226,7 @@ export const HEATMAP_TILE_CONFIG = {
  */
 export const POI_TILE_CONFIG = {
   /** Fixed tile zoom level for POI caching (same as heatmap for simplicity) */
-  TILE_ZOOM: 13,
+  TILE_ZOOM: SHARED_TILE_ZOOM,
   
   /** Default POI buffer scale multiplier (applied to max factor distance) */
   DEFAULT_POI_BUFFER_SCALE: 2,
@@ -231,7 +244,7 @@ export const POI_TILE_CONFIG = {
   SERVER_LRU_MAX: 1000,
   
   /** Server-side cache TTL in seconds - 24 hours */
-  SERVER_TTL_SECONDS: 86400,
+  SERVER_TTL_SECONDS: TTL_24_HOURS,
   
   /** Approximate tile size in meters at Poland's latitude (~52°) for zoom 13 */
   TILE_SIZE_METERS: 2400,

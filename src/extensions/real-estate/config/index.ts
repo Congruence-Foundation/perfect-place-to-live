@@ -22,3 +22,15 @@ export type {
   FilterOption,
   TranslatableFilterOption,
 } from './filters';
+
+// Price category colors and labels
+export {
+  DEFAULT_FALLBACK_COLOR,
+  PRICE_CATEGORY_THEME,
+  PRICE_CATEGORY_COLORS,
+  PRICE_BADGE_COLORS,
+  PRICE_BADGE_LABEL_KEYS,
+  PRICE_BADGE_LABELS_EN,
+  getPriceCategoryColor,
+  getPriceCategoryBgColor,
+} from './price-colors';

@@ -2,7 +2,6 @@
 
 import { useTranslations } from 'next-intl';
 import { Slider } from '@/components/ui/slider';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -10,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { InfoTooltip } from '@/components/ui/info-tooltip';
+import { LabelWithTooltip } from '@/components/ui/label-with-tooltip';
 import { HeatmapSettings, ClusterPriceAnalysisMode } from '@/types';
 import { ClusterPriceDisplay } from '../types';
 import { useRealEstateExtension } from '../hooks';
@@ -47,12 +46,10 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
     <>
       {/* Price Analysis Radius */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <Label className="text-xs">{t('priceAnalysisRadius')}</Label>
-          <InfoTooltip>
-            <p className="text-xs">{t('priceAnalysisRadiusTooltip')}</p>
-          </InfoTooltip>
-        </div>
+        <LabelWithTooltip
+          label={t('priceAnalysisRadius')}
+          tooltip={t('priceAnalysisRadiusTooltip')}
+        />
         <Select
           value={priceAnalysisRadius.toString()}
           onValueChange={(value) => setPriceAnalysisRadius(parseInt(value, 10))}
@@ -60,7 +57,7 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
           <SelectTrigger className="h-7 text-xs w-[100px]">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}]`}>
+          <SelectContent position="popper" style={{ zIndex: Z_INDEX.DROPDOWN }}>
             {PRICE_RADIUS_VALUES.map((value) => (
               <SelectItem key={value} value={value.toString()} className="text-xs">
                 {t(`priceAnalysisRadius_${value}`)}
@@ -72,12 +69,10 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
 
       {/* Cluster Price Display */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <Label className="text-xs">{t('clusterPrice')}</Label>
-          <InfoTooltip>
-            <p className="text-xs">{t('clusterPriceTooltip')}</p>
-          </InfoTooltip>
-        </div>
+        <LabelWithTooltip
+          label={t('clusterPrice')}
+          tooltip={t('clusterPriceTooltip')}
+        />
         <Select
           value={settings.clusterPriceDisplay}
           onValueChange={(value: ClusterPriceDisplay) => onSettingsChange({ clusterPriceDisplay: value })}
@@ -85,7 +80,7 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
           <SelectTrigger className="h-7 text-xs w-[100px]">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}]`}>
+          <SelectContent position="popper" style={{ zIndex: Z_INDEX.DROPDOWN }}>
             {CLUSTER_PRICE_VALUES.map((displayValue) => (
               <SelectItem key={displayValue} value={displayValue} className="text-xs">
                 {t(`clusterPrice_${displayValue}`)}
@@ -97,12 +92,10 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
 
       {/* Cluster Price Analysis */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <Label className="text-xs">{t('clusterAnalysis')}</Label>
-          <InfoTooltip>
-            <p className="text-xs">{t('clusterAnalysisTooltip')}</p>
-          </InfoTooltip>
-        </div>
+        <LabelWithTooltip
+          label={t('clusterAnalysis')}
+          tooltip={t('clusterAnalysisTooltip')}
+        />
         <Select
           value={settings.clusterPriceAnalysis}
           onValueChange={(value: ClusterPriceAnalysisMode) => onSettingsChange({ clusterPriceAnalysis: value })}
@@ -110,7 +103,7 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
           <SelectTrigger className="h-7 text-xs w-[100px]">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent position="popper" className={`z-[${Z_INDEX.DROPDOWN}]`}>
+          <SelectContent position="popper" style={{ zIndex: Z_INDEX.DROPDOWN }}>
             {CLUSTER_ANALYSIS_VALUES.map((analysisValue) => (
               <SelectItem key={analysisValue} value={analysisValue} className="text-xs">
                 {t(`clusterAnalysis_${analysisValue}`)}
@@ -124,12 +117,10 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
       {settings.clusterPriceAnalysis === 'detailed' && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <Label className="text-xs">{t('detailedThreshold')}</Label>
-              <InfoTooltip>
-                <p className="text-xs">{t('detailedThresholdTooltip')}</p>
-              </InfoTooltip>
-            </div>
+            <LabelWithTooltip
+              label={t('detailedThreshold')}
+              tooltip={t('detailedThresholdTooltip')}
+            />
             <span className="text-xs text-muted-foreground font-medium">{settings.detailedModeThreshold}</span>
           </div>
           <Slider

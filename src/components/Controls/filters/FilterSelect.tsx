@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Z_INDEX } from '@/constants/z-index';
 
 interface SelectOption<T extends string> {
   value: T;
@@ -40,7 +41,7 @@ export default function FilterSelect<T extends string>({
         <SelectTrigger className="h-7 text-xs w-full">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
-        <SelectContent className="z-[1100] max-h-60" position="popper" sideOffset={4}>
+        <SelectContent style={{ zIndex: Z_INDEX.DROPDOWN }} className="max-h-60" position="popper" sideOffset={4}>
           {options.map((option) => (
             <SelectItem key={option.value} value={option.value} className="text-xs">
               {option.label}

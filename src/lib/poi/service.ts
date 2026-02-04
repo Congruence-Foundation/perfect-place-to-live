@@ -180,9 +180,10 @@ export async function fetchPOIs(
         return await fetchAllPOIsCombined(factorTags, bounds, signal);
       
       case 'neon':
-      default:
+      default: {
         const factorIds = factorTags.map(f => f.id);
         return await getPOIsFromDB(factorIds, bounds);
+      }
     }
   } catch (error) {
     throw new POIFetchError(
@@ -229,10 +230,11 @@ export async function fetchPOIsBatched(
         break;
       
       case 'neon':
-      default:
+      default: {
         const factorIds = factorTags.map(f => f.id);
         result = await getPOIsForTilesBatchedDB(tiles, factorIds);
         break;
+      }
     }
     
     stopTimer({ tiles: tiles.length, factors: factorTags.length, source });

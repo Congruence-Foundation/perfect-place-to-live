@@ -26,6 +26,7 @@ interface SnapHeights {
   expanded: number;
 }
 
+/** Default snap point percentages of viewport height */
 const DEFAULT_SNAP_CONFIG: SnapPointConfig = {
   collapsedPercent: 7,
   halfPercent: 50,

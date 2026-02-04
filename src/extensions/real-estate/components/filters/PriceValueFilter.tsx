@@ -13,6 +13,10 @@ const SLIDER_MIN = 0;
 const SLIDER_MAX = 100;
 const SLIDER_STEP = 20;
 
+// Shared thumb styles
+const THUMB_CLASSES = 'block h-3.5 w-3.5 rounded-full border-2 border-white bg-white shadow-md ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-grab active:cursor-grabbing';
+const THUMB_STYLE = { boxShadow: '0 1px 3px rgba(0,0,0,0.3)' };
+
 interface PriceValueFilterOption {
   value: PriceValueFilterType;
   label: string;
@@ -175,18 +179,14 @@ export default function PriceValueFilter({
           
           {/* Left thumb */}
           <SliderPrimitive.Thumb 
-            className="block h-3.5 w-3.5 rounded-full border-2 border-white bg-white shadow-md ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-grab active:cursor-grabbing"
-            style={{
-              boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-            }}
+            className={THUMB_CLASSES}
+            style={THUMB_STYLE}
           />
           
           {/* Right thumb */}
           <SliderPrimitive.Thumb 
-            className="block h-3.5 w-3.5 rounded-full border-2 border-white bg-white shadow-md ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-grab active:cursor-grabbing"
-            style={{
-              boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-            }}
+            className={THUMB_CLASSES}
+            style={THUMB_STYLE}
           />
         </SliderPrimitive.Root>
         

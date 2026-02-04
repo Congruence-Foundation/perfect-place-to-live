@@ -263,5 +263,3 @@ export function RealEstateController() {
   // No UI - this is a controller component
   return null;
 }
-
-export default RealEstateController;

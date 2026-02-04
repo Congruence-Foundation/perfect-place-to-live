@@ -31,4 +31,4 @@ export type {
   ClusterPriceDisplay,
 } from './property';
 
-export { DEFAULT_PROPERTY_FILTERS } from './property';
+export { DEFAULT_PROPERTY_FILTERS, isEnrichedProperty } from './property';
