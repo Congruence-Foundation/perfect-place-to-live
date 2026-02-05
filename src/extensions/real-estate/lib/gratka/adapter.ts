@@ -10,7 +10,6 @@ import type {
   IPropertyDataSource,
   DataSourceFeature,
 } from '../shared/datasource';
-import { registerDataSource } from '../shared/datasource';
 import type {
   UnifiedSearchParams,
   UnifiedSearchResult,
@@ -21,7 +20,6 @@ import type {
   UnifiedTransactionType,
   UnifiedOwnerType,
   UnifiedSortKey,
-  UnifiedContactType,
 } from '../shared/types';
 import { createUnifiedId } from '../shared/types';
 import {
@@ -36,214 +34,145 @@ import type {
   GratkaPropertyType,
   GratkaTransactionType,
   GratkaOwnerType,
-  GratkaContactType,
   GratkaPropertyAttributes,
 } from './types';
-import { GRATKA_DEFAULT_MAX_MARKERS, GRATKA_DEFAULT_PAGE_SIZE } from '../../config/constants';
+import { GRATKA_DEFAULT_MAX_MARKERS, GRATKA_DEFAULT_PAGE_SIZE, GRATKA_BASE_URL, GRATKA_CDN_URL } from '../../config/constants';
 
 // ============================================================================
-// Gratka-Specific Conversion Utilities
+// Type Mapping Utilities (Internal)
 // ============================================================================
 
-/**
- * Map Gratka transaction type to unified
- * Gratka uses 'SALE' | 'RENT', unified uses 'SELL' | 'RENT'
- */
-export function mapGratkaTransaction(transaction: GratkaTransactionType): UnifiedTransactionType {
+/** Map Gratka transaction type to unified (SALE -> SELL) */
+function mapGratkaTransaction(transaction: GratkaTransactionType): UnifiedTransactionType {
   return transaction === 'SALE' ? 'SELL' : 'RENT';
 }
 
-/**
- * Map unified transaction to Gratka format
- */
-export function toGratkaTransaction(transaction: UnifiedTransactionType): GratkaTransactionType {
+/** Map unified transaction to Gratka format (SELL -> SALE) */
+function toGratkaTransaction(transaction: UnifiedTransactionType): GratkaTransactionType {
   return transaction === 'SELL' ? 'SALE' : 'RENT';
 }
 
-/**
- * Map Gratka property type to unified
- * Gratka uses 'PLOT', unified uses 'TERRAIN'
- */
-export function mapGratkaPropertyType(
-  type: GratkaPropertyType
-): UnifiedEstateType {
-  if (type === 'PLOT') return 'TERRAIN';
-  return type as UnifiedEstateType;
+/** Map Gratka property type to unified (PLOT -> TERRAIN) */
+function mapGratkaPropertyType(type: GratkaPropertyType): UnifiedEstateType {
+  return type === 'PLOT' ? 'TERRAIN' : (type as UnifiedEstateType);
 }
 
-/**
- * Map unified estate type to Gratka format
- */
-export function toGratkaPropertyType(
-  type: UnifiedEstateType
-): GratkaPropertyType {
-  if (type === 'TERRAIN') return 'PLOT';
-  return type as GratkaPropertyType;
+/** Map unified estate type to Gratka format (TERRAIN -> PLOT) */
+function toGratkaPropertyType(type: UnifiedEstateType): GratkaPropertyType {
+  return type === 'TERRAIN' ? 'PLOT' : (type as GratkaPropertyType);
 }
 
-/**
- * Map unified owner type to Gratka format (array)
- * Gratka uses arrays for owner type filter
- */
-export function toGratkaOwnerType(
-  owner: UnifiedOwnerType
-): GratkaOwnerType[] {
-  if (owner === 'ALL') return []; // Empty array means no filter
-  return [owner as GratkaOwnerType];
+/** Map unified owner type to Gratka format (array) */
+function toGratkaOwnerType(owner: UnifiedOwnerType): GratkaOwnerType[] {
+  return owner === 'ALL' ? [] : [owner as GratkaOwnerType];
 }
 
-/**
- * Map unified sort key to Gratka format
- */
-export function toGratkaSortKey(sort: UnifiedSortKey): { sortKey: string; sortOrder: 'ASC' | 'DESC' } {
-  switch (sort) {
-    case 'RELEVANCE':
-      return { sortKey: 'PROMOTION_POINTS', sortOrder: 'ASC' };
-    case 'PRICE_ASC':
-      return { sortKey: 'PRICE', sortOrder: 'ASC' };
-    case 'PRICE_DESC':
-      return { sortKey: 'PRICE', sortOrder: 'DESC' };
-    case 'PRICE_M2_ASC':
-      return { sortKey: 'PRICE_M2', sortOrder: 'ASC' };
-    case 'PRICE_M2_DESC':
-      return { sortKey: 'PRICE_M2', sortOrder: 'DESC' };
-    case 'AREA_ASC':
-      return { sortKey: 'AREA', sortOrder: 'ASC' };
-    case 'AREA_DESC':
-      return { sortKey: 'AREA', sortOrder: 'DESC' };
-    case 'DATE_ASC':
-      return { sortKey: 'DATE', sortOrder: 'ASC' };
-    case 'DATE_DESC':
-      return { sortKey: 'DATE', sortOrder: 'DESC' };
-    default:
-      return { sortKey: 'PROMOTION_POINTS', sortOrder: 'ASC' };
-  }
-}
-
-/**
- * Map Gratka contact type to unified
- */
-export function mapGratkaContactType(
-  type: GratkaContactType
-): UnifiedContactType {
-  return type; // Same values
-}
-
-// ============================================================================
-// Building Material Mapping
-// ============================================================================
-
-/**
- * Map Otodom building material codes to Gratka dictionary values
- */
-const BUILDING_MATERIAL_MAP: Record<string, string> = {
-  'BRICK': 'BUILDING_MATERIAL_BRICK',
-  'WOOD': 'BUILDING_MATERIAL_WOOD',
-  'CONCRETE': 'BUILDING_MATERIAL_CONCRETE',
-  'CONCRETE_PLATE': 'BUILDING_MATERIAL_LPS',
-  'CELLULAR_CONCRETE': 'BUILDING_MATERIAL_YTONG',
-  'SILIKAT': 'BUILDING_MATERIAL_SUPOREX',
-  'BREEZEBLOCK': 'BUILDING_MATERIAL_HOLLOW_BLOCK',
-  'OTHER': 'BUILDING_MATERIAL_VARIED',
-  'REINFORCED_CONCRETE': 'BUILDING_MATERIAL_CONCRETE',
-  'HYDROTON': 'BUILDING_MATERIAL_HOLLOW_BLOCK',
+/** Sort key mapping from unified to Gratka format */
+const SORT_KEY_MAP: Record<UnifiedSortKey, { sortKey: string; sortOrder: 'ASC' | 'DESC' }> = {
+  RELEVANCE: { sortKey: 'PROMOTION_POINTS', sortOrder: 'ASC' },
+  PRICE_ASC: { sortKey: 'PRICE', sortOrder: 'ASC' },
+  PRICE_DESC: { sortKey: 'PRICE', sortOrder: 'DESC' },
+  PRICE_M2_ASC: { sortKey: 'PRICE_M2', sortOrder: 'ASC' },
+  PRICE_M2_DESC: { sortKey: 'PRICE_M2', sortOrder: 'DESC' },
+  AREA_ASC: { sortKey: 'AREA', sortOrder: 'ASC' },
+  AREA_DESC: { sortKey: 'AREA', sortOrder: 'DESC' },
+  DATE_ASC: { sortKey: 'DATE', sortOrder: 'ASC' },
+  DATE_DESC: { sortKey: 'DATE', sortOrder: 'DESC' },
 };
 
-/**
- * Convert unified building materials to Gratka dictionaries format
- * Gratka uses a 2D array for dictionaries: [['MATERIAL_1', 'MATERIAL_2']]
- */
-export function toGratkaBuildingMaterials(materials: string[]): string[][] {
-  if (!materials || materials.length === 0) return [];
-  const gratkaMaterials = materials
-    .map(m => BUILDING_MATERIAL_MAP[m])
-    .filter(Boolean);
+/** Map unified sort key to Gratka format */
+function toGratkaSortKey(sort: UnifiedSortKey): { sortKey: string; sortOrder: 'ASC' | 'DESC' } {
+  return SORT_KEY_MAP[sort] ?? SORT_KEY_MAP.RELEVANCE;
+}
+
+// ============================================================================
+// Building Material & Extras Mapping (Internal)
+// ============================================================================
+
+/** Map unified building material codes to Gratka dictionary values */
+const BUILDING_MATERIAL_MAP: Record<string, string> = {
+  BRICK: 'BUILDING_MATERIAL_BRICK',
+  WOOD: 'BUILDING_MATERIAL_WOOD',
+  CONCRETE: 'BUILDING_MATERIAL_CONCRETE',
+  CONCRETE_PLATE: 'BUILDING_MATERIAL_LPS',
+  CELLULAR_CONCRETE: 'BUILDING_MATERIAL_YTONG',
+  SILIKAT: 'BUILDING_MATERIAL_SUPOREX',
+  BREEZEBLOCK: 'BUILDING_MATERIAL_HOLLOW_BLOCK',
+  OTHER: 'BUILDING_MATERIAL_VARIED',
+  REINFORCED_CONCRETE: 'BUILDING_MATERIAL_CONCRETE',
+  HYDROTON: 'BUILDING_MATERIAL_HOLLOW_BLOCK',
+};
+
+/** Map unified extras to Gratka property attributes */
+const EXTRAS_TO_ATTRIBUTES: Record<string, keyof GratkaPropertyAttributes> = {
+  BALCONY: 'balcony',
+  TERRACE: 'terrace',
+  BASEMENT: 'basement',
+  LIFT: 'elevator',
+  GARDEN: 'garden',
+};
+
+/** Convert unified building materials to Gratka dictionaries format (2D array) */
+function toGratkaBuildingMaterials(materials: string[]): string[][] {
+  if (!materials?.length) return [];
+  const gratkaMaterials = materials.map(m => BUILDING_MATERIAL_MAP[m]).filter(Boolean);
   return gratkaMaterials.length > 0 ? [gratkaMaterials] : [];
 }
 
-// ============================================================================
-// Extras/Attributes Mapping
-// ============================================================================
-
-/**
- * Map Otodom extras to Gratka property attributes
- * Note: Some Otodom extras don't have direct Gratka equivalents
- */
-const EXTRAS_TO_ATTRIBUTES: Record<string, keyof GratkaPropertyAttributes> = {
-  'BALCONY': 'balcony',
-  'TERRACE': 'terrace',
-  'BASEMENT': 'basement',
-  'LIFT': 'elevator',
-  'GARDEN': 'garden',
-  // Note: GARAGE, SEPARATE_KITCHEN, TWO_STOREY, HAS_PHOTOS not directly supported
-};
-
-/**
- * Convert unified extras to Gratka property attributes
- */
-export function toGratkaAttributes(extras: string[]): Partial<GratkaPropertyAttributes> {
-  if (!extras || extras.length === 0) return {};
-  
+/** Convert unified extras to Gratka property attributes */
+function toGratkaAttributes(extras: string[]): Partial<GratkaPropertyAttributes> {
+  if (!extras?.length) return {};
   const attrs: Partial<GratkaPropertyAttributes> = {};
   for (const extra of extras) {
     const key = EXTRAS_TO_ATTRIBUTES[extra];
-    if (key) {
-      attrs[key] = true;
-    }
+    if (key) attrs[key] = true;
   }
   return attrs;
 }
 
-// ============================================================================
-// Listing Age / Date Filter
-// ============================================================================
-
-/**
- * Convert days since created to ISO date string for Gratka dateFrom filter
- * @param daysSinceCreated - Number of days (1, 3, 7, 14, 30, 90)
- * @returns ISO date string (YYYY-MM-DD)
- */
-export function toGratkaDateFrom(daysSinceCreated: number): string {
+/** Convert days since created to ISO date string for Gratka dateFrom filter */
+function toGratkaDateFrom(daysSinceCreated: number): string {
   const date = new Date();
   date.setDate(date.getDate() - daysSinceCreated);
   return date.toISOString().split('T')[0];
 }
 
 // ============================================================================
-// Floor Parsing
+// Floor Parsing (Internal)
 // ============================================================================
 
 /**
  * Parse floor number from Gratka's floorFormatted string
- * Examples: "parter" -> 0, "1 piętro" -> 1, "3" -> 3, "10 piętro" -> 10
+ * Examples: "parter" -> 0, "1 piętro" -> 1, "suterena" -> -1
  */
-export function parseFloorFromFormatted(formatted: string | undefined | null): number | null {
+function parseFloorFromFormatted(formatted: string | undefined | null): number | null {
   if (!formatted) return null;
   
   const lower = formatted.toLowerCase().trim();
   
-  // Handle "parter" (ground floor)
-  if (lower === 'parter' || lower.includes('parter')) {
-    return 0;
-  }
+  // Ground floor
+  if (lower.includes('parter')) return 0;
   
-  // Handle "suterena" or "piwnica" (basement)
-  if (lower === 'suterena' || lower === 'piwnica' || lower.includes('suteren') || lower.includes('piwnic')) {
-    return -1;
-  }
+  // Basement
+  if (lower.includes('suteren') || lower.includes('piwnic')) return -1;
   
   // Extract number from string like "3 piętro", "1", "10 piętro"
   const match = formatted.match(/(\d+)/);
-  if (match) {
-    return parseInt(match[1], 10);
-  }
-  
-  return null;
+  return match ? parseInt(match[1], 10) : null;
 }
 
 // ============================================================================
-// Internal Conversion Functions
+// Parsing Utilities (Internal)
 // ============================================================================
+
+/** Parse Gratka numeric string to number, returns defaultValue for invalid values */
+function parseGratkaNumber(value: string | undefined | null, defaultValue: null): number | null;
+function parseGratkaNumber(value: string | undefined | null, defaultValue: number): number;
+function parseGratkaNumber(value: string | undefined | null, defaultValue: number | null): number | null {
+  if (!value) return defaultValue;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
 
 /**
  * Convert unified search params to Gratka ListingParametersInput
@@ -301,10 +230,15 @@ function toGratkaParams(params: UnifiedSearchParams): GratkaListingParametersInp
     baseParams.searchParameters.priceM2To = formatGratkaPrice(params.pricePerMeterMax);
   }
 
+  // Extended params type for optional filters not in base UnifiedSearchParams
+  type ExtendedParams = UnifiedSearchParams & {
+    buildingMaterials?: string[];
+    extras?: string[];
+    daysSinceCreated?: number;
+  };
+  const extendedParams = params as ExtendedParams;
+
   // Building materials filter (convert to Gratka dictionaries format)
-  // Note: This requires extending UnifiedSearchParams to include buildingMaterials
-  // For now, we check if it exists in the params object
-  const extendedParams = params as UnifiedSearchParams & { buildingMaterials?: string[] };
   if (extendedParams.buildingMaterials && extendedParams.buildingMaterials.length > 0) {
     const dictionaries = toGratkaBuildingMaterials(extendedParams.buildingMaterials);
     if (dictionaries.length > 0) {
@@ -313,10 +247,8 @@ function toGratkaParams(params: UnifiedSearchParams): GratkaListingParametersInp
   }
 
   // Extras/amenities filter (convert to Gratka attributes format)
-  // Note: This requires extending UnifiedSearchParams to include extras
-  const extendedParams2 = params as UnifiedSearchParams & { extras?: string[] };
-  if (extendedParams2.extras && extendedParams2.extras.length > 0) {
-    const attributes = toGratkaAttributes(extendedParams2.extras);
+  if (extendedParams.extras && extendedParams.extras.length > 0) {
+    const attributes = toGratkaAttributes(extendedParams.extras);
     if (Object.keys(attributes).length > 0) {
       baseParams.searchParameters.attributes = {
         ...baseParams.searchParameters.attributes,
@@ -325,16 +257,14 @@ function toGratkaParams(params: UnifiedSearchParams): GratkaListingParametersInp
     }
     
     // Handle HAS_PHOTOS special case
-    if (extendedParams2.extras.includes('HAS_PHOTOS')) {
+    if (extendedParams.extras.includes('HAS_PHOTOS')) {
       baseParams.searchParameters.withPhoto = true;
     }
   }
 
   // Listing age filter (convert days to dateFrom)
-  // Note: This requires extending UnifiedSearchParams to include daysSinceCreated
-  const extendedParams3 = params as UnifiedSearchParams & { daysSinceCreated?: number };
-  if (extendedParams3.daysSinceCreated) {
-    baseParams.searchParameters.dateFrom = toGratkaDateFrom(extendedParams3.daysSinceCreated);
+  if (extendedParams.daysSinceCreated) {
+    baseParams.searchParameters.dateFrom = toGratkaDateFrom(extendedParams.daysSinceCreated);
   }
 
   // Sort order
@@ -351,37 +281,18 @@ function toGratkaParams(params: UnifiedSearchParams): GratkaListingParametersInp
 }
 
 /**
- * Parse Gratka price string to number
- */
-function parseGratkaPrice(price: string | undefined | null): number | null {
-  if (!price) return null;
-  const parsed = parseFloat(price);
-  return isNaN(parsed) ? null : parsed;
-}
-
-/**
- * Parse Gratka area string to number
- */
-function parseGratkaArea(area: string | undefined | null): number {
-  if (!area) return 0;
-  const parsed = parseFloat(area);
-  return isNaN(parsed) ? 0 : parsed;
-}
-
-/**
  * Convert Gratka property to unified format
  */
 function toUnifiedProperty(property: GratkaPropertyNode): UnifiedProperty {
   // Parse price from Gratka format - API uses 'amount' field
-  // Handle null price gracefully
   const totalPrice = property.price 
-    ? parseGratkaPrice(property.price.amount ?? property.price.totalPrice)
+    ? parseGratkaNumber(property.price.amount ?? property.price.totalPrice, null)
     : null;
   // Price per meter comes from priceM2.amount or fallback to pricePerSquareMeter
   const pricePerMeter = property.priceM2?.amount 
-    ? parseGratkaPrice(property.priceM2.amount)
-    : (property.price?.pricePerSquareMeter ? parseGratkaPrice(property.price.pricePerSquareMeter) : null);
-  const area = parseGratkaArea(property.area);
+    ? parseGratkaNumber(property.priceM2.amount, null)
+    : (property.price?.pricePerSquareMeter ? parseGratkaNumber(property.price.pricePerSquareMeter, null) : null);
+  const area = parseGratkaNumber(property.area, 0);
 
   // Parse rooms (Gratka uses number or string)
   const rooms = property.rooms ?? (property.numberOfRooms ? parseInt(property.numberOfRooms, 10) : null);
@@ -393,16 +304,10 @@ function toUnifiedProperty(property: GratkaPropertyNode): UnifiedProperty {
   const lat = property.location?.coordinates?.latitude ?? property.location?.map?.center.latitude ?? 0;
   const lng = property.location?.coordinates?.longitude ?? property.location?.map?.center.longitude ?? 0;
 
-  // #region agent log
-  if (lat === 0 || lng === 0) {
-    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adapter.ts:toUnifiedProperty:noCoords',message:'Property missing coordinates',data:{id:property.id,title:property.title,locationObj:property.location?{hasCoords:!!property.location.coordinates,hasMap:!!property.location.map,coordsLat:property.location.coordinates?.latitude,coordsLng:property.location.coordinates?.longitude,mapLat:property.location.map?.center?.latitude,mapLng:property.location.map?.center?.longitude}:'null'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-  }
-  // #endregion
-
   // Map images - Gratka uses thumbs.cdngr.pl with base64 photo.id
   const images = (property.photos ?? []).map((photo) => ({
-    medium: `https://thumbs.cdngr.pl/thumb/${photo.id}/3x2_m:fill_and_crop/${photo.name}.jpg`,
-    large: `https://thumbs.cdngr.pl/thumb/${photo.id}/16x9_xl:fill_and_crop/${photo.name}.jpg`,
+    medium: `${GRATKA_CDN_URL}/thumb/${photo.id}/3x2_m:fill_and_crop/${photo.name}.jpg`,
+    large: `${GRATKA_CDN_URL}/thumb/${photo.id}/16x9_xl:fill_and_crop/${photo.name}.jpg`,
   }));
 
   return {
@@ -412,7 +317,7 @@ function toUnifiedProperty(property: GratkaPropertyNode): UnifiedProperty {
     lat,
     lng,
     title: property.title,
-    url: property.url.startsWith('http') ? property.url : `https://gratka.pl${property.url}`,
+    url: property.url.startsWith('http') ? property.url : `${GRATKA_BASE_URL}${property.url}`,
     price: totalPrice,
     pricePerMeter,
     currency: property.price?.currency ?? 'PLN',
@@ -425,10 +330,10 @@ function toUnifiedProperty(property: GratkaPropertyNode): UnifiedProperty {
     createdAt: property.addedAt,
     // Property type and transaction are not in listing response, use defaults
     estateType: property.propertyType
-      ? (mapGratkaPropertyType(property.propertyType) as UnifiedEstateType)
+      ? mapGratkaPropertyType(property.propertyType)
       : 'FLAT',
     transaction: property.transaction
-      ? (mapGratkaTransaction(property.transaction) as UnifiedTransactionType)
+      ? mapGratkaTransaction(property.transaction)
       : 'SELL',
     rawData: property,
   };
@@ -457,48 +362,44 @@ function toUnifiedCluster(marker: GratkaMapMarker): UnifiedCluster {
   };
 }
 
-/**
- * Convert non-clustered Gratka map marker to unified property
- * 
- * Non-clustered markers represent individual properties with coordinates.
- * We create a minimal property with the available data from the marker.
- */
-function markerToUnifiedProperty(marker: GratkaMapMarker): UnifiedProperty | null {
-  // Only convert non-clustered markers with exactly 1 property
-  if (marker.clustered || marker.count !== 1 || !marker.ids || marker.ids.length === 0) {
-    return null;
-  }
-
-  const propertyId = marker.ids[0];
-  const price = marker.price ? parseFloat(marker.price) : null;
-
-  return {
-    id: createUnifiedId('gratka', propertyId.id),
-    sourceId: propertyId.id,
-    source: 'gratka',
-    lat: marker.position.latitude,
-    lng: marker.position.longitude,
-    title: marker.label || `Property ${propertyId.id}`,
-    url: marker.url ? (marker.url.startsWith('http') ? marker.url : `https://gratka.pl${marker.url}`) : `https://gratka.pl/nieruchomosci/${propertyId.id}`,
-    price: price && !isNaN(price) ? price : null,
-    pricePerMeter: null,
-    currency: 'PLN',
-    area: 0, // Not available from marker
-    rooms: null,
-    floor: null,
-    buildYear: null,
-    images: [], // Not available from marker, will be loaded on click
-    isPromoted: false,
-    createdAt: '',
-    estateType: 'FLAT', // Default, actual type not available from marker
-    transaction: 'SELL', // Default, actual type not available from marker
-    rawData: marker,
-  };
-}
-
 // ============================================================================
 // Gratka Adapter
 // ============================================================================
+
+/**
+ * Fetch map markers for multiple property types in parallel
+ * 
+ * Gratka API doesn't support multiple property types in a single searchMap call
+ * ("Mixing root types is forbidden" error). This helper makes separate calls
+ * for each type and combines the results.
+ */
+async function fetchMarkersForPropertyTypes(
+  gratkaParams: GratkaListingParametersInput,
+  signal?: AbortSignal
+): Promise<GratkaMapMarker[]> {
+  const propertyTypes = gratkaParams.searchParameters.type ?? ['FLAT'];
+  
+  const markerPromises = propertyTypes.map(async (propType) => {
+    const singleTypeParams = {
+      ...gratkaParams,
+      searchParameters: {
+        ...gratkaParams.searchParameters,
+        type: [propType],
+      },
+      isMapMode: true,
+    };
+    
+    const result = await gratkaClient.searchMap(singleTypeParams, {
+      numberOfMarkers: Math.ceil(GRATKA_DEFAULT_MAX_MARKERS / propertyTypes.length),
+      propertyIds: [],
+    }, signal);
+    
+    return result.markers;
+  });
+  
+  const markerResults = await Promise.all(markerPromises);
+  return markerResults.flat();
+}
 
 /**
  * Gratka data source adapter
@@ -521,107 +422,67 @@ export class GratkaAdapter implements IPropertyDataSource {
     'listing-age-filter',
   ]);
 
-  constructor() {
-    // Register this adapter in the cache
-    registerDataSource(this);
-  }
-
   async searchProperties(params: UnifiedSearchParams): Promise<UnifiedSearchResult> {
     const gratkaParams = toGratkaParams(params);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adapter.ts:searchProperties:entry',message:'Gratka searchProperties called',data:{bounds:params.bounds,propertyTypes:params.propertyTypes,transaction:params.transaction},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
+    // Fetch markers for all property types
+    const allMarkers = await fetchMarkersForPropertyTypes(gratkaParams, params.signal);
 
-    try {
-      // Fetch map markers first - they have coordinates
-      const mapParams = { ...gratkaParams, isMapMode: true };
-      const markersResult = await gratkaClient.searchMap(mapParams, {
-        numberOfMarkers: GRATKA_DEFAULT_MAX_MARKERS,
-        propertyIds: [],
-      }, params.signal);
+    // Separate clustered and non-clustered markers
+    const nonClusteredMarkers = allMarkers.filter(m => !m.clustered && m.count === 1 && m.ids && m.ids.length > 0);
+    const clusteredMarkers = allMarkers.filter(m => m.clustered || m.count > 1);
 
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adapter.ts:searchProperties:markersResult',message:'Gratka searchMap returned',data:{totalMarkers:markersResult.markers.length,clusteredCount:markersResult.markers.filter(m=>m.clustered).length,nonClusteredCount:markersResult.markers.filter(m=>!m.clustered).length,sampleMarkers:markersResult.markers.slice(0,3).map(m=>({clustered:m.clustered,count:m.count,price:m.price,url:m.url,position:m.position,ids:m.ids,label:m.label}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-
-      // Separate clustered and non-clustered markers
-      const nonClusteredMarkers = markersResult.markers.filter(m => !m.clustered && m.count === 1 && m.ids && m.ids.length > 0);
-      const clusteredMarkers = markersResult.markers.filter(m => m.clustered || m.count > 1);
-
-      // Build a map of coordinates by property ID from non-clustered markers
-      const markerCoordsById = new Map<number, { lat: number; lng: number }>();
-      const propertyIds: string[] = [];
-      for (const marker of nonClusteredMarkers) {
-        const propId = marker.ids![0].id;
-        markerCoordsById.set(propId, {
-          lat: marker.position.latitude,
-          lng: marker.position.longitude,
-        });
-        propertyIds.push(String(propId));
-      }
-
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adapter.ts:searchProperties:propertyIds',message:'Property IDs to fetch',data:{count:propertyIds.length,ids:propertyIds.slice(0,10)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-
-      // Fetch full property details for non-clustered markers using getMarkers API
-      let properties: UnifiedProperty[] = [];
-      if (propertyIds.length > 0) {
-        const markersData = await gratkaClient.getMarkers(propertyIds, params.signal);
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adapter.ts:searchProperties:markersData',message:'getMarkers returned',data:{count:markersData.properties.length,sampleProp:markersData.properties[0]?{id:markersData.properties[0].id,title:markersData.properties[0].title?.slice(0,30),area:markersData.properties[0].area,rooms:markersData.properties[0].numberOfRooms,photosCount:markersData.properties[0].photos?.length}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
-
-        // Convert to unified format and add coordinates from markers
-        properties = markersData.properties
-          .map(node => {
-            const unified = toUnifiedProperty(node);
-            // Get coordinates from marker
-            const coords = markerCoordsById.get(node.id);
-            if (coords) {
-              unified.lat = coords.lat;
-              unified.lng = coords.lng;
-            }
-            return unified;
-          })
-          .filter(p => p.lat !== 0 && p.lng !== 0);
-      }
-
-      // Clustered markers become clusters
-      const clusters = clusteredMarkers.map(toUnifiedCluster);
-
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adapter.ts:searchProperties:result',message:'Gratka final result',data:{markerCoordsCount:markerCoordsById.size,enrichedPropsCount:properties.length,clustersCount:clusters.length,sampleProperty:properties[0]?{id:properties[0].id,lat:properties[0].lat,lng:properties[0].lng,area:properties[0].area,title:properties[0].title?.slice(0,30),hasImages:properties[0].images.length>0,rooms:properties[0].rooms}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-
-      return {
-        properties,
-        clusters,
-        totalCount: properties.length + clusters.reduce((sum, c) => sum + c.count, 0),
-        cached: false, // Gratka doesn't indicate cache status
-        fetchedAt: new Date().toISOString(),
-        sources: ['gratka'],
-      };
-    } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adapter.ts:searchProperties:error',message:'Gratka API error',data:{error:error instanceof Error?error.message:String(error),stack:error instanceof Error?error.stack?.slice(0,500):undefined},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'ERROR'})}).catch(()=>{});
-      // #endregion
-      throw error;
+    // Build a map of coordinates by property ID from non-clustered markers
+    const markerCoordsById = new Map<number, { lat: number; lng: number }>();
+    const propertyIds: string[] = [];
+    for (const marker of nonClusteredMarkers) {
+      const propId = marker.ids![0].id;
+      markerCoordsById.set(propId, {
+        lat: marker.position.latitude,
+        lng: marker.position.longitude,
+      });
+      propertyIds.push(String(propId));
     }
+
+    // Fetch full property details for non-clustered markers using getMarkers API
+    let properties: UnifiedProperty[] = [];
+    if (propertyIds.length > 0) {
+      const markersData = await gratkaClient.getMarkers(propertyIds, params.signal);
+
+      // Convert to unified format and add coordinates from markers
+      properties = markersData.properties
+        .map(node => {
+          const unified = toUnifiedProperty(node);
+          // Get coordinates from marker
+          const coords = markerCoordsById.get(node.id);
+          if (coords) {
+            unified.lat = coords.lat;
+            unified.lng = coords.lng;
+          }
+          return unified;
+        })
+        .filter(p => p.lat !== 0 && p.lng !== 0);
+    }
+
+    // Clustered markers become clusters
+    const clusters = clusteredMarkers.map(toUnifiedCluster);
+
+    return {
+      properties,
+      clusters,
+      totalCount: properties.length + clusters.reduce((sum, c) => sum + c.count, 0),
+      cached: false, // Gratka doesn't indicate cache status
+      fetchedAt: new Date().toISOString(),
+      sources: ['gratka'],
+    };
   }
 
   async searchMapMarkers(params: UnifiedSearchParams): Promise<UnifiedCluster[]> {
     const gratkaParams = toGratkaParams(params);
     gratkaParams.isMapMode = true;
 
-    const result = await gratkaClient.searchMap(gratkaParams, {
-      numberOfMarkers: GRATKA_DEFAULT_MAX_MARKERS,
-      propertyIds: [],
-    }, params.signal);
-
-    return result.markers.map(toUnifiedCluster);
+    const allMarkers = await fetchMarkersForPropertyTypes(gratkaParams, params.signal);
+    return allMarkers.map(toUnifiedCluster);
   }
 
   async getLocationSuggestions(
@@ -645,20 +506,4 @@ export class GratkaAdapter implements IPropertyDataSource {
   supportsFeature(feature: DataSourceFeature): boolean {
     return this.supportedFeatures.has(feature);
   }
-}
-
-// ============================================================================
-// Singleton Instance
-// ============================================================================
-
-let instance: GratkaAdapter | null = null;
-
-/**
- * Get the singleton Gratka adapter instance
- */
-export function getGratkaAdapter(): GratkaAdapter {
-  if (!instance) {
-    instance = new GratkaAdapter();
-  }
-  return instance;
 }

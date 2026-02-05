@@ -1,10 +1,9 @@
 import type { 
   UnifiedProperty, 
   EnrichedUnifiedProperty,
-  PropertyPriceAnalysis,
 } from '../lib/shared';
 import { isEnrichedUnifiedProperty } from '../lib/shared';
-import { formatPrice } from '@/lib/format';
+import { formatPrice, formatPriceWithSeparators, formatNumberWithSeparators } from '@/lib/format';
 import { generatePriceAnalysisBadgeHtml } from './markers';
 import { PROPERTY_MARKER_COLORS } from '../lib';
 
@@ -12,8 +11,21 @@ import { PROPERTY_MARKER_COLORS } from '../lib';
 // Popup Style Constants
 // ============================================================================
 
-/** Default locale for number formatting in popups */
-const POPUP_LOCALE = 'pl-PL';
+/** Popup dimension constants */
+const POPUP_DIMENSIONS = {
+  /** Minimum width for property popups */
+  MIN_WIDTH_PROPERTY: 220,
+  /** Minimum width for cluster popups */
+  MIN_WIDTH_CLUSTER: 240,
+  /** Minimum width for loading/error popups */
+  MIN_WIDTH_STATUS: 200,
+  /** Maximum width for all popups */
+  MAX_WIDTH: 280,
+  /** Maximum image height in property popup */
+  MAX_IMAGE_HEIGHT: 180,
+  /** Image height in cluster popup */
+  CLUSTER_IMAGE_HEIGHT: 160,
+} as const;
 
 /** Popup color palette - Tailwind-based colors */
 const POPUP_COLORS = {
@@ -40,6 +52,18 @@ const POPUP_COLORS = {
   BUTTON_DISABLED: '#d1d5db', // Gray-300
 } as const;
 
+/** Data source badge colors */
+const SOURCE_BADGE_COLORS: Record<string, string> = {
+  otodom: '#2563eb',  // Blue-600
+  gratka: '#7c3aed',  // Violet-600
+};
+
+/** Data source display names */
+const SOURCE_BADGE_NAMES: Record<string, string> = {
+  otodom: 'Otodom',
+  gratka: 'Gratka',
+};
+
 /**
  * Translations for property popups
  */
@@ -52,13 +76,6 @@ export interface PropertyPopupTranslations {
   noOffersFound: string;
 }
 
-// Legacy alias for backwards compatibility
-export type PopupTranslations = PropertyPopupTranslations;
-
-/**
- * Default English translations for popups
- * Used when translations are not provided
- */
 export const DEFAULT_POPUP_TRANSLATIONS: PropertyPopupTranslations = {
   house: 'House',
   flat: 'Apartment',
@@ -125,16 +142,8 @@ function generateTypeBadgeHtml(
  * Shows which source (Otodom, Gratka) the property came from
  */
 function generateSourceBadgeHtml(source: string): string {
-  const sourceColors: Record<string, string> = {
-    otodom: '#2563eb',  // Blue-600
-    gratka: '#7c3aed',  // Violet-600
-  };
-  const sourceNames: Record<string, string> = {
-    otodom: 'Otodom',
-    gratka: 'Gratka',
-  };
-  const color = sourceColors[source] ?? '#6b7280';
-  const name = sourceNames[source] ?? source;
+  const color = SOURCE_BADGE_COLORS[source] ?? POPUP_COLORS.TEXT_MUTED;
+  const name = SOURCE_BADGE_NAMES[source] ?? source;
   return `<span style="background: ${color}; color: white; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px;">${name}</span>`;
 }
 
@@ -159,7 +168,7 @@ function generatePropertyDetailsHtml(
     <div style="display: flex; align-items: center; gap: 4px; color: ${POPUP_COLORS.TEXT_SECONDARY}; font-size: ${fontSize};">
       <span style="font-weight: 500;">${area} m²</span>
       ${rooms !== null ? `<span style="color: ${POPUP_COLORS.TEXT_LIGHT};">•</span><span style="font-weight: 500;">${rooms} ${translations.rooms}</span>` : ''}
-      ${pricePerMeterRounded ? `<span style="color: ${POPUP_COLORS.TEXT_LIGHT};">•</span><span style="color: ${POPUP_COLORS.TEXT_MUTED};">${pricePerMeterRounded.toLocaleString(POPUP_LOCALE)} PLN/m²</span>` : ''}
+      ${pricePerMeterRounded ? `<span style="color: ${POPUP_COLORS.TEXT_LIGHT};">•</span><span style="color: ${POPUP_COLORS.TEXT_MUTED};">${formatNumberWithSeparators(pricePerMeterRounded)} PLN/m²</span>` : ''}
     </div>
   `;
 }
@@ -215,43 +224,47 @@ export function generatePropertyPopupHtml(
   
   if (imageCount > 0) {
     const imagesJson = JSON.stringify(property.images.map(img => img.medium)).replace(/"/g, '&quot;');
+    
+    // Gallery navigation buttons (only if multiple images)
+    const galleryNavHtml = imageCount > 1 ? `
+      <button 
+        onclick="(function(){
+          var imgs = ${imagesJson};
+          var img = document.getElementById('${galleryId}-img');
+          var counter = document.getElementById('${galleryId}-counter');
+          var idx = parseInt(counter.textContent) - 1;
+          idx = (idx - 1 + imgs.length) % imgs.length;
+          img.src = imgs[idx];
+          counter.textContent = idx + 1;
+        })()"
+        style="position: absolute; left: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: ${POPUP_COLORS.BG_OVERLAY}; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
+      >‹</button>
+      ${generateImageCounterHtml(`${galleryId}-counter`, 0, imageCount)}
+      <button 
+        onclick="(function(){
+          var imgs = ${imagesJson};
+          var img = document.getElementById('${galleryId}-img');
+          var counter = document.getElementById('${galleryId}-counter');
+          var idx = parseInt(counter.textContent.split('/')[0]) - 1;
+          idx = (idx + 1) % imgs.length;
+          img.src = imgs[idx];
+          counter.textContent = (idx + 1) + '/${imageCount}';
+        })()"
+        style="position: absolute; right: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: ${POPUP_COLORS.BG_OVERLAY}; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
+      >›</button>
+    ` : '';
+    
     imageHtml = `
       <div style="position: relative; background: ${POPUP_COLORS.BG_LIGHT}; border-radius: 8px 8px 0 0; overflow: hidden;">
         <img 
           id="${galleryId}-img" 
           src="${property.images[0].medium}" 
           alt="" 
-          style="width: 100%; height: auto; max-height: 180px; object-fit: contain; display: block;" 
+          style="width: 100%; height: auto; max-height: ${POPUP_DIMENSIONS.MAX_IMAGE_HEIGHT}px; object-fit: contain; display: block;" 
           onerror="this.style.display='none'" 
         />
         ${typeBadge.html}
-        ${imageCount > 1 ? `
-          <button 
-            onclick="(function(){
-              var imgs = ${imagesJson};
-              var img = document.getElementById('${galleryId}-img');
-              var counter = document.getElementById('${galleryId}-counter');
-              var idx = parseInt(counter.textContent) - 1;
-              idx = (idx - 1 + imgs.length) % imgs.length;
-              img.src = imgs[idx];
-              counter.textContent = idx + 1;
-            })()"
-            style="position: absolute; left: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: ${POPUP_COLORS.BG_OVERLAY}; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
-          >‹</button>
-          ${generateImageCounterHtml(`${galleryId}-counter`, 0, imageCount)}
-          <button 
-            onclick="(function(){
-              var imgs = ${imagesJson};
-              var img = document.getElementById('${galleryId}-img');
-              var counter = document.getElementById('${galleryId}-counter');
-              var idx = parseInt(counter.textContent.split('/')[0]) - 1;
-              idx = (idx + 1) % imgs.length;
-              img.src = imgs[idx];
-              counter.textContent = (idx + 1) + '/${imageCount}';
-            })()"
-            style="position: absolute; right: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: ${POPUP_COLORS.BG_OVERLAY}; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
-          >›</button>
-        ` : ''}
+        ${galleryNavHtml}
       </div>
     `;
   }
@@ -270,7 +283,7 @@ export function generatePropertyPopupHtml(
   const sourceBadgeHtml = generateSourceBadgeHtml(property.source);
 
   return `
-    <div style="min-width: 220px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
+    <div style="min-width: ${POPUP_DIMENSIONS.MIN_WIDTH_PROPERTY}px; max-width: ${POPUP_DIMENSIONS.MAX_WIDTH}px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
       ${imageHtml}
       <div style="padding: 12px;">
         <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
@@ -298,7 +311,7 @@ export function generateClusterPropertyPopupHtml(
   totalCount: number,
   fetchedCount: number,
   imageIndex: number = 0,
-  translations: PopupTranslations = DEFAULT_POPUP_TRANSLATIONS
+  translations: PropertyPopupTranslations = DEFAULT_POPUP_TRANSLATIONS
 ): string {
   const typeBadge = generateTypeBadgeHtml(property.estateType, translations);
   
@@ -311,13 +324,6 @@ export function generateClusterPropertyPopupHtml(
   // Disable next button when we've reached the end of fetched properties
   const isAtEnd = currentIndex >= fetchedCount - 1;
 
-  // #region agent log
-  const isEnriched = isEnrichedUnifiedProperty(property);
-  const hasPriceAnalysis = isEnriched && !!(property as EnrichedUnifiedProperty).priceAnalysis;
-  const priceCategory = hasPriceAnalysis ? (property as EnrichedUnifiedProperty).priceAnalysis?.priceCategory : null;
-  fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'popups.ts:generateClusterPropertyPopupHtml',message:'Badge check',data:{propertyId:property.id,isEnriched,hasPriceAnalysis,priceCategory,willShowBadge:isEnriched&&hasPriceAnalysis&&priceCategory!=='no_data'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4,H5'})}).catch(()=>{});
-  // #endregion
-
   // Generate price analysis badge HTML for cluster popup (only if enriched)
   let clusterPriceAnalysisBadgeHtml = '';
   if (isEnrichedUnifiedProperty(property) && property.priceAnalysis) {
@@ -327,7 +333,7 @@ export function generateClusterPropertyPopupHtml(
   // Price display - null means price is hidden/negotiable
   const priceDisplay = property.price === null 
     ? translations.priceNegotiable 
-    : `${property.price.toLocaleString(POPUP_LOCALE)} ${property.currency}`;
+    : formatPriceWithSeparators(property.price, property.currency);
 
   // Source badge
   const sourceBadgeHtml = generateSourceBadgeHtml(property.source);
@@ -338,7 +344,7 @@ export function generateClusterPropertyPopupHtml(
         id="${clusterId}-img"
         src="${currentImage.medium}" 
         alt="" 
-        style="width: 100%; height: 160px; object-fit: cover; display: block;" 
+        style="width: 100%; height: ${POPUP_DIMENSIONS.CLUSTER_IMAGE_HEIGHT}px; object-fit: cover; display: block;" 
         onerror="this.style.display='none'" 
       />
       ${typeBadge.html}
@@ -357,7 +363,7 @@ export function generateClusterPropertyPopupHtml(
   `;
 
   return `
-    <div style="min-width: 240px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
+    <div style="min-width: ${POPUP_DIMENSIONS.MIN_WIDTH_CLUSTER}px; max-width: ${POPUP_DIMENSIONS.MAX_WIDTH}px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
       ${imageHtml}
       <div style="padding: 12px;">
         <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
@@ -392,11 +398,11 @@ export function generateClusterPropertyPopupHtml(
  */
 export function generateLoadingPopupHtml(
   count: number,
-  translations: PopupTranslations = DEFAULT_POPUP_TRANSLATIONS
+  translations: PropertyPopupTranslations = DEFAULT_POPUP_TRANSLATIONS
 ): string {
   const loadingText = translations.loadingOffers.replace('{count}', String(count));
   return `
-    <div style="min-width: 200px; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
+    <div style="min-width: ${POPUP_DIMENSIONS.MIN_WIDTH_STATUS}px; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
       <div style="display: inline-block; width: 24px; height: 24px; border: 2px solid ${POPUP_COLORS.BORDER_SPINNER}; border-top-color: ${POPUP_COLORS.LINK_BLUE}; border-radius: 50%; animation: spin 1s linear infinite;"></div>
       <div style="margin-top: 12px; color: ${POPUP_COLORS.TEXT_MUTED}; font-size: 12px;">${loadingText}</div>
       <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
@@ -409,7 +415,7 @@ export function generateLoadingPopupHtml(
  */
 export function generateErrorPopupHtml(message: string): string {
   return `
-    <div style="min-width: 200px; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
+    <div style="min-width: ${POPUP_DIMENSIONS.MIN_WIDTH_STATUS}px; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
       <div style="color: ${POPUP_COLORS.ERROR_RED}; font-size: 12px;">${message}</div>
     </div>
   `;

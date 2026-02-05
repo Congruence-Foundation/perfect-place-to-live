@@ -23,6 +23,7 @@ export function PanelHeader({ title, onClose, className }: PanelHeaderProps) {
     <div className={cn('flex items-center justify-between mb-3', className)}>
       <span className="text-sm font-semibold">{title}</span>
       <button
+        type="button"
         onClick={onClose}
         aria-label="Close"
         className="w-6 h-6 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"

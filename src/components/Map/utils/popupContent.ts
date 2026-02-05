@@ -121,7 +121,7 @@ export function generatePopupContent(
           ${breakdownRows}
         </tbody>
       </table>
-      <div style="font-size: 9px; color: #9ca3af; margin-top: 4px; padding-top: 4px; border-top: 1px solid ${UI_COLORS.BORDER};">
+      <div style="font-size: 9px; color: ${UI_COLORS.MUTED_TEXT}; margin-top: 4px; padding-top: 4px; border-top: 1px solid ${UI_COLORS.BORDER};">
         ${translations.footer} • ✓ ${translations.goodLabel} • ⚠ ${translations.improveLabel}
       </div>
     </div>

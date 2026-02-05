@@ -5,7 +5,7 @@
  * These are used internally by the Otodom client and adapter.
  */
 
-import type { Bounds } from '@/types/poi';
+import type { PropertyPriceAnalysis } from '../shared/types';
 
 // ============================================================================
 // Enums / Union Types
@@ -199,14 +199,6 @@ export const OTODOM_DEFAULT_FILTERS: OtodomPropertyFilters = {
 };
 
 /**
- * Request to fetch properties
- */
-export interface OtodomPropertyRequest {
-  bounds: Bounds;
-  filters: OtodomPropertyFilters;
-}
-
-/**
  * Response from properties API
  */
 export interface OtodomPropertyResponse {
@@ -229,51 +221,15 @@ export interface OtodomPropertyCluster {
   estateType?: string; // The estate type this cluster represents (FLAT, HOUSE, etc.)
 }
 
-/**
- * Response from cluster properties API
- */
-export interface OtodomClusterPropertiesResponse {
-  properties: OtodomProperty[];
-  totalCount: number;
-  currentPage: number;
-  totalPages: number;
-}
-
 // ============================================================================
 // Price Analysis Types (Otodom-specific enrichment)
 // ============================================================================
 
 /**
- * Location quality tier based on heatmap score (20% windows)
+ * Price analysis result for a property.
+ * Alias for the shared PropertyPriceAnalysis type for backward compatibility.
  */
-export type LocationQualityTier = '0-20' | '20-40' | '40-60' | '60-80' | '80-100';
-
-/**
- * Price category based on comparison with similar properties
- */
-export type PriceCategory = 'great_deal' | 'good_deal' | 'fair' | 'above_avg' | 'overpriced' | 'no_data';
-
-/**
- * Price analysis result for a property
- */
-export interface OtodomPropertyPriceAnalysis {
-  /** Price score in standard deviations from median (-3 to +3 typical range) */
-  priceScore: number;
-  /** Categorized price assessment */
-  priceCategory: PriceCategory;
-  /** Median price per m² in the comparison group */
-  groupMedianPrice: number;
-  /** Number of properties in the comparison group */
-  groupSize: number;
-  /** Percentile rank (0-100) - lower means cheaper */
-  percentile: number;
-  /** Percentage difference from median (e.g., -15 means 15% below median) */
-  percentFromMedian: number;
-  /** Location quality tier based on heatmap */
-  locationQualityTier: LocationQualityTier;
-  /** Human-readable comparison group description */
-  comparisonGroup: string;
-}
+export type OtodomPropertyPriceAnalysis = PropertyPriceAnalysis;
 
 /**
  * Property with price analysis data
@@ -281,104 +237,3 @@ export interface OtodomPropertyPriceAnalysis {
 export interface OtodomEnrichedProperty extends OtodomProperty {
   priceAnalysis?: OtodomPropertyPriceAnalysis;
 }
-
-/**
- * Type guard to check if a property is enriched with price analysis
- */
-export function isEnrichedProperty(
-  property: OtodomProperty | OtodomEnrichedProperty
-): property is OtodomEnrichedProperty {
-  return 'priceAnalysis' in property;
-}
-
-/**
- * Price value filter options
- */
-export type PriceValueFilter = 'all' | 'great_deal' | 'good_deal' | 'fair' | 'above_avg' | 'overpriced';
-
-/**
- * Price value range for filtering (0-100 positions)
- */
-export type PriceValueRange = [number, number];
-
-// ============================================================================
-// Client Configuration
-// ============================================================================
-
-/**
- * Client configuration options
- */
-export interface OtodomClientConfig {
-  /** Base URL for the API (default: https://www.otodom.pl/api/query) */
-  baseUrl?: string;
-  /** Additional headers to include in requests */
-  headers?: Record<string, string>;
-  /** Cache TTL in milliseconds (default: 3 minutes) */
-  cacheTtlMs?: number;
-  /** Maximum cache entries (default: 50) */
-  maxCacheEntries?: number;
-}
-
-// ============================================================================
-// Legacy Type Aliases (for backward compatibility)
-// ============================================================================
-
-/** @deprecated Use OtodomTransactionType instead */
-export type TransactionType = OtodomTransactionType;
-
-/** @deprecated Use OtodomEstateType instead */
-export type EstateType = OtodomEstateType;
-
-/** @deprecated Use OtodomOwnerType instead */
-export type OwnerType = OtodomOwnerType;
-
-/** @deprecated Use OtodomMarketType instead */
-export type MarketType = OtodomMarketType;
-
-/** @deprecated Use OtodomRoomCount instead */
-export type RoomCount = OtodomRoomCount;
-
-/** @deprecated Use OtodomFloorLevel instead */
-export type FloorLevel = OtodomFloorLevel;
-
-/** @deprecated Use OtodomFlatBuildingType instead */
-export type FlatBuildingType = OtodomFlatBuildingType;
-
-/** @deprecated Use OtodomHouseBuildingType instead */
-export type HouseBuildingType = OtodomHouseBuildingType;
-
-/** @deprecated Use OtodomBuildingMaterial instead */
-export type BuildingMaterial = OtodomBuildingMaterial;
-
-/** @deprecated Use OtodomPropertyExtra instead */
-export type PropertyExtra = OtodomPropertyExtra;
-
-/** @deprecated Use OtodomPrice instead */
-export type Price = OtodomPrice;
-
-/** @deprecated Use OtodomPropertyImage instead */
-export type PropertyImage = OtodomPropertyImage;
-
-/** @deprecated Use OtodomPropertyFilters instead */
-export type PropertyFilters = OtodomPropertyFilters;
-
-/** @deprecated Use OTODOM_DEFAULT_FILTERS instead */
-export const DEFAULT_PROPERTY_FILTERS = OTODOM_DEFAULT_FILTERS;
-
-/** @deprecated Use OtodomPropertyRequest instead */
-export type PropertyRequest = OtodomPropertyRequest;
-
-/** @deprecated Use OtodomPropertyResponse instead */
-export type PropertyResponse = OtodomPropertyResponse;
-
-/** @deprecated Use OtodomPropertyCluster instead */
-export type PropertyCluster = OtodomPropertyCluster;
-
-/** @deprecated Use OtodomClusterPropertiesResponse instead */
-export type ClusterPropertiesResponse = OtodomClusterPropertiesResponse;
-
-/** @deprecated Use OtodomPropertyPriceAnalysis instead */
-export type PropertyPriceAnalysis = OtodomPropertyPriceAnalysis;
-
-/** @deprecated Use OtodomEnrichedProperty instead */
-export type EnrichedProperty = OtodomEnrichedProperty;

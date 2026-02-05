@@ -223,15 +223,6 @@ export function enrichPropertiesWithPriceScore(
   }
   stopMetadataTimer({ total: properties.length, valid: propertiesWithMetadata.length });
 
-  // #region agent log
-  const sourceBreakdown = propertiesWithMetadata.reduce((acc, pm) => {
-    const source = pm.property.source || 'unknown';
-    acc[source] = (acc[source] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'price-analysis.ts:enrichPropertiesWithPriceScore',message:'Price analysis input',data:{totalProperties:properties.length,validForAnalysis:propertiesWithMetadata.length,sourceBreakdown},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'PRICE'})}).catch(()=>{});
-  // #endregion
-
   // Step 2: Build groups (properties can belong to multiple groups due to overlapping room ranges)
   const stopGroupsTimer = createTimer('price-analysis:groups');
   const groups = new Map<string, PropertyWithMetadata[]>();
@@ -247,21 +238,6 @@ export function enrichPropertiesWithPriceScore(
     }
   }
   stopGroupsTimer({ groups: groups.size });
-
-  // #region agent log
-  // Check if groups contain mixed sources
-  const mixedGroups: Array<{key: string, otodom: number, gratka: number}> = [];
-  for (const [key, members] of groups) {
-    const otodomCount = members.filter(m => m.property.source === 'otodom').length;
-    const gratkaCount = members.filter(m => m.property.source === 'gratka').length;
-    if (otodomCount > 0 && gratkaCount > 0) {
-      mixedGroups.push({ key, otodom: otodomCount, gratka: gratkaCount });
-    }
-  }
-  // Log group sizes to understand distribution
-  const groupSizes = Array.from(groups.entries()).map(([key, members]) => ({ key, size: members.length })).sort((a, b) => b.size - a.size);
-  fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'price-analysis.ts:groups',message:'Price analysis groups',data:{totalGroups:groups.size,mixedSourceGroups:mixedGroups.length,sampleMixedGroups:mixedGroups.slice(0,3),minGroupSize:PRICE_ANALYSIS_MIN_GROUP_SIZE,largestGroups:groupSizes.slice(0,5),smallestGroups:groupSizes.slice(-5)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'PRICE'})}).catch(()=>{});
-  // #endregion
 
   // Step 3: Calculate statistics for each group
   const stopStatsTimer = createTimer('price-analysis:stats');
@@ -310,12 +286,10 @@ export function enrichPropertiesWithPriceScore(
   for (const pm of propertiesWithMetadata) {
     // Find the best group (largest group size) for this property
     let bestGroup: { key: string; stats: GroupStatistics } | null = null;
-    const triedKeys: string[] = [];
 
     // First, try the exact quality tier
     for (const roomRange of pm.roomRanges) {
       const key = generateGroupKey(pm.property.estateType, roomRange, pm.areaRange, pm.qualityTier);
-      triedKeys.push(key);
       const stats = groupStats.get(key);
       if (stats && (!bestGroup || stats.count > bestGroup.stats.count)) {
         bestGroup = { key, stats };
@@ -328,7 +302,6 @@ export function enrichPropertiesWithPriceScore(
       for (const adjacentTier of adjacentTiers) {
         for (const roomRange of pm.roomRanges) {
           const key = generateGroupKey(pm.property.estateType, roomRange, pm.areaRange, adjacentTier);
-          triedKeys.push(key);
           const stats = groupStats.get(key);
           if (stats && stats.stdDev > 0 && (!bestGroup || stats.count > bestGroup.stats.count)) {
             bestGroup = { key, stats };
@@ -338,13 +311,6 @@ export function enrichPropertiesWithPriceScore(
     }
 
     const enriched: EnrichedUnifiedProperty = { ...pm.property };
-
-    // #region agent log
-    // Log details for properties that will get no_data
-    if (!bestGroup || bestGroup.stats.stdDev === 0) {
-      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'price-analysis.ts:noDataProperty',message:'Property getting no_data',data:{id:pm.property.id,source:pm.property.source,estateType:pm.property.estateType,rooms:pm.rooms,area:pm.property.area,areaRange:pm.areaRange,qualityTier:pm.qualityTier,triedKeys,bestGroupKey:bestGroup?.key,bestGroupCount:bestGroup?.stats.count,bestGroupStdDev:bestGroup?.stats.stdDev,groupStatsSize:groupStats.size},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'NODATA'})}).catch(()=>{});
-    }
-    // #endregion
 
     if (bestGroup && bestGroup.stats.stdDev > 0) {
       const { stats } = bestGroup;
@@ -410,21 +376,11 @@ export function filterPropertiesByPriceValue(
     return properties;
   }
 
-  // Map category to position
-  const categoryToPosition: Record<PriceCategory, number> = {
-    'great_deal': 20,
-    'good_deal': 40,
-    'fair': 60,
-    'above_avg': 80,
-    'overpriced': 100,
-    'no_data': 0,
-  };
-
   return properties.filter(p => {
     if (!p.priceAnalysis) return false;
     if (p.priceAnalysis.priceCategory === 'no_data') return false;
     
-    const position = categoryToPosition[p.priceAnalysis.priceCategory];
+    const position = PRICE_CATEGORY_POSITION[p.priceAnalysis.priceCategory];
     // Check if the category's position falls within the selected range
     // A category at position X is selected if range includes (X-20, X]
     return position > range[0] && position <= range[1];
@@ -446,6 +402,18 @@ export interface ClusterPriceAnalysis {
 export type ClusterAnalysisMap = Map<string, ClusterPriceAnalysis>;
 
 /**
+ * Price category position for UI filtering (0-100 scale, each category spans 20 points)
+ */
+const PRICE_CATEGORY_POSITION: Record<PriceCategory, number> = {
+  'great_deal': 20,
+  'good_deal': 40,
+  'fair': 60,
+  'above_avg': 80,
+  'overpriced': 100,
+  'no_data': 0,
+};
+
+/**
  * Price category order for comparison (lower = better deal)
  */
 const PRICE_CATEGORY_ORDER: Record<PriceCategory, number> = {
@@ -456,6 +424,40 @@ const PRICE_CATEGORY_ORDER: Record<PriceCategory, number> = {
   'overpriced': 5,
   'no_data': 99,
 };
+
+/**
+ * Find min and max price categories from a list of enriched properties
+ * Returns null for both if no valid properties found
+ * 
+ * Uses O(n) iteration instead of sorting for better performance.
+ */
+export function findMinMaxCategories(
+  properties: EnrichedUnifiedProperty[]
+): { minCategory: PriceCategory | null; maxCategory: PriceCategory | null } {
+  let minCategory: PriceCategory | null = null;
+  let maxCategory: PriceCategory | null = null;
+  let minOrder = Infinity;
+  let maxOrder = -Infinity;
+
+  for (const prop of properties) {
+    if (!prop.priceAnalysis || prop.priceAnalysis.priceCategory === 'no_data') {
+      continue;
+    }
+    const category = prop.priceAnalysis.priceCategory;
+    const order = PRICE_CATEGORY_ORDER[category];
+
+    if (order < minOrder) {
+      minOrder = order;
+      minCategory = category;
+    }
+    if (order > maxOrder) {
+      maxOrder = order;
+      maxCategory = category;
+    }
+  }
+
+  return { minCategory, maxCategory };
+}
 
 /**
  * Analyze cluster prices using cached cluster properties
@@ -481,11 +483,6 @@ export function analyzeClusterPricesFromCache(
     enrichedById.set(p.id, p);
   }
 
-  // #region agent log
-  const propsWithAnalysis = enrichedProperties.filter(p => p.priceAnalysis && p.priceAnalysis.priceCategory !== 'no_data');
-  fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'price-analysis.ts:analyzeClusterPricesFromCache:entry',message:'Cache-based cluster analysis',data:{totalClusters:clusters.length,totalEnrichedProps:enrichedProperties.length,propsWithAnalysis:propsWithAnalysis.length,cacheSize:clusterPropertiesCache.size,cachedClusterIds:Array.from(clusterPropertiesCache.keys()).slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'CACHE'})}).catch(()=>{});
-  // #endregion
-
   for (const cluster of clusters) {
     const clusterId = createClusterId(cluster.lat, cluster.lng);
     
@@ -502,50 +499,20 @@ export function analyzeClusterPricesFromCache(
       continue;
     }
 
-    // Find enriched versions of cached properties with valid price analysis
+    // Find enriched versions of cached properties
     const clusterEnrichedProps = cachedProps
       .map(p => enrichedById.get(p.id))
-      .filter((p): p is EnrichedUnifiedProperty => 
-        !!p && !!p.priceAnalysis && p.priceAnalysis.priceCategory !== 'no_data'
-      );
+      .filter((p): p is EnrichedUnifiedProperty => !!p);
 
-    if (clusterEnrichedProps.length === 0) {
-      result.set(clusterId, {
-        minCategory: null,
-        maxCategory: null,
-        propertyCount: cachedProps.length, // Has properties but none with analysis
-      });
-      continue;
-    }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'price-analysis.ts:analyzeClusterPricesFromCache:cluster',message:'Cluster has enriched props',data:{clusterId,source:cluster.source,cachedCount:cachedProps.length,enrichedCount:clusterEnrichedProps.length,categories:clusterEnrichedProps.map(p=>p.priceAnalysis?.priceCategory)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'CACHE'})}).catch(()=>{});
-    // #endregion
-
-    // Find min and max categories from actual cluster properties
-    let minCategory: PriceCategory | null = null;
-    let maxCategory: PriceCategory | null = null;
-    let minOrder = Infinity;
-    let maxOrder = -Infinity;
-
-    for (const prop of clusterEnrichedProps) {
-      const category = prop.priceAnalysis!.priceCategory;
-      const order = PRICE_CATEGORY_ORDER[category];
-
-      if (order < minOrder) {
-        minOrder = order;
-        minCategory = category;
-      }
-      if (order > maxOrder) {
-        maxOrder = order;
-        maxCategory = category;
-      }
-    }
+    const { minCategory, maxCategory } = findMinMaxCategories(clusterEnrichedProps);
+    const validCount = clusterEnrichedProps.filter(
+      p => p.priceAnalysis && p.priceAnalysis.priceCategory !== 'no_data'
+    ).length;
 
     result.set(clusterId, {
       minCategory,
       maxCategory,
-      propertyCount: clusterEnrichedProps.length,
+      propertyCount: validCount || cachedProps.length,
     });
   }
 
@@ -583,34 +550,7 @@ export function analyzeClusterPrices(
       return distance <= searchRadius * 2;
     });
 
-    if (nearbyProperties.length === 0) {
-      result.set(clusterId, {
-        minCategory: null,
-        maxCategory: null,
-        propertyCount: 0,
-      });
-      continue;
-    }
-
-    // Find min and max categories
-    let minCategory: PriceCategory | null = null;
-    let maxCategory: PriceCategory | null = null;
-    let minOrder = Infinity;
-    let maxOrder = -Infinity;
-
-    for (const prop of nearbyProperties) {
-      const category = prop.priceAnalysis!.priceCategory;
-      const order = PRICE_CATEGORY_ORDER[category];
-
-      if (order < minOrder) {
-        minOrder = order;
-        minCategory = category;
-      }
-      if (order > maxOrder) {
-        maxOrder = order;
-        maxCategory = category;
-      }
-    }
+    const { minCategory, maxCategory } = findMinMaxCategories(nearbyProperties);
 
     result.set(clusterId, {
       minCategory,

@@ -7,8 +7,9 @@ import {
   initializeTileResultMap,
   assignPOIToTile,
   findTileForPointFast,
+  validateTileZoomConsistency,
+  buildTileKeySet,
 } from './tile-utils';
-import { getTileKeyString } from '@/lib/geo/tiles';
 
 /**
  * Create a Neon SQL client
@@ -72,11 +73,22 @@ function validatePOIRows(result: unknown[]): POIRow[] {
 
 /**
  * Convert a database row to a POI object
+ * Note: For very large bigint IDs from PostgreSQL, parseInt may lose precision
+ * beyond Number.MAX_SAFE_INTEGER (9007199254740991). This is acceptable for
+ * display purposes but should not be used for database lookups.
  */
 function rowToPOI(row: POIRow): POI {
+  let id: number;
+  if (typeof row.id === 'string') {
+    // Parse string ID, using 0 as fallback for invalid/overflow cases
+    const parsed = parseInt(row.id, 10);
+    id = Number.isFinite(parsed) ? parsed : 0;
+  } else {
+    id = row.id;
+  }
+  
   return {
-    // Convert string ID to number if needed (safe for display purposes)
-    id: typeof row.id === 'string' ? parseInt(row.id, 10) : row.id,
+    id,
     lat: row.lat,
     lng: row.lng,
     name: row.name ?? undefined,
@@ -195,21 +207,8 @@ function distributePOIsToTiles(
     return new Map();
   }
 
-  // Get zoom level from first tile (all tiles should have same zoom)
-  const zoom = tiles[0].z;
-  
-  // Validate all tiles have the same zoom level
-  const invalidTile = tiles.find(t => t.z !== zoom);
-  if (invalidTile) {
-    throw new Error(`All tiles must have the same zoom level. Expected ${zoom}, found ${invalidTile.z}`);
-  }
-  
-  // Build set of valid tile keys for O(1) lookup
-  const validTileKeys = new Set<string>();
-  for (const tile of tiles) {
-    validTileKeys.add(getTileKeyString(tile));
-  }
-
+  const zoom = validateTileZoomConsistency(tiles);
+  const validTileKeys = buildTileKeySet(tiles);
   const result = initializeTileResultMap(tiles, factorIds);
 
   for (const row of rows) {

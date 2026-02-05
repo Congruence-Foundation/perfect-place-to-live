@@ -8,18 +8,13 @@ import { ScoreRangeSection } from './ScoreRangeSection';
 import { DataSourcesPanel } from './DataSourcesPanel';
 import { useRealEstateExtension } from '../hooks';
 
-interface RealEstateFiltersContentProps {
-  /** Additional content to render after the main filters (when enabled) */
-  children?: React.ReactNode;
-}
-
 /**
  * Shared Real Estate Filters Content
  * 
  * Contains the common filter UI used by both sidebar and bottom sheet.
  * Renders transaction type buttons, score range, price value filter, and property filters.
  */
-export function RealEstateFiltersContent({ children }: RealEstateFiltersContentProps) {
+export function RealEstateFiltersContent() {
   const tRealEstate = useTranslations('realEstate');
   const realEstate = useRealEstateExtension();
 
@@ -34,29 +29,23 @@ export function RealEstateFiltersContent({ children }: RealEstateFiltersContentP
         onSelectSell={() => realEstate.selectTransaction('SELL')}
       />
 
-      {/* Score Range Slider (only when real estate is enabled) */}
-      {realEstate.enabled && (
-        <ScoreRangeSection
-          scoreRange={realEstate.scoreRange}
-          onScoreRangeChange={realEstate.setScoreRange}
-        />
-      )}
-
-      {/* Price Value Filter (only when real estate is enabled) */}
-      {realEstate.enabled && (
-        <div className="mb-3">
-          <PriceValueFilter
-            label={tRealEstate('priceValue')}
-            tooltip={tRealEstate('priceValueTooltip')}
-            range={realEstate.priceValueRange}
-            onChange={realEstate.setPriceValueRange}
-          />
-        </div>
-      )}
-
-      {/* Real Estate Filters (only when enabled) */}
+      {/* Filters shown only when real estate is enabled */}
       {realEstate.enabled && (
         <>
+          <ScoreRangeSection
+            scoreRange={realEstate.scoreRange}
+            onScoreRangeChange={realEstate.setScoreRange}
+          />
+
+          <div className="mb-3">
+            <PriceValueFilter
+              label={tRealEstate('priceValue')}
+              tooltip={tRealEstate('priceValueTooltip')}
+              range={realEstate.priceValueRange}
+              onChange={realEstate.setPriceValueRange}
+            />
+          </div>
+
           <RealEstateSidebar
             filters={realEstate.filters}
             onFiltersChange={realEstate.setFilters}
@@ -65,14 +54,13 @@ export function RealEstateFiltersContent({ children }: RealEstateFiltersContentP
             isBelowMinZoom={realEstate.isBelowMinZoom}
             error={realEstate.error}
           />
-          {/* Data Sources Panel */}
+          
           <div className="mt-3">
             <DataSourcesPanel
               enabledSources={realEstate.dataSources}
               onSourcesChange={realEstate.setDataSources}
             />
           </div>
-          {children}
         </>
       )}
     </>

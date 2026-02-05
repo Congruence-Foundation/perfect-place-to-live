@@ -42,14 +42,13 @@ function getWindowHeight(): number {
 }
 
 /**
- * Calculate snap heights in pixels from percentage config
+ * Calculate snap heights in pixels from percentage config and window height
  */
-function calculateSnapHeights(config: SnapPointConfig): SnapHeights {
-  const vh = getWindowHeight();
+function calculateSnapHeights(config: SnapPointConfig, windowHeight: number): SnapHeights {
   return {
-    collapsed: (config.collapsedPercent / 100) * vh,
-    half: (config.halfPercent / 100) * vh,
-    expanded: (config.expandedPercent / 100) * vh,
+    collapsed: (config.collapsedPercent / 100) * windowHeight,
+    half: (config.halfPercent / 100) * windowHeight,
+    expanded: (config.expandedPercent / 100) * windowHeight,
   };
 }
 
@@ -57,21 +56,42 @@ function calculateSnapHeights(config: SnapPointConfig): SnapHeights {
  * Hook for managing snap point behavior in bottom sheets
  */
 export function useSnapPoints(config: SnapPointConfig = DEFAULT_SNAP_CONFIG) {
+  // Destructure config to use primitive values in dependency arrays
+  // This prevents unnecessary recalculations when caller passes a new object reference
+  const { collapsedPercent, halfPercent, expandedPercent } = config;
+  
+  // Track window height for responsive snap points
+  const [windowHeight, setWindowHeight] = useState(() => getWindowHeight());
+  
   const [height, setHeight] = useState(() => {
-    if (typeof window === 'undefined') {
-      return (config.collapsedPercent / 100) * UI_CONFIG.SSR_FALLBACK_WINDOW_HEIGHT;
-    }
-    return (config.collapsedPercent / 100) * window.innerHeight;
+    const vh = getWindowHeight();
+    return (collapsedPercent / 100) * vh;
   });
   const [isMounted, setIsMounted] = useState(false);
 
-  /** Snap heights in pixels (memoized) */
-  const snapHeights = useMemo(() => calculateSnapHeights(config), [config]);
+  /** Snap heights in pixels (memoized on primitive values) */
+  const snapHeights = useMemo(
+    () => calculateSnapHeights({ collapsedPercent, halfPercent, expandedPercent }, windowHeight),
+    [collapsedPercent, halfPercent, expandedPercent, windowHeight]
+  );
 
-  // Track mount state for SSR safety
+  // Track mount state for SSR safety and handle window resize
   useEffect(() => {
     setIsMounted(true);
     setHeight(snapHeights.collapsed);
+    
+    // Update snap heights when window resizes
+    const handleResize = () => {
+      setWindowHeight(window.innerHeight);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    // Also listen for orientation change on mobile devices
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, [snapHeights.collapsed]);
 
   /** Get current snap point name based on height */

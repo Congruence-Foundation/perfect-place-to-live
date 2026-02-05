@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchClusterProperties, fromOtodomRoomCount } from '@/extensions/real-estate/lib/otodom';
+import { fetchClusterProperties, fromOtodomRoomCount, toUnifiedProperty } from '@/extensions/real-estate/lib/otodom';
 import { fetchGratkaClusterProperties } from '@/extensions/real-estate/lib/gratka';
 import { PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/extensions/real-estate/types';
 import type { PropertyDataSource } from '@/extensions/real-estate/config';
@@ -30,55 +30,6 @@ interface ClusterRequest {
     west: number;
     north: number;
     east: number;
-  };
-}
-
-/**
- * Convert Otodom property to unified format
- */
-function otodomToUnified(property: {
-  id: number;
-  lat: number;
-  lng: number;
-  title: string;
-  url: string;
-  totalPrice: { value: number; currency: string };
-  pricePerMeter?: { value: number; currency: string };
-  areaInSquareMeters: number;
-  roomsNumber?: string;
-  floor?: number;
-  buildYear?: number;
-  images: { medium: string; large: string }[];
-  isPromoted: boolean;
-  createdAt: string;
-  estate: string;
-  transaction: string;
-  hidePrice?: boolean;
-}): UnifiedProperty {
-  // Parse room count from string enum (e.g., 'ONE', 'TWO', 'THREE', etc.)
-  const rooms = property.roomsNumber ? fromOtodomRoomCount(property.roomsNumber) : null;
-
-  return {
-    id: createUnifiedId('otodom', property.id),
-    sourceId: property.id,
-    source: 'otodom',
-    lat: property.lat,
-    lng: property.lng,
-    title: property.title,
-    url: property.url,
-    price: property.hidePrice ? null : property.totalPrice.value,
-    pricePerMeter: property.pricePerMeter?.value ?? null,
-    currency: property.totalPrice.currency,
-    area: property.areaInSquareMeters,
-    rooms,
-    floor: property.floor ?? null,
-    buildYear: property.buildYear ?? null,
-    images: property.images,
-    isPromoted: property.isPromoted,
-    createdAt: property.createdAt,
-    estateType: property.estate as UnifiedProperty['estateType'],
-    transaction: property.transaction as UnifiedProperty['transaction'],
-    rawData: property,
   };
 }
 
@@ -126,10 +77,6 @@ export async function POST(request: NextRequest) {
       // Convert roomsNumber string array to number array for Gratka
       const rooms = filters.roomsNumber?.map(fromOtodomRoomCount);
       
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cluster/route.ts:gratka-request',message:'Gratka cluster request',data:{lat,lng,hasClusterUrl:!!clusterUrl,clusterUrl:clusterUrl?.slice(0,100),hasBounds:!!clusterBounds,radius,page,limit},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'1'})}).catch(()=>{});
-      // #endregion
-      
       const gratkaResult = await fetchGratkaClusterProperties({
         clusterUrl,
         lat,
@@ -148,10 +95,6 @@ export async function POST(request: NextRequest) {
       });
 
       // Gratka adapter already returns unified-like format, but we need to ensure consistency
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cluster/route.ts:gratka',message:'Raw gratka properties',data:{count:gratkaResult.properties.length,firstProperty:gratkaResult.properties[0]?{id:gratkaResult.properties[0].id,price:gratkaResult.properties[0].price,priceM2:gratkaResult.properties[0].priceM2,photos:gratkaResult.properties[0].photos,location:gratkaResult.properties[0].location}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      
       // Infer estateType and transaction from filters since Gratka API doesn't return these fields
       const inferredEstateType = estateType ?? 'FLAT';
       const inferredTransaction = filters.transaction ?? 'SELL';
@@ -190,9 +133,6 @@ export async function POST(request: NextRequest) {
         currentPage: gratkaResult.currentPage,
         totalPages: gratkaResult.totalPages,
       };
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cluster/route.ts:gratka-result',message:'Converted properties',data:{count:result.properties.length,clusterCenter:{lat,lng},firstProperty:result.properties[0]?{id:result.properties[0].id,price:result.properties[0].price,pricePerMeter:result.properties[0].pricePerMeter,estateType:result.properties[0].estateType,transaction:result.properties[0].transaction,images:result.properties[0].images,lat:result.properties[0].lat,lng:result.properties[0].lng,usedClusterCenter:result.properties[0].lat===lat&&result.properties[0].lng===lng}:null,rawPropertyType:gratkaResult.properties[0]?.propertyType,rawTransaction:gratkaResult.properties[0]?.transaction},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
     } else {
       // Use Otodom client (default)
       const otodomResult = await fetchClusterProperties(
@@ -207,7 +147,7 @@ export async function POST(request: NextRequest) {
       );
 
       result = {
-        properties: otodomResult.properties.map(otodomToUnified),
+        properties: otodomResult.properties.map(toUnifiedProperty),
         totalCount: otodomResult.totalCount,
         currentPage: otodomResult.currentPage,
         totalPages: otodomResult.totalPages,
@@ -216,9 +156,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'cluster/route.ts:error',message:'Cluster API error',data:{error:error instanceof Error?{message:error.message,stack:error.stack?.slice(0,500)}:String(error)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'ERROR'})}).catch(()=>{});
-    // #endregion
     return handleApiError(error, { context: 'Cluster properties API' });
   }
 }

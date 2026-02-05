@@ -63,6 +63,8 @@ export default function EstateTypeToggle({
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-background hover:bg-muted border-input'
               }`}
+              aria-pressed={isSelected}
+              aria-label={option.label}
             >
               <option.Icon className="h-3.5 w-3.5" />
               {option.label}

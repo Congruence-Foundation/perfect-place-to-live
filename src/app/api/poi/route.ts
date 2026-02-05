@@ -118,9 +118,16 @@ export async function GET(request: NextRequest) {
     const south = parseFloat(searchParams.get('south') || '');
     const east = parseFloat(searchParams.get('east') || '');
     const west = parseFloat(searchParams.get('west') || '');
-    const factorIds = searchParams.get('factorIds')?.split(',') || [];
+    const factorIds = searchParams.get('factorIds')?.split(',').filter(Boolean) || [];
 
+    // Validate parsed values are actual numbers (not NaN)
     if (isNaN(north) || isNaN(south) || isNaN(east) || isNaN(west)) {
+      return errorResponse(new Error('Invalid bounds: coordinates must be valid numbers'), 400);
+    }
+
+    const bounds: Bounds = { north, south, east, west };
+    
+    if (!isValidBounds(bounds)) {
       return errorResponse(new Error('Invalid bounds'), 400);
     }
 
@@ -128,7 +135,6 @@ export async function GET(request: NextRequest) {
       return errorResponse(new Error('Invalid factor IDs'), 400);
     }
 
-    const bounds: Bounds = { north, south, east, west };
     const result = await fetchPOIsWithCache(bounds, factorIds);
     return NextResponse.json(result);
   } catch (error) {

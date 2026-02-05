@@ -1,6 +1,5 @@
 import type { 
   PriceCategory, 
-  EnrichedUnifiedProperty,
   PropertyPriceAnalysis,
   UnifiedProperty,
 } from '../lib/shared';
@@ -47,30 +46,6 @@ export function generateClusterPriceLabel(
     default:
       return '';
   }
-}
-
-/**
- * Get min/max price categories from enriched properties
- * Now accepts unified property format
- */
-export function getClusterPriceCategories(
-  properties: EnrichedUnifiedProperty[]
-): { minCategory: PriceCategory | null; maxCategory: PriceCategory | null } {
-  const withAnalysis = properties.filter(p => p.priceAnalysis && p.priceAnalysis.priceCategory !== 'no_data');
-  
-  if (withAnalysis.length === 0) {
-    return { minCategory: null, maxCategory: null };
-  }
-
-  // Sort by price score (lower = better deal)
-  const sorted = [...withAnalysis].sort((a, b) => 
-    (a.priceAnalysis?.priceScore || 0) - (b.priceAnalysis?.priceScore || 0)
-  );
-
-  return {
-    minCategory: sorted[0].priceAnalysis?.priceCategory || null,
-    maxCategory: sorted[sorted.length - 1].priceAnalysis?.priceCategory || null,
-  };
 }
 
 /**

@@ -36,36 +36,6 @@ export type GratkaContactType = 'AGENCY' | 'AGENT' | 'DEVELOPER' | 'SALES_OFFICE
 /** Location type */
 export type GratkaLocationType = 'VOIVODESHIP' | 'COUNTY' | 'COMMUNE' | 'CITY' | 'DISTRICT' | 'STREET';
 
-/** Building materials (for dictionaries filter) */
-export type GratkaBuildingMaterial =
-  | 'BUILDING_MATERIAL_BRICK'
-  | 'BUILDING_MATERIAL_CONCRETE'
-  | 'BUILDING_MATERIAL_LPS'
-  | 'BUILDING_MATERIAL_HOLLOW_BLOCK'
-  | 'BUILDING_MATERIAL_YTONG'
-  | 'BUILDING_MATERIAL_SUPOREX'
-  | 'BUILDING_MATERIAL_VARIED'
-  | 'BUILDING_MATERIAL_STONE'
-  | 'BUILDING_MATERIAL_WOOD'
-  | 'BUILDING_MATERIAL_H_FRAME';
-
-/** Building types for flats */
-export type GratkaBuildingType =
-  | 'BUILDING_TYPE_APARTMENT_BUILDING'
-  | 'BUILDING_TYPE_BLOCK_OF_FLATS'
-  | 'BUILDING_TYPE_TENEMENT'
-  | 'BUILDING_TYPE_LOFT'
-  | 'BUILDING_TYPE_RIBBON'
-  | 'BUILDING_TYPE_INFILL';
-
-/** House types */
-export type GratkaHouseType =
-  | 'HOUSE_TYPE_DETACHED'
-  | 'HOUSE_TYPE_SEMI_DETACHED'
-  | 'HOUSE_TYPE_TERRACED'
-  | 'HOUSE_TYPE_FARM'
-  | 'HOUSE_TYPE_MANOR';
-
 // ============================================
 // CORE TYPES
 // ============================================
@@ -369,34 +339,6 @@ export interface GratkaPageInfo {
   hasNextPage: boolean;
 }
 
-/** Blog post */
-export interface GratkaBlogPost {
-  title: string;
-  url: string;
-  photo: GratkaImage | null;
-  content: string;
-}
-
-/** Breadcrumb node */
-export interface GratkaBreadcrumbNode {
-  title: string;
-  url: string;
-}
-
-/** Breadcrumbs */
-export interface GratkaBreadcrumbs {
-  title: string;
-  nodes: GratkaBreadcrumbNode[];
-}
-
-/** Header title */
-export interface GratkaHeaderTitle {
-  header: string;
-  subHeader: string | null;
-  count: number;
-  searchQuery: string | null;
-}
-
 // ============================================
 // API RESPONSE TYPES
 // ============================================
@@ -413,59 +355,6 @@ export interface GratkaEncodeListingParametersResponse {
   };
 }
 
-/** Response from decodeListingUrl */
-export interface GratkaDecodeListingUrlResponse {
-  url: string;
-  totalCount: number;
-  listingParameters: {
-    extraParameters: GratkaExtraParameter[];
-    locations: GratkaLocationInfo[];
-    mode: GratkaListingMode;
-    numberOfResults: number;
-    pageNumber: number;
-    searchOrder: GratkaSearchOrder;
-    searchParameters: GratkaSearchParameters;
-  };
-}
-
-/** Search result */
-export interface GratkaSearchResult {
-  adKeywords: string[];
-  dataLayer: Record<string, unknown>;
-  hasTopPromoted: boolean;
-  properties: {
-    nodes: GratkaPropertyNode[];
-    totalCount: number;
-  };
-  topPromoted: {
-    listingUrl: string | null;
-    topPromotedListingUrl: string | null;
-  } | null;
-}
-
-/** Response from getPropertyListingData */
-export interface GratkaPropertyListingDataResponse {
-  blogPosts: GratkaBlogPost[];
-  breadcrumbs: GratkaBreadcrumbs;
-  headerTitle: GratkaHeaderTitle;
-  headTags: {
-    link: { href: string; rel: string; sizes?: string }[];
-    meta: { content: string; name?: string; property?: string }[];
-    script: { innerHTML: string; type: string }[];
-    title: string;
-  };
-  searchResult: GratkaSearchResult;
-}
-
-/** Response from getTopPromotedProperty */
-export interface GratkaTopPromotedResponse {
-  topPromoted: {
-    listingUrl: string | null;
-    nodes: GratkaPropertyNode[];
-    topPromotedListingUrl: string;
-  };
-}
-
 /** Response from searchMap */
 export interface GratkaSearchMapResponse {
   markers: GratkaMapMarker[];
@@ -476,9 +365,6 @@ export interface GratkaLocationSuggestionsResponse {
   edges: { node: GratkaLocationSuggestion }[];
   pageInfo: GratkaPageInfo;
 }
-
-/** Response from addPropertyViewOnListingStatistic mutation */
-export type GratkaAddPropertyViewResponse = string[];
 
 // ============================================
 // GRAPHQL TYPES
@@ -503,17 +389,6 @@ export interface GratkaGraphQLResponse<T> {
 // ============================================
 
 /**
- * Extended property node for cluster data
- * 
- * The getPropertyClusterData query returns additional fields not present
- * in the standard getPropertyListingData response.
- * Note: Most fields are now in the base GratkaPropertyNode type.
- */
-export interface GratkaClusterPropertyNode extends GratkaPropertyNode {
-  // All fields are now in the base type
-}
-
-/**
  * Response from getPropertyClusterData query
  * 
  * This is a lightweight alternative to getPropertyListingData that returns
@@ -524,7 +399,7 @@ export interface GratkaPropertyClusterDataResponse {
   searchResult: {
     hasTopPromoted: boolean;
     properties: {
-      nodes: GratkaClusterPropertyNode[];
+      nodes: GratkaPropertyNode[];
       totalCount: number;
     };
   };
@@ -538,7 +413,7 @@ export interface GratkaPropertyClusterDataResponse {
  * - Fetching details for properties in a cluster using marker.ids
  */
 export interface GratkaGetMarkersResponse {
-  properties: GratkaClusterPropertyNode[];
+  properties: GratkaPropertyNode[];
 }
 
 // ============================================

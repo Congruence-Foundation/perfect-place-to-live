@@ -51,8 +51,10 @@ export default function LanguageSwitcher() {
                   ? 'bg-muted font-medium' 
                   : 'hover:bg-muted'
               }`}
+              aria-pressed={locale === localeCode}
+              aria-label={`Switch to ${metadata.label}`}
             >
-              <span>{metadata.flag}</span>
+              <span aria-hidden="true">{metadata.flag}</span>
               <span>{metadata.label}</span>
             </button>
           );

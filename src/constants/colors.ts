@@ -41,29 +41,17 @@ export const DEFAULT_FALLBACK_COLOR = '#6b7280';
 
 /**
  * Score-based colors for heatmap and popup displays
- * Used for rating bars, score indicators, and quality badges
+ * Used for rating bars, score indicators, quality badges, and gradients
+ * 
+ * K value scale: 0 = excellent (green), 1 = poor (red)
  */
 export const SCORE_COLORS = {
-  /** Good score (low K value) - Green-500 */
+  /** Excellent/Good score (low K value) - Green-500 */
   GOOD: '#22c55e',
-  /** Average score - Amber-500 (aligned with SCORE_GRADIENT) */
+  /** Average score - Amber-500 */
   AVERAGE: '#f59e0b',
   /** Poor score (high K value) - Red-500 */
   POOR: '#ef4444',
-} as const;
-
-/**
- * Score gradient colors for range sliders and visualizations
- * Red (poor) -> Amber (average) -> Green (excellent)
- * Uses SCREAMING_SNAKE_CASE for consistency with SCORE_COLORS
- */
-export const SCORE_GRADIENT = {
-  /** Poor score color - Red-500 */
-  POOR: '#ef4444',
-  /** Average score color - Amber-500 */
-  AVERAGE: '#f59e0b',
-  /** Excellent score color - Green-500 */
-  EXCELLENT: '#22c55e',
 } as const;
 
 /**
@@ -111,6 +99,11 @@ export const DEBUG_COLORS = {
  * K is 0-1 where 0 = excellent, 1 = poor
  */
 export function getColorForK(k: number): string {
+  // Handle non-finite values
+  if (!Number.isFinite(k)) {
+    return DEFAULT_FALLBACK_COLOR;
+  }
+  
   // Color stops: green (good, low K) to red (bad, high K)
   const colors = [
     { pos: 0, r: 22, g: 163, b: 74 },    // green-600 - excellent (K=0)
@@ -122,6 +115,15 @@ export function getColorForK(k: number): string {
   
   // Clamp K to 0-1 range
   const normalized = Math.max(0, Math.min(1, k));
+  
+  // Handle exact boundary cases
+  if (normalized === 0) {
+    return `rgb(${colors[0].r},${colors[0].g},${colors[0].b})`;
+  }
+  if (normalized === 1) {
+    const last = colors[colors.length - 1];
+    return `rgb(${last.r},${last.g},${last.b})`;
+  }
   
   // Find the two colors to interpolate between
   let lower = colors[0];

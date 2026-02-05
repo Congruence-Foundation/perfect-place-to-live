@@ -173,14 +173,16 @@ class SpatialIndex {
 
 function applyDistanceCurve(distance, maxDistance, curve, sensitivity) {
   const ratio = Math.min(distance, maxDistance) / maxDistance;
+  // Clamp sensitivity to prevent division by zero and extreme values
+  const safeSensitivity = Math.max(0.1, Math.min(10, sensitivity));
   switch (curve) {
     case 'log':
-      const logBase = 1 + (Math.E - 1) * sensitivity;
+      const logBase = 1 + (Math.E - 1) * safeSensitivity;
       return Math.log(1 + ratio * (logBase - 1)) / Math.log(logBase);
     case 'exp':
-      return 1 - Math.exp(-3 * sensitivity * ratio);
+      return 1 - Math.exp(-3 * safeSensitivity * ratio);
     case 'power':
-      return Math.pow(ratio, 0.5 / sensitivity);
+      return Math.pow(ratio, 0.5 / safeSensitivity);
     default:
       return ratio;
   }

@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import type { PriceValueRange } from '../types';
+import type { PriceValueRange, PropertyFilters } from '../types';
 import { useRealEstateStore } from '../store';
 import type { PropertyDataSource } from '../config';
 import { getDefaultPriceRange } from '../config/constants';
@@ -13,7 +13,7 @@ import { getDefaultPriceRange } from '../config/constants';
 export interface UseRealEstateExtensionReturn {
   // State
   enabled: boolean;
-  filters: import('../types').PropertyFilters;
+  filters: PropertyFilters;
   scoreRange: [number, number];
   priceValueRange: PriceValueRange;
   dataSources: PropertyDataSource[];
@@ -28,7 +28,7 @@ export interface UseRealEstateExtensionReturn {
   
   // Actions
   setEnabled: (enabled: boolean) => void;
-  setFilters: (filters: Partial<import('../types').PropertyFilters>) => void;
+  setFilters: (filters: Partial<PropertyFilters>) => void;
   setScoreRange: (range: [number, number]) => void;
   setPriceValueRange: (range: PriceValueRange) => void;
   setDataSources: (sources: PropertyDataSource[]) => void;

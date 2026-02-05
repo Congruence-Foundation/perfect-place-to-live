@@ -99,21 +99,14 @@ export const HOUSE_BUILDING_TYPE_OPTIONS: TranslatableFilterOption<HouseBuilding
 // Building Material Options
 // ============================================================================
 
-export const BUILDING_MATERIAL_OPTIONS: TranslatableFilterOption<BuildingMaterial>[] = [
+/** Common building materials for filter UI (subset of all available materials) */
+export const COMMON_BUILDING_MATERIALS: TranslatableFilterOption<BuildingMaterial>[] = [
   { value: 'BRICK', labelKey: 'materialBrick' },
   { value: 'WOOD', labelKey: 'materialWood' },
   { value: 'CONCRETE', labelKey: 'materialConcrete' },
   { value: 'CONCRETE_PLATE', labelKey: 'materialConcretePlate' },
   { value: 'CELLULAR_CONCRETE', labelKey: 'materialCellularConcrete' },
-  { value: 'SILIKAT', labelKey: 'materialSilikat' },
-  { value: 'BREEZEBLOCK', labelKey: 'materialBreezeblock' },
-  { value: 'HYDROTON', labelKey: 'materialHydroton' },
-  { value: 'REINFORCED_CONCRETE', labelKey: 'materialReinforcedConcrete' },
-  { value: 'OTHER', labelKey: 'materialOther' },
 ];
-
-// Commonly used materials (first 5)
-export const COMMON_BUILDING_MATERIALS = BUILDING_MATERIAL_OPTIONS.slice(0, 5);
 
 // ============================================================================
 // Extras Options

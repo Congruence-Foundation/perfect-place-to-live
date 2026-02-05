@@ -328,6 +328,9 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     }
     prevHeatmapHashRef.current = currentHash;
 
+    // Track if effect is still active (for async callback safety)
+    let isActive = true;
+
     const updateGrid = async () => {
       try {
         const L = (await import('leaflet')).default;
@@ -418,7 +421,8 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         ];
 
         canvas.toBlob((blob) => {
-          if (!blob || !mapInstanceRef.current) return;
+          // Safety check: abort if effect was cleaned up or map was destroyed
+          if (!isActive || !blob || !mapInstanceRef.current) return;
           
           const url = URL.createObjectURL(blob);
           const oldUrl = blobUrlRef.current;
@@ -436,7 +440,8 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           // Pre-load the new image first
           const tempImg = new Image();
           tempImg.onload = () => {
-            if (!mapInstanceRef.current) return;
+            // Safety check: abort if effect was cleaned up
+            if (!isActive || !mapInstanceRef.current) return;
             
             // Image is now cached - create new overlay (will load instantly)
             const newOverlay = L.imageOverlay(url, overlayBounds, {
@@ -445,27 +450,19 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
               pane: 'heatmapPane',
             });
             
-            // Add new overlay to map first (old one stays visible underneath)
+            // Remove old overlay BEFORE adding new one to prevent double overlays
+            if (oldOverlay) {
+              oldOverlay.remove();
+            }
+            if (oldUrl) {
+              URL.revokeObjectURL(oldUrl);
+            }
+            
+            // Add new overlay to map
             newOverlay.addTo(mapInstanceRef.current!);
             
-            // Update ref BEFORE scheduling removal
-            // This ensures rapid updates don't remove the wrong overlay
+            // Update ref
             canvasOverlayRef.current = newOverlay;
-            
-            // Remove old overlay after new one is painted
-            // Double rAF ensures browser has composited the new overlay
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                // Only remove if oldOverlay is not the current one
-                // (protects against race conditions with rapid updates)
-                if (oldOverlay && oldOverlay !== canvasOverlayRef.current) {
-                  oldOverlay.remove();
-                }
-                if (oldUrl) {
-                  URL.revokeObjectURL(oldUrl);
-                }
-              });
-            });
           };
           tempImg.src = url;
         }, 'image/png');
@@ -476,6 +473,10 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     };
 
     updateGrid();
+
+    return () => {
+      isActive = false;
+    };
   }, [mapReady, heatmapPoints, heatmapOpacity, heatmapTileCoords, isHeatmapDataReady]);
 
   // Update POI markers

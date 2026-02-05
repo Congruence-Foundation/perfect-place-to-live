@@ -3,10 +3,6 @@
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import type { PropertyFilters } from '../types';
-import { DEFAULT_RENT_PRICE, DEFAULT_SELL_PRICE } from '../config/constants';
-
-// Re-export for backwards compatibility
-export { DEFAULT_RENT_PRICE, DEFAULT_SELL_PRICE, getDefaultPriceRange } from '../config/constants';
 
 const BASE_BUTTON_CLASSES = 'flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors';
 const ACTIVE_BUTTON_CLASSES = 'bg-primary text-primary-foreground';

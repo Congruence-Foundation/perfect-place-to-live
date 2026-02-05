@@ -14,7 +14,9 @@ const messages = {
 
 export default getRequestConfig(async () => {
   const store = await cookies();
-  const requested = store.get('locale')?.value;
+  const cookieValue = store.get('locale')?.value;
+  // Ensure we have a non-empty string before checking locale validity
+  const requested = cookieValue && cookieValue.trim() ? cookieValue.trim() : undefined;
   const locale = hasLocale(routing.locales, requested) ? requested : routing.defaultLocale;
 
   return {

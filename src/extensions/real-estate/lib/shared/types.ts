@@ -284,18 +284,6 @@ export function createUnifiedId(source: PropertyDataSource, id: number): string 
   return `${source}:${id}`;
 }
 
-/**
- * Parse a unified property ID back to source and numeric ID
- */
-export function parseUnifiedId(unifiedId: string): { source: PropertyDataSource; id: number } | null {
-  const match = unifiedId.match(/^(otodom|gratka):(\d+)$/);
-  if (!match) return null;
-  return {
-    source: match[1] as PropertyDataSource,
-    id: parseInt(match[2], 10),
-  };
-}
-
 // ============================================================================
 // Price Analysis Types (Source-Agnostic)
 // ============================================================================

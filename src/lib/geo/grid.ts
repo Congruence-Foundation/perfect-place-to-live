@@ -7,9 +7,11 @@ import { PERFORMANCE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
 
 /**
- * Grid points divisor for tile-based calculations
- * Accounts for tile overlap when calculating grid size from tile dimensions.
- * A value of 4 means we expect ~4 tiles worth of overlap in a typical viewport.
+ * Divisor for tile-based grid size calculations.
+ * When calculating grid cell size from tile dimensions, we divide the target
+ * grid points by this value to account for the fact that a typical viewport
+ * spans multiple tiles. A value of 4 assumes ~4 tiles visible in a typical
+ * viewport, so each tile gets ~1/4 of the target grid points.
  */
 const TILE_GRID_DIVISOR = 4;
 
@@ -44,10 +46,28 @@ export function calculateTileGridSize(
 export function generateGrid(bounds: Bounds, cellSize: number): Point[] {
   const points: Point[] = [];
 
+  // Handle edge cases: invalid cell size
+  if (!Number.isFinite(cellSize) || cellSize <= 0) {
+    console.warn('Invalid cell size for grid generation:', cellSize);
+    return points;
+  }
+
+  // Handle edge cases: invalid or degenerate bounds
+  if (bounds.north <= bounds.south || bounds.east <= bounds.west) {
+    console.warn('Invalid bounds for grid generation: degenerate or inverted bounds');
+    return points;
+  }
+
   // Calculate step sizes in degrees
   const centerLat = (bounds.north + bounds.south) / 2;
   const latStep = cellSize / METERS_PER_DEGREE_LAT;
   const lngStep = cellSize / metersPerDegreeLng(centerLat);
+
+  // Guard against extremely small steps that could cause infinite loops
+  if (latStep < 1e-10 || lngStep < 1e-10) {
+    console.warn('Cell size too small for grid generation');
+    return points;
+  }
 
   // Align grid to global reference (0,0) to ensure adjacent tiles have matching points
   // Find the first grid point >= bounds.south that aligns with global grid
@@ -68,6 +88,10 @@ export function generateGrid(bounds: Bounds, cellSize: number): Point[] {
  * Estimate the number of grid points for given bounds and cell size
  */
 export function estimateGridSize(bounds: Bounds, cellSize: number): number {
+  // Handle edge cases
+  if (!Number.isFinite(cellSize) || cellSize <= 0) return 0;
+  if (bounds.north <= bounds.south || bounds.east <= bounds.west) return 0;
+
   const centerLat = (bounds.north + bounds.south) / 2;
 
   const latRange = (bounds.north - bounds.south) * METERS_PER_DEGREE_LAT;
@@ -88,12 +112,28 @@ export function calculateAdaptiveGridSize(
   minCellSize: number = MIN_CELL_SIZE,
   maxCellSize: number = MAX_CELL_SIZE
 ): number {
+  // Handle edge cases: invalid target points
+  if (!Number.isFinite(targetPoints) || targetPoints <= 0) {
+    return maxCellSize;
+  }
+
+  // Handle edge cases: degenerate bounds
+  if (bounds.north <= bounds.south || bounds.east <= bounds.west) {
+    return maxCellSize;
+  }
+
   const centerLat = (bounds.north + bounds.south) / 2;
 
   const latRange = (bounds.north - bounds.south) * METERS_PER_DEGREE_LAT;
   const lngRange = (bounds.east - bounds.west) * metersPerDegreeLng(centerLat);
 
   const area = latRange * lngRange;
+  
+  // Handle edge case: zero or negative area
+  if (area <= 0) {
+    return maxCellSize;
+  }
+  
   const cellSize = Math.sqrt(area / targetPoints);
 
   return Math.max(minCellSize, Math.min(maxCellSize, cellSize));

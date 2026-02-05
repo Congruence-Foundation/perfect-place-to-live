@@ -15,8 +15,29 @@ function createExtensionRegistry(): ExtensionRegistry {
       extensions.set(extension.id, extension);
     },
 
+    unregister(extensionId: string) {
+      if (!extensions.has(extensionId)) {
+        console.warn(`Extension "${extensionId}" is not registered.`);
+        return false;
+      }
+      extensions.delete(extensionId);
+      return true;
+    },
+
     getAll() {
       return Array.from(extensions.values());
+    },
+
+    get(extensionId: string) {
+      return extensions.get(extensionId);
+    },
+
+    has(extensionId: string) {
+      return extensions.has(extensionId);
+    },
+
+    clear() {
+      extensions.clear();
     },
   };
 }

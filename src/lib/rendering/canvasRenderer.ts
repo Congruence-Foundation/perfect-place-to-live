@@ -18,14 +18,14 @@ interface CanvasRenderOptions {
 
 /**
  * Convert rgb(r,g,b) color string to rgba with alpha
- * Note: getColorForK always returns rgb() format
+ * Note: getColorForK always returns rgb(r,g,b) format without spaces
  */
 function rgbToRgba(color: string, alpha: number): string {
-  const rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  // getColorForK returns "rgb(r,g,b)" - extract values directly
+  const rgbMatch = color.match(/rgb\((\d+),(\d+),(\d+)\)/);
   if (rgbMatch) {
-    return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${alpha})`;
+    return `rgba(${rgbMatch[1]},${rgbMatch[2]},${rgbMatch[3]},${alpha})`;
   }
-  // Fallback - return as-is (shouldn't happen with getColorForK)
   return color;
 }
 
@@ -45,28 +45,59 @@ export function renderHeatmapToCanvas(
   // Clear canvas with transparent background
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
+  // Handle edge case: no points to render
   if (points.length === 0) return;
+  
+  // Handle edge case: invalid canvas dimensions
+  if (canvasWidth <= 0 || canvasHeight <= 0) {
+    console.warn('Invalid canvas dimensions for heatmap rendering');
+    return;
+  }
 
-  // Calculate scale factors
+  // Calculate scale factors with protection against zero-width/height bounds
   const boundsWidth = bounds.east - bounds.west;
   const boundsHeight = bounds.north - bounds.south;
+  
+  // Guard against degenerate bounds (zero or negative dimensions)
+  if (boundsWidth <= 0 || boundsHeight <= 0) {
+    console.warn('Invalid bounds for canvas rendering: zero or negative dimensions');
+    return;
+  }
+  
+  // Guard against extremely small bounds that could cause precision issues
+  if (boundsWidth < 1e-10 || boundsHeight < 1e-10) {
+    console.warn('Bounds too small for canvas rendering');
+    return;
+  }
+  
   const scaleX = canvasWidth / boundsWidth;
   const scaleY = canvasHeight / boundsHeight;
 
   let cellWidthDeg: number;
   let cellHeightDeg: number;
 
-  if (cellSizeMeters) {
+  if (cellSizeMeters && cellSizeMeters > 0) {
     // Use fixed cell size based on meters - consistent regardless of point count
     // Calculate center latitude for longitude scaling
     const centerLat = (bounds.north + bounds.south) / 2;
     const metersPerLng = metersPerDegreeLng(centerLat);
+    
+    // Guard against zero metersPerLng (at poles)
+    if (metersPerLng <= 0) {
+      console.warn('Invalid latitude for canvas rendering');
+      return;
+    }
     
     cellHeightDeg = cellSizeMeters / METERS_PER_DEGREE_LAT;
     cellWidthDeg = cellSizeMeters / metersPerLng;
   } else {
     // Fallback: Estimate grid dimensions from point count (legacy behavior)
     const estimatedGridDim = Math.sqrt(points.length);
+    // Guard against division by zero
+    if (estimatedGridDim <= 0) {
+      console.warn('Cannot estimate grid dimensions from zero points');
+      return;
+    }
     cellWidthDeg = boundsWidth / estimatedGridDim;
     cellHeightDeg = boundsHeight / estimatedGridDim;
   }

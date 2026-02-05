@@ -17,6 +17,9 @@ const SHARED_BATCH_SIZE = 5;
 /** 24 hours in seconds - common TTL for server caches */
 const TTL_24_HOURS = 86400;
 
+/** 1 hour in seconds - common TTL for API and POI caches */
+const TTL_1_HOUR = 3600;
+
 export const PERFORMANCE_CONFIG = {
   /** Default data source for POI fetching */
   DEFAULT_DATA_SOURCE: 'neon' as POIDataSource,
@@ -31,7 +34,7 @@ export const PERFORMANCE_CONFIG = {
   GRID_BUFFER_DEGREES: 0.05,
   
   /** Cache TTL for POI data (seconds) */
-  POI_CACHE_TTL_SECONDS: 3600,
+  POI_CACHE_TTL_SECONDS: TTL_1_HOUR,
   
   /** Target number of grid points for adaptive sizing */
   TARGET_GRID_POINTS: 5000,
@@ -120,8 +123,19 @@ export const OVERPASS_CONFIG = {
   /** Maximum delay between retries (ms) */
   MAX_DELAY_MS: 10000,
   
+  /** Minimum interval between API requests (ms) - rate limiting */
+  MIN_REQUEST_INTERVAL_MS: 200,
+  
   /** HTTP status codes that trigger a retry */
   RETRYABLE_STATUSES: [429, 503, 504] as const,
+} as const;
+
+/**
+ * POI cache key configuration
+ */
+export const POI_CACHE_KEY_CONFIG = {
+  /** Precision for cache key bounds rounding (2 = ~1km precision) */
+  BOUNDS_PRECISION: 2,
 } as const;
 
 /**
@@ -258,13 +272,16 @@ export const POI_TILE_CONFIG = {
  */
 export const CACHE_CONFIG = {
   /** Default TTL for cache entries in seconds - 1 hour */
-  DEFAULT_TTL_SECONDS: 3600,
+  DEFAULT_TTL_SECONDS: TTL_1_HOUR,
   
   /** Maximum entries in memory cache fallback */
   MEMORY_CACHE_MAX_SIZE: 10000,
   
   /** Fraction of entries to evict when memory cache is full */
   EVICTION_RATIO: 0.1,
+  
+  /** Property API cache TTL in seconds - 1 hour */
+  PROPERTY_API_TTL_SECONDS: TTL_1_HOUR,
 } as const;
 
 /**

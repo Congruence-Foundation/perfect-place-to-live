@@ -29,7 +29,6 @@ export type {
 
 export {
   createUnifiedId,
-  parseUnifiedId,
   isEnrichedUnifiedProperty,
 } from './types';
 
@@ -40,10 +39,6 @@ export type {
 } from './datasource';
 
 export {
-  MultiSourceDataSource,
   createDataSource,
   createMultiSource,
-  getDataSource,
-  registerDataSource,
-  getRegisteredSources,
 } from './datasource';

@@ -9,6 +9,8 @@
     "active": "{count} active",
     "reset": "Reset",
     "refresh": "Refresh",
+    "expand": "Expand",
+    "collapse": "Collapse",
     "calculating": "Calculating...",
     "zoomInFirst": "Zoom in first",
     "fallbackNotice": "Using Overpass API for this area",

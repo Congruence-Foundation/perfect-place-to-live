@@ -106,22 +106,21 @@ export function useTileBorders(
     const renderTileBorders = async () => {
       try {
         const L = (await import('leaflet')).default;
-        const map = mapInstance;
-        if (!map) return;
+        if (!mapInstance) return;
 
         // Create or clear tile border layer
         if (!tileBorderLayerRef.current) {
           // Create a pane for tile borders above the heatmap
-          let tileBorderPane = map.getPane('tileBorderPane');
+          let tileBorderPane = mapInstance.getPane('tileBorderPane');
           if (!tileBorderPane) {
-            map.createPane('tileBorderPane');
-            tileBorderPane = map.getPane('tileBorderPane');
+            mapInstance.createPane('tileBorderPane');
+            tileBorderPane = mapInstance.getPane('tileBorderPane');
             if (tileBorderPane) {
               tileBorderPane.style.zIndex = String(Z_INDEX.MAP_TILE_BORDER_PANE);
               tileBorderPane.style.pointerEvents = 'none';
             }
           }
-          tileBorderLayerRef.current = L.layerGroup([], { pane: 'tileBorderPane' }).addTo(map);
+          tileBorderLayerRef.current = L.layerGroup([], { pane: 'tileBorderPane' }).addTo(mapInstance);
         }
         tileBorderLayerRef.current.clearLayers();
 
@@ -152,5 +151,13 @@ export function useTileBorders(
     };
 
     renderTileBorders();
+    
+    // Cleanup: remove layer group from map when component unmounts or map changes
+    return () => {
+      if (tileBorderLayerRef.current) {
+        tileBorderLayerRef.current.remove();
+        tileBorderLayerRef.current = null;
+      }
+    };
   }, [mapReady, mapInstance, showHeatmapTileBorders, showPropertyTileBorders, heatmapTiles, propertyTiles]);
 }

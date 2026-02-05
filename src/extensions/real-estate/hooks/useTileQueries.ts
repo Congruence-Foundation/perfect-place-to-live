@@ -31,11 +31,19 @@ import {
   calculateTilesWithRadius,
   type TileCoord,
   PROPERTY_TILE_ZOOM,
+  getTileKeyString,
 } from '@/lib/geo/tiles';
 import { createCoordinateKey } from '@/lib/geo';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
 import { delay } from '@/lib/utils';
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/** Query key prefix for property tile queries */
+const PROPERTY_TILE_QUERY_KEY = 'property-tile' as const;
 
 // =============================================================================
 // Helper Functions
@@ -239,17 +247,46 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
   }, [filters, dataSources]);
 
   // ============================================
+  // MODE TRANSITION: Clear state when switching modes
+  // These setState calls are intentional - they reset state when the fetching
+  // mode changes, which is a valid use case for synchronous state updates.
+  // ============================================
+  const prevModeRef = useRef(mode);
+  useEffect(() => {
+    const prevMode = prevModeRef.current;
+    prevModeRef.current = mode;
+    
+    // Clear viewport state when leaving viewport mode
+    if (prevMode === 'viewport' && mode !== 'viewport') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional state reset on mode change
+      setViewportProperties([]);
+      setViewportClusters([]);
+      setViewportTotalCount(0);
+    }
+    
+    // Reset loading state when entering tile mode with no tiles
+    if (mode === 'tile' && (isTooLarge || allTiles.length === 0)) {
+      setLoadingState('idle');
+      setLoadedTileCount(0);
+    }
+  }, [mode, isTooLarge, allTiles.length]);
+
+  // Clear viewport state when below minimum zoom
+  useEffect(() => {
+    if (isBelowMinZoom) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional state reset when below min zoom
+      setViewportProperties([]);
+      setViewportClusters([]);
+      setViewportTotalCount(0);
+    }
+  }, [isBelowMinZoom]);
+
+  // ============================================
   // VIEWPORT MODE: Single fetch with bounds
   // ============================================
   useEffect(() => {
     // Don't fetch if below minimum zoom, not in viewport mode, disabled, or no bounds
     if (isBelowMinZoom || mode !== 'viewport' || !enabled || !bounds) {
-      if (mode !== 'viewport' || isBelowMinZoom) {
-        // Clear viewport state when switching to tile mode or below min zoom
-        setViewportProperties([]);
-        setViewportClusters([]);
-        setViewportTotalCount(0);
-      }
       return;
     }
 
@@ -288,17 +325,15 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
     return () => {
       controller.abort();
     };
-  }, [mode, bounds, filters, enabled, filterHash, isBelowMinZoom, dataSources]);
+  }, [mode, bounds, filters, enabled, isBelowMinZoom, dataSources]);
 
   // ============================================
   // TILE MODE: Batched fetching effect
   // ============================================
   useEffect(() => {
+    // Don't fetch if not in tile mode, disabled, too large, or no tiles
+    // State clearing is handled by the mode transition effect above
     if (mode !== 'tile' || !enabled || isTooLarge || allTiles.length === 0) {
-      if (mode === 'tile') {
-        setLoadingState('idle');
-        setLoadedTileCount(0);
-      }
       return;
     }
 
@@ -313,10 +348,10 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
       const BATCH_DELAY = PROPERTY_TILE_CONFIG.BATCH_DELAY_MS;
 
       // Prioritize viewport tiles first
-      const viewportSet = new Set(viewportTiles.map((t: TileCoord) => `${t.z}:${t.x}:${t.y}`));
+      const viewportSet = new Set(viewportTiles.map((t: TileCoord) => getTileKeyString(t)));
       const sortedTiles = [
         ...viewportTiles,
-        ...allTiles.filter((t: TileCoord) => !viewportSet.has(`${t.z}:${t.x}:${t.y}`)),
+        ...allTiles.filter((t: TileCoord) => !viewportSet.has(getTileKeyString(t))),
       ];
 
       let loaded = 0;
@@ -336,7 +371,7 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
           const results = await Promise.allSettled(
             batch.map(tile =>
               queryClient.fetchQuery({
-                queryKey: ['property-tile', tile.z, tile.x, tile.y, filterHash],
+                queryKey: [PROPERTY_TILE_QUERY_KEY, tile.z, tile.x, tile.y, filterHash],
                 queryFn: () => fetchTileProperties(tile, filters, dataSources, controller.signal),
                 staleTime: PROPERTY_TILE_CONFIG.CLIENT_STALE_TIME_MS,
               })
@@ -378,7 +413,7 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
     return () => {
       controller.abort();
     };
-  }, [mode, allTiles, viewportTiles, filterHash, filters, enabled, isTooLarge, queryClient, dataSources]);
+  }, [mode, allTiles, viewportTiles, filters, filterHash, enabled, isTooLarge, queryClient, dataSources]);
 
   // Collect results from cache (tile mode only)
   const { tileProperties, tileClusters, tileIsLoading, tileTotalCount } = useMemo(() => {
@@ -395,7 +430,7 @@ export function useTileQueries(options: UseTileQueriesOptions): UseTileQueriesRe
 
     for (const tile of allTiles) {
       const data = queryClient.getQueryData<TileResponse>([
-        'property-tile',
+        PROPERTY_TILE_QUERY_KEY,
         tile.z,
         tile.x,
         tile.y,

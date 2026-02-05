@@ -17,18 +17,15 @@ import type {
   IPropertyDataSource,
   DataSourceFeature,
 } from '../shared/datasource';
-import { registerDataSource } from '../shared/datasource';
 import type {
   UnifiedSearchParams,
   UnifiedSearchResult,
   UnifiedCluster,
   UnifiedProperty,
   UnifiedEstateType,
-  UnifiedTransactionType,
   UnifiedOwnerType,
-  UnifiedSortKey,
 } from '../shared/types';
-import { createUnifiedId, parseUnifiedId } from '../shared/types';
+import { createUnifiedId } from '../shared/types';
 import { fetchOtodomProperties } from './client';
 
 // ============================================================================
@@ -36,97 +33,47 @@ import { fetchOtodomProperties } from './client';
 // ============================================================================
 
 /**
- * Map Otodom transaction type to unified
- * Otodom uses 'SELL' | 'RENT' which matches unified format
- */
-export function mapOtodomTransaction(transaction: 'SELL' | 'RENT'): UnifiedTransactionType {
-  return transaction;
-}
-
-/**
- * Map Otodom estate type to unified
- * Otodom uses same format as unified
- */
-export function mapOtodomEstateType(
-  estate: 'FLAT' | 'HOUSE' | 'TERRAIN' | 'COMMERCIAL' | 'ROOM' | 'GARAGE'
-): UnifiedEstateType {
-  return estate;
-}
-
-/**
  * Map unified owner type to Otodom format
  * Note: Otodom doesn't support COMMUNE, falls back to ALL
  */
-export function toOtodomOwnerType(owner: UnifiedOwnerType): 'ALL' | 'PRIVATE' | 'DEVELOPER' | 'AGENCY' {
+function toOtodomOwnerType(owner: UnifiedOwnerType): 'ALL' | 'PRIVATE' | 'DEVELOPER' | 'AGENCY' {
   if (owner === 'COMMUNE') return 'ALL';
   return owner as 'ALL' | 'PRIVATE' | 'DEVELOPER' | 'AGENCY';
 }
 
 /**
- * Map unified sort key to Otodom format
- * Note: Otodom has limited sort options
+ * Bidirectional room count mapping between numbers and Otodom string enums.
+ * Single source of truth for room count conversions.
  */
-export function toOtodomSortKey(sort: UnifiedSortKey): { by: string; direction: 'ASC' | 'DESC' } {
-  switch (sort) {
-    case 'RELEVANCE':
-      return { by: 'DEFAULT', direction: 'DESC' };
-    case 'PRICE_ASC':
-      return { by: 'PRICE', direction: 'ASC' };
-    case 'PRICE_DESC':
-      return { by: 'PRICE', direction: 'DESC' };
-    case 'PRICE_M2_ASC':
-    case 'PRICE_M2_DESC':
-      // Otodom doesn't support price per m² sorting, fall back to price
-      return { by: 'PRICE', direction: sort.endsWith('ASC') ? 'ASC' : 'DESC' };
-    case 'AREA_ASC':
-      return { by: 'AREA', direction: 'ASC' };
-    case 'AREA_DESC':
-      return { by: 'AREA', direction: 'DESC' };
-    case 'DATE_ASC':
-    case 'DATE_DESC':
-      return { by: 'CREATED_AT', direction: sort.endsWith('ASC') ? 'ASC' : 'DESC' };
-    default:
-      return { by: 'DEFAULT', direction: 'DESC' };
-  }
-}
+const ROOM_COUNT_MAP: readonly [number, OtodomRoomCount][] = [
+  [1, 'ONE'],
+  [2, 'TWO'],
+  [3, 'THREE'],
+  [4, 'FOUR'],
+  [5, 'FIVE'],
+  [6, 'SIX'],
+  [7, 'SEVEN'],
+  [8, 'EIGHT'],
+  [9, 'NINE'],
+  [10, 'TEN'],
+  [11, 'MORE'],
+] as const;
+
+const numberToRoom = new Map(ROOM_COUNT_MAP);
+const roomToNumber = new Map(ROOM_COUNT_MAP.map(([n, r]) => [r, n]));
 
 /**
  * Map room count number to Otodom string enum
  */
-export function toOtodomRoomCount(room: number): OtodomRoomCount {
-  const roomMap: Record<number, OtodomRoomCount> = {
-    1: 'ONE',
-    2: 'TWO',
-    3: 'THREE',
-    4: 'FOUR',
-    5: 'FIVE',
-    6: 'SIX',
-    7: 'SEVEN',
-    8: 'EIGHT',
-    9: 'NINE',
-    10: 'TEN',
-  };
-  return roomMap[room] || 'MORE';
+function toOtodomRoomCount(room: number): OtodomRoomCount {
+  return numberToRoom.get(room) ?? 'MORE';
 }
 
 /**
  * Map Otodom room string to number
  */
 export function fromOtodomRoomCount(room: string): number {
-  const roomMap: Record<string, number> = {
-    ONE: 1,
-    TWO: 2,
-    THREE: 3,
-    FOUR: 4,
-    FIVE: 5,
-    SIX: 6,
-    SEVEN: 7,
-    EIGHT: 8,
-    NINE: 9,
-    TEN: 10,
-    MORE: 11,
-  };
-  return roomMap[room] || 0;
+  return roomToNumber.get(room as OtodomRoomCount) ?? 0;
 }
 
 // ============================================================================
@@ -149,22 +96,12 @@ function toOtodomDaysSinceCreated(days: number | undefined): '1' | '3' | '7' | '
  * Convert unified search params to Otodom PropertyFilters
  */
 function toOtodomFilters(params: UnifiedSearchParams): OtodomPropertyFilters {
-  // Map unified estate types to Otodom format
-  const estateTypes = params.propertyTypes.map((type: UnifiedEstateType) => {
-    return type as OtodomEstateType;
-  });
+  // UnifiedEstateType and OtodomEstateType share the same values
+  const estateTypes = params.propertyTypes as OtodomEstateType[];
 
-  // Map room numbers to Otodom string enum
   const roomsNumber = params.rooms?.map(toOtodomRoomCount) as OtodomPropertyFilters['roomsNumber'];
 
-  // Map market type
-  const market = params.market ?? 'ALL';
-
-  // Map owner type (handles COMMUNE -> ALL fallback)
-  const owner = params.owner ? toOtodomOwnerType(params.owner) : 'ALL';
-
-  // Handle listing age filter (daysSinceCreated)
-  // Note: This requires extending UnifiedSearchParams to include daysSinceCreated
+  // Handle optional daysSinceCreated from extended params
   const extendedParams = params as UnifiedSearchParams & { daysSinceCreated?: number };
 
   return {
@@ -174,9 +111,9 @@ function toOtodomFilters(params: UnifiedSearchParams): OtodomPropertyFilters {
     priceMax: params.priceMax,
     areaMin: params.areaMin,
     areaMax: params.areaMax,
-    roomsNumber: roomsNumber,
-    market: market,
-    ownerType: owner,
+    roomsNumber,
+    market: params.market ?? 'ALL',
+    ownerType: params.owner ? toOtodomOwnerType(params.owner) : 'ALL',
     pricePerMeterMin: params.pricePerMeterMin,
     pricePerMeterMax: params.pricePerMeterMax,
     buildYearMin: params.buildYearMin,
@@ -188,7 +125,7 @@ function toOtodomFilters(params: UnifiedSearchParams): OtodomPropertyFilters {
 /**
  * Convert Otodom property to unified format
  */
-function toUnifiedProperty(property: OtodomProperty): UnifiedProperty {
+export function toUnifiedProperty(property: OtodomProperty): UnifiedProperty {
   // Parse room count from string
   const rooms = property.roomsNumber ? fromOtodomRoomCount(property.roomsNumber) : null;
 
@@ -220,8 +157,8 @@ function toUnifiedProperty(property: OtodomProperty): UnifiedProperty {
     })),
     isPromoted: property.isPromoted,
     createdAt: property.createdAt,
-    estateType: mapOtodomEstateType(property.estate) as UnifiedEstateType,
-    transaction: mapOtodomTransaction(property.transaction) as UnifiedTransactionType,
+    estateType: property.estate,
+    transaction: property.transaction,
     rawData: property,
   };
 }
@@ -237,9 +174,7 @@ function toUnifiedCluster(cluster: OtodomPropertyCluster): UnifiedCluster {
     source: 'otodom',
     shape: cluster.shape,
     radiusInMeters: cluster.radiusInMeters,
-    estateType: cluster.estateType
-      ? (mapOtodomEstateType(cluster.estateType as OtodomProperty['estate']) as UnifiedEstateType)
-      : undefined,
+    estateType: cluster.estateType as UnifiedEstateType | undefined,
   };
 }
 
@@ -267,11 +202,6 @@ export class OtodomAdapter implements IPropertyDataSource {
     'listing-age-filter',
   ]);
 
-  constructor() {
-    // Register this adapter in the cache
-    registerDataSource(this);
-  }
-
   async searchProperties(params: UnifiedSearchParams): Promise<UnifiedSearchResult> {
     const filters = toOtodomFilters(params);
 
@@ -297,22 +227,3 @@ export class OtodomAdapter implements IPropertyDataSource {
     return this.supportedFeatures.has(feature);
   }
 }
-
-// ============================================================================
-// Singleton Instance
-// ============================================================================
-
-let instance: OtodomAdapter | null = null;
-
-/**
- * Get the singleton Otodom adapter instance
- */
-export function getOtodomAdapter(): OtodomAdapter {
-  if (!instance) {
-    instance = new OtodomAdapter();
-  }
-  return instance;
-}
-
-// Re-export shared utilities that are used by both adapters
-export { createUnifiedId, parseUnifiedId };

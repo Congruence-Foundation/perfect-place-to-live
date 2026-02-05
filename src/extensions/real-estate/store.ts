@@ -19,7 +19,7 @@ import {
   DEFAULT_SCORE_RANGE,
   DEFAULT_PRICE_VALUE_RANGE,
   DEFAULT_DATA_SOURCES,
-} from './config/constants';
+} from './config';
 
 /**
  * Real estate store state interface
@@ -44,8 +44,8 @@ export interface RealEstateState {
   properties: EnrichedUnifiedProperty[];
   clusters: UnifiedCluster[];
   /** 
-   * Cluster analysis data - stored for potential future use and devtools debugging.
-   * Currently computed in RealEstateController but not read from store by any component.
+   * Cluster analysis data for price category glow effects.
+   * Computed in RealEstateController and passed to useRealEstateMarkers.
    */
   clusterAnalysisData: ClusterAnalysisMap;
   

@@ -2,8 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { GripHorizontal, ChevronDown, ChevronUp, SlidersHorizontal, RotateCcw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { GripHorizontal } from 'lucide-react';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import type { Factor } from '@/types';
 import { FACTOR_PROFILES } from '@/config/factors';
@@ -11,6 +10,7 @@ import { useSnapPoints } from '@/hooks';
 import ProfileSelector from './ProfileSelector';
 import WeightSliders from './WeightSliders';
 import ExtensionsBottomSheet from './ExtensionsBottomSheet';
+import { CollapsibleFactorsSection } from './CollapsibleFactorsSection';
 import { Z_INDEX } from '@/constants/z-index';
 
 // Snap points configuration (percentage of viewport height)
@@ -26,6 +26,7 @@ const MAX_HEIGHT_PERCENT = 85;
 interface BottomSheetProps {
   factors: Factor[];
   selectedProfile: string | null;
+  enabledFactorCount: number;
   onFactorChange: (factorId: string, updates: Partial<Factor>) => void;
   onProfileSelect: (profileId: string) => void;
   onResetFactors: () => void;
@@ -36,6 +37,7 @@ interface BottomSheetProps {
 export default function BottomSheet({
   factors,
   selectedProfile,
+  enabledFactorCount,
   onFactorChange,
   onProfileSelect,
   onResetFactors,
@@ -70,7 +72,6 @@ export default function BottomSheet({
     }
   }, [sheetHeight, isMounted, onHeightChange]);
 
-  const enabledFactorCount = factors.filter((f) => f.enabled && f.weight !== 0).length;
   const currentProfile = FACTOR_PROFILES.find(p => p.id === selectedProfile);
 
   // Handle snap with side effects
@@ -241,57 +242,14 @@ export default function BottomSheet({
 
         {/* Factors Section - Collapsible */}
         <div className="pb-4">
-          <div className={`rounded-xl bg-muted/50 transition-colors ${isFactorsExpanded ? '' : 'hover:bg-muted'}`}>
-            {/* Header - always visible */}
-            <div className="flex items-center justify-between p-3">
-              <button
-                onClick={() => setIsFactorsExpanded(!isFactorsExpanded)}
-                className="flex items-center gap-3 flex-1"
-              >
-                <div className="w-8 h-8 rounded-lg bg-background flex items-center justify-center shadow-sm">
-                  <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="text-left">
-                  <span className="text-sm font-medium block">{tControls('factors')}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {tControls('active', { count: enabledFactorCount })}
-                  </span>
-                </div>
-              </button>
-              <div className="flex items-center gap-1">
-                {isFactorsExpanded && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onResetFactors}
-                    className="h-7 px-2 text-xs animate-in fade-in slide-in-from-right-2 duration-200"
-                  >
-                    <RotateCcw className="h-3 w-3 mr-1" />
-                    {tControls('reset')}
-                  </Button>
-                )}
-                <button
-                  onClick={() => setIsFactorsExpanded(!isFactorsExpanded)}
-                  className="p-1 hover:bg-background/50 rounded transition-colors"
-                >
-                  {isFactorsExpanded ? (
-                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Expanded content */}
-            {isFactorsExpanded && (
-              <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="border-t border-background/50 pt-3">
-                  <WeightSliders factors={factors} onFactorChange={onFactorChange} />
-                </div>
-              </div>
-            )}
-          </div>
+          <CollapsibleFactorsSection
+            isExpanded={isFactorsExpanded}
+            onToggleExpanded={() => setIsFactorsExpanded(!isFactorsExpanded)}
+            enabledFactorCount={enabledFactorCount}
+            onReset={onResetFactors}
+          >
+            <WeightSliders factors={factors} onFactorChange={onFactorChange} />
+          </CollapsibleFactorsSection>
         </div>
 
         {/* Divider */}

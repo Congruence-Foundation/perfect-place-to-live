@@ -42,6 +42,8 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
   const [isLocating, setIsLocating] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  // Track the latest search request to prevent stale results from overwriting newer ones
+  const searchRequestIdRef = useRef(0);
 
   // Cleanup debounce timer on unmount
   useEffect(() => {
@@ -67,6 +69,9 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
 
     setIsLoading(true);
     setError(null);
+    
+    // Increment request ID to track this specific request
+    const requestId = ++searchRequestIdRef.current;
 
     try {
       // Use Nominatim API for geocoding (free, OSM-based)
@@ -86,6 +91,11 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
         }
       );
 
+      // Check if this is still the latest request (prevent stale results)
+      if (requestId !== searchRequestIdRef.current) {
+        return;
+      }
+
       if (!response.ok) {
         throw new Error('Search failed');
       }
@@ -94,10 +104,16 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
       setResults(data);
       setIsOpen(data.length > 0);
     } catch {
-      setError(t('failed'));
-      setResults([]);
+      // Only update error state if this is still the latest request
+      if (requestId === searchRequestIdRef.current) {
+        setError(t('failed'));
+        setResults([]);
+      }
     } finally {
-      setIsLoading(false);
+      // Only update loading state if this is still the latest request
+      if (requestId === searchRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [locale, t]);
 
@@ -143,6 +159,15 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
     setIsOpen(false);
   };
 
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const handleLocateMe = useCallback(() => {
     if (!('geolocation' in navigator)) {
       setError(t('noGeolocation'));
@@ -154,12 +179,16 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        // Guard against state updates after unmount
+        if (!isMountedRef.current) return;
         const { latitude, longitude } = position.coords;
         onCitySelect(latitude, longitude);
         setQuery('');
         setIsLocating(false);
       },
       () => {
+        // Guard against state updates after unmount
+        if (!isMountedRef.current) return;
         setError(t('locationFailed'));
         setIsLocating(false);
       },
@@ -216,6 +245,7 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
               size="sm"
               className="h-6 w-6 p-0 rounded-full"
               onClick={handleClear}
+              aria-label={isLoading ? t('loading') : t('clear')}
             >
               {isLoading ? (
                 <Loader2 className="h-3 w-3 animate-spin" />

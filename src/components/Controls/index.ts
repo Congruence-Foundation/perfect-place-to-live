@@ -17,6 +17,7 @@ export { ExtensionsSettingsPanel } from './ExtensionsSettingsPanel';
 export { PanelToggleButton } from './PanelToggleButton';
 export { FloatingPanel } from './FloatingPanel';
 export { DesktopControlPanel } from './DesktopControlPanel';
+export { CollapsibleFactorsSection } from './CollapsibleFactorsSection';
 
 // Reusable filter components
 export { RangeInput, ToggleButtonGroup, FilterSelect, EstateTypeToggle } from './filters';

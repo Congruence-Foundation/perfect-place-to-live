@@ -7,9 +7,14 @@ import { METERS_PER_DEGREE_LAT, DEG_TO_RAD } from './constants';
 /**
  * Calculate meters per degree of longitude at a given latitude
  * Longitude degrees get smaller as you move away from the equator
+ * 
+ * Note: At poles (±90°), cos(lat) approaches 0, so we clamp to a minimum
+ * to avoid division-by-zero issues in downstream calculations.
  */
 export function metersPerDegreeLng(lat: number): number {
-  return METERS_PER_DEGREE_LAT * Math.cos(lat * DEG_TO_RAD);
+  // Clamp latitude to avoid issues at poles where cos(90°) ≈ 0
+  const clampedLat = Math.max(-89.9, Math.min(89.9, lat));
+  return METERS_PER_DEGREE_LAT * Math.cos(clampedLat * DEG_TO_RAD);
 }
 
 /**
@@ -25,6 +30,12 @@ export function distanceInMeters(
   lat2: number,
   lng2: number
 ): number {
+  // Handle edge cases: NaN or Infinity coordinates
+  if (!Number.isFinite(lat1) || !Number.isFinite(lng1) || 
+      !Number.isFinite(lat2) || !Number.isFinite(lng2)) {
+    return Infinity;
+  }
+  
   const avgLat = (lat1 + lat2) / 2;
   const latDiff = (lat2 - lat1) * METERS_PER_DEGREE_LAT;
   const lngDiff = (lng2 - lng1) * metersPerDegreeLng(avgLat);
@@ -41,6 +52,10 @@ export function distanceInMeters(
  * @returns Coordinate key string
  */
 export function createCoordinateKey(lat: number, lng: number, separator: string = ':'): string {
+  // Handle edge cases: NaN or Infinity coordinates
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return `invalid${separator}invalid`;
+  }
   return `${lat.toFixed(6)}${separator}${lng.toFixed(6)}`;
 }
 
@@ -53,5 +68,5 @@ export function createCoordinateKey(lat: number, lng: number, separator: string 
  * @returns Cluster ID string
  */
 export function createClusterId(lat: number, lng: number): string {
-  return `cluster-${lat.toFixed(6)}-${lng.toFixed(6)}`;
+  return `cluster-${createCoordinateKey(lat, lng, '-')}`;
 }

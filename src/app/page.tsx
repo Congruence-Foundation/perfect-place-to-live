@@ -79,7 +79,6 @@ function HomeContent({
   heatmapTileCoords,
   isHeatmapDataReady,
 }: HomeContentProps) {
-  const tApp = useTranslations('app');
   const tControls = useTranslations('controls');
 
   const isMobile = useIsMobile();
@@ -431,6 +430,7 @@ function HomeContent({
         <BottomSheet
           factors={factors}
           selectedProfile={selectedProfile}
+          enabledFactorCount={enabledFactorCount}
           onFactorChange={handleFactorChange}
           onProfileSelect={handleProfileSelect}
           onResetFactors={handleResetFactors}

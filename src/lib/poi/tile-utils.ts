@@ -7,6 +7,36 @@ import type { TileCoord } from '@/lib/geo/tiles';
 import { getTileKeyString, latLngToTile } from '@/lib/geo/tiles';
 
 /**
+ * Validate that all tiles have the same zoom level
+ * @throws Error if tiles have different zoom levels
+ */
+export function validateTileZoomConsistency(tiles: TileCoord[]): number {
+  if (tiles.length === 0) {
+    throw new Error('Cannot validate zoom for empty tile array');
+  }
+  
+  const zoom = tiles[0].z;
+  const invalidTile = tiles.find(t => t.z !== zoom);
+  
+  if (invalidTile) {
+    throw new Error(`All tiles must have the same zoom level. Expected ${zoom}, found ${invalidTile.z}`);
+  }
+  
+  return zoom;
+}
+
+/**
+ * Build a set of valid tile keys for O(1) lookup
+ */
+export function buildTileKeySet(tiles: TileCoord[]): Set<string> {
+  const validTileKeys = new Set<string>();
+  for (const tile of tiles) {
+    validTileKeys.add(getTileKeyString(tile));
+  }
+  return validTileKeys;
+}
+
+/**
  * Initialize an empty result map with arrays for each tile and factor
  */
 export function initializeTileResultMap(
@@ -76,15 +106,8 @@ export function distributePOIsByFactorToTiles(
     return new Map();
   }
 
-  // Get zoom level from first tile (all tiles should have same zoom)
-  const zoom = tiles[0].z;
-  
-  // Build set of valid tile keys for O(1) lookup
-  const validTileKeys = new Set<string>();
-  for (const tile of tiles) {
-    validTileKeys.add(getTileKeyString(tile));
-  }
-  
+  const zoom = validateTileZoomConsistency(tiles);
+  const validTileKeys = buildTileKeySet(tiles);
   const result = initializeTileResultMap(tiles, factorIds);
 
   for (const [factorId, pois] of Object.entries(poisByFactor)) {

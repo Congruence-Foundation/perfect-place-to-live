@@ -6,6 +6,7 @@ import { UI_CONFIG } from '@/constants/performance';
 import {
   SPATIAL_INDEX_CELL_SIZE_METERS,
   SPATIAL_INDEX_LINEAR_THRESHOLD,
+  HEATMAP_VARIATION_THRESHOLD,
 } from '../config/constants';
 
 /**
@@ -207,4 +208,22 @@ export function filterClustersByScore(
   gridCellSize: number
 ): UnifiedCluster[] {
   return filterByScore(clusters, heatmapPoints, qualityRange, gridCellSize);
+}
+
+/**
+ * Check if heatmap data has meaningful variation in K values.
+ * 
+ * When all K values are identical (or nearly identical), the heatmap data
+ * is likely invalid (e.g., no POIs in the area). In this case, score-based
+ * filtering should be skipped to avoid hiding all properties/clusters.
+ * 
+ * @param heatmapPoints - Array of heatmap points to check
+ * @returns true if heatmap has meaningful variation, false if all values are the same
+ */
+export function hasHeatmapVariation(heatmapPoints: HeatmapPoint[]): boolean {
+  if (heatmapPoints.length === 0) {
+    return false;
+  }
+  const firstK = heatmapPoints[0].value;
+  return heatmapPoints.some(p => Math.abs(p.value - firstK) > HEATMAP_VARIATION_THRESHOLD);
 }

@@ -2,22 +2,18 @@
  * Gratka.pl API Client
  *
  * GraphQL client for the Gratka.pl real estate API at https://gratka.pl/api-gratka
- * Based on reverse-engineered API contracts from 150 captured requests.
+ * Based on reverse-engineered API contracts.
  *
  * ## API Coverage
  *
- * ### IMPLEMENTED APIs (used in this client):
  * - encodeListingParameters - Convert search params to URL, get total count
- * - getPropertyListingData - Fetch full listing page with properties
+ * - getPropertyClusterData - Lightweight property fetch for cluster expansion
+ * - getMarkers - Fetch property details by IDs
  * - searchMap - Map-based search with clustering
  * - getLocationSuggestions - Location autocomplete
  *
- * ### IMPLEMENTED BUT NOT USED in current integration:
- * - decodeListingUrl - Parse URL back to search parameters
- * - getTopPromotedProperty - Fetch promoted/featured listings
- * - addPropertyViewOnListingStatistic - Track property views (analytics)
+ * ## API Differences from Otodom
  *
- * ### API DIFFERENCES from Otodom:
  * - Location: Uses MapBounds (NE/SW) instead of GeoJSON polygon
  * - Prices: Decimal strings ("100000.00") instead of numbers
  * - Transaction: "SALE" instead of "SELL"
@@ -33,33 +29,23 @@ import type {
   GratkaMarkerConfiguration,
   GratkaLocationSuggestionsInput,
   GratkaEncodeListingParametersResponse,
-  GratkaDecodeListingUrlResponse,
-  GratkaPropertyListingDataResponse,
   GratkaPropertyClusterDataResponse,
   GratkaGetMarkersResponse,
-  GratkaTopPromotedResponse,
   GratkaSearchMapResponse,
   GratkaLocationSuggestionsResponse,
-  GratkaAddPropertyViewResponse,
   GratkaGraphQLResponse,
   GratkaPropertyType,
   GratkaTransactionType,
 } from './types';
 import {
-  GRATKA_API_URL as CONFIG_GRATKA_API_URL,
-  GRATKA_CACHE_TTL_MS,
-  GRATKA_MAX_CACHE_ENTRIES,
+  GRATKA_API_URL,
   GRATKA_DEFAULT_PAGE_SIZE,
-  GRATKA_DEFAULT_MAX_MARKERS,
   GRATKA_CLUSTER_RADIUS_METERS,
 } from '../../config/constants';
 import { createTimer, logPerf } from '@/lib/profiling';
-
-// ============================================
-// CONSTANTS
-// ============================================
-
-const GRATKA_API_URL = CONFIG_GRATKA_API_URL;
+import { cacheGet, cacheSet } from '@/lib/cache';
+import { CACHE_CONFIG } from '@/constants/performance';
+import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '@/lib/geo';
 
 const GRATKA_HEADERS: Record<string, string> = {
   accept: 'application/json',
@@ -71,23 +57,6 @@ const GRATKA_HEADERS: Record<string, string> = {
 // ============================================
 // CACHING
 // ============================================
-
-/**
- * Module-level cache for property responses
- * 
- * Design note: This uses a simple Map with TTL-based eviction rather than a
- * full LRU cache. The cache is bounded by GRATKA_MAX_CACHE_ENTRIES and entries
- * expire after GRATKA_CACHE_TTL_MS. Old entries are evicted when the cache
- * exceeds the maximum size.
- */
-interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
-}
-
-const propertyCache = new Map<string, CacheEntry<GratkaPropertyListingDataResponse>>();
-const clusterCache = new Map<string, CacheEntry<GratkaPropertyClusterDataResponse>>();
-const mapMarkersCache = new Map<string, CacheEntry<GratkaSearchMapResponse>>();
 
 /**
  * Generate a cache key from bounds and filters
@@ -116,56 +85,13 @@ function generateCacheKey(
     filters.transaction ?? 'SALE',
     (filters.propertyType ?? ['FLAT']).sort().join(','),
     filters.priceMin ?? 0,
-    filters.priceMax ?? 999999999,
+    filters.priceMax ?? 0,
     filters.areaMin ?? 0,
-    filters.areaMax ?? 999,
+    filters.areaMax ?? 0,
     (filters.rooms ?? []).sort().join(','),
   ].join(':');
 
   return `gratka:${snappedBounds.south},${snappedBounds.west},${snappedBounds.north},${snappedBounds.east}:${filterKey}`;
-}
-
-/**
- * Check if a cache entry is still valid
- */
-function isCacheValid<T>(entry: CacheEntry<T> | undefined): entry is CacheEntry<T> {
-  return entry !== undefined && Date.now() - entry.timestamp < GRATKA_CACHE_TTL_MS;
-}
-
-/**
- * Evict old entries from a cache if it exceeds max size
- */
-function evictOldEntries<T>(cache: Map<string, CacheEntry<T>>, maxEntries: number): void {
-  if (cache.size > maxEntries) {
-    const entries = Array.from(cache.entries());
-    entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-    const toDelete = entries.slice(0, entries.length - maxEntries);
-    toDelete.forEach(([key]) => cache.delete(key));
-  }
-}
-
-/**
- * Clear all Gratka caches
- */
-export function clearGratkaCache(): void {
-  propertyCache.clear();
-  clusterCache.clear();
-  mapMarkersCache.clear();
-}
-
-/**
- * Get Gratka cache statistics
- */
-export function getGratkaCacheStats(): {
-  properties: { size: number; maxSize: number };
-  clusters: { size: number; maxSize: number };
-  mapMarkers: { size: number; maxSize: number };
-} {
-  return {
-    properties: { size: propertyCache.size, maxSize: GRATKA_MAX_CACHE_ENTRIES },
-    clusters: { size: clusterCache.size, maxSize: GRATKA_MAX_CACHE_ENTRIES },
-    mapMarkers: { size: mapMarkersCache.size, maxSize: GRATKA_MAX_CACHE_ENTRIES },
-  };
 }
 
 // ============================================
@@ -220,329 +146,6 @@ query encodeListingParameters($parameters: ListingParametersInput!) {
         uniqueUrlParts
         outline
       }
-    }
-  }
-}`;
-
-const DECODE_LISTING_URL_QUERY = `
-query decodeListingUrl($url: String!) {
-  decodeListingUrl(url: $url) {
-    url
-    listingParameters {
-      extraParameters {
-        key
-        value
-      }
-      locations {
-        id
-        mapBounds {
-          northeast {
-            latitude
-            longitude
-          }
-          southwest {
-            latitude
-            longitude
-          }
-        }
-        name
-        nameFull
-        nameLocCase
-        type
-        uniqueName
-        uniqueUrlParts
-        outline
-      }
-      mode
-      numberOfResults
-      pageNumber
-      searchOrder {
-        sortKey
-        sortOrder
-      }
-      searchParameters {
-        addedAtFrom
-        addedAtTo
-        areaFrom
-        areaTo
-        attributes {
-          balcony
-          basement
-          electricity
-          elevator
-          gas
-          garden
-          nonCesspitSewerage
-          parkingPlaces
-          threePhasePower
-          terrace
-          water
-        }
-        buildYearFrom
-        buildYearTo
-        completionDateFrom
-        completionDateTo
-        dateFrom
-        description
-        dictionaries
-        floorFrom
-        floorTo
-        isLastFloor
-        isTopPromoted
-        location {
-          identifiers {
-            id
-            name
-          }
-          mapBounds {
-            northeast {
-              latitude
-              longitude
-            }
-            southwest {
-              latitude
-              longitude
-            }
-          }
-          mapArea {
-            latitude
-            longitude
-          }
-          radius
-        }
-        marketType
-        numberOfFloorsFrom
-        numberOfFloorsTo
-        numberOfRooms
-        numberOfRoomsFrom
-        numberOfRoomsTo
-        ownerType
-        plotAreaFrom
-        plotAreaTo
-        priceFrom
-        priceTo
-        priceM2From
-        priceM2To
-        reference
-        transaction
-        type
-        with3dView
-        withDiscount
-        withPhoto
-        withPrice
-      }
-    }
-    totalCount
-  }
-}`;
-
-const GET_PROPERTY_LISTING_DATA_QUERY = `
-query getPropertyListingData($url: String!) {
-  blogPosts: getBlogPosts(url: $url) {
-    title
-    url
-    photo: photoUrl {
-      id
-      name
-      alt
-    }
-    content(maxLength: 300)
-  }
-  breadcrumbs: getBreadcrumbs(url: $url) {
-    title
-    nodes {
-      title
-      url
-    }
-  }
-  headerTitle: getListingHeader(url: $url) {
-    header
-    subHeader
-    count
-    searchQuery
-  }
-  headTags: getListingHeadTags(url: $url) {
-    link {
-      href
-      rel
-      sizes
-    }
-    meta {
-      content
-      name
-      property
-    }
-    script {
-      innerHTML
-      type
-    }
-    title
-  }
-  searchResult: searchProperties(url: $url) {
-    adKeywords
-    dataLayer
-    hasTopPromoted
-    properties {
-      nodes {
-        addedAt(format: "dd.MM.y")
-        advertisementText
-        area
-        contact {
-          company {
-            address
-            faxes
-            id
-            name
-            logo {
-              alt
-              id
-              name
-            }
-            phones
-            type
-          }
-          person {
-            faxes
-            name
-            phones
-            photo {
-              alt
-              id
-              name
-            }
-            type
-            url
-          }
-        }
-        development {
-          id
-          name
-        }
-        description(maxLength: 300)
-        floorFormatted
-        highlightText
-        id
-        idOnFrontend
-        isHighlighted
-        isRecommended
-        location {
-          location
-          street
-        }
-        numberOfRooms
-        photos {
-          alt
-          id
-          name
-        }
-        photosNumber
-        promotionPoints
-        has3dView
-        hasVideo
-        plans {
-          alt
-          id
-          name
-        }
-        price {
-          amount
-          currency
-        }
-        priceFormatted
-        priceM2 {
-          amount
-          currency
-        }
-        priceM2Formatted
-        title
-        url
-        servicePromocenaIsActive
-        omnibusPreviousSalePrice {
-          amount
-          currency
-        }
-        omnibusPreviousLowestPrice {
-          amount
-          currency
-        }
-      }
-      totalCount
-    }
-    topPromoted {
-      listingUrl
-      topPromotedListingUrl
-    }
-  }
-}`;
-
-const GET_TOP_PROMOTED_PROPERTY_QUERY = `
-query getTopPromotedProperty($url: String!) {
-  searchProperties(url: $url) {
-    topPromoted {
-      listingUrl
-      nodes {
-        addedAt(format: "dd.MM.y")
-        advertisementText
-        area
-        contact {
-          company {
-            address
-            faxes
-            id
-            name
-            logo {
-              alt
-              id
-              name
-            }
-            phones
-            type
-          }
-          person {
-            faxes
-            name
-            phones
-            photo {
-              alt
-              id
-              name
-            }
-            type
-            url
-          }
-        }
-        development {
-          id
-          name
-        }
-        description(maxLength: 300)
-        has3dView
-        hasVideo
-        id
-        idOnFrontend
-        isHighlighted
-        floorFormatted
-        location {
-          location
-          street
-        }
-        numberOfRooms
-        photos {
-          alt
-          id
-          name
-        }
-        photosNumber
-        price {
-          amount
-        }
-        priceFormatted
-        priceM2Formatted
-        promotionPoints
-        title
-        url
-      }
-      topPromotedListingUrl
     }
   }
 }`;
@@ -787,26 +390,9 @@ query getLocationSuggestions(
   }
 }`;
 
-const ADD_PROPERTY_VIEW_MUTATION = `
-mutation addPropertyViewOnListingStatistic($ids: [Int]!, $sessionId: String!) {
-  addPropertyViewOnListingStatistic(ids: $ids, sessionId: $sessionId)
-}`;
-
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
-
-/**
- * Generate a session ID in the format used by Gratka
- * Format: {8-char-alphanumeric}.ocr
- */
-export function generateGratkaSessionId(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  const randomPart = Array.from({ length: 8 }, () =>
-    chars[Math.floor(Math.random() * chars.length)]
-  ).join('');
-  return `${randomPart}.ocr`;
-}
 
 /**
  * Format a number as a Gratka price string (decimal format)
@@ -818,7 +404,7 @@ export function formatGratkaPrice(price: number): string {
 /**
  * Format a number as a Gratka area string (decimal format)
  */
-export function formatGratkaArea(area: number): string {
+function formatGratkaArea(area: number): string {
   return area.toFixed(2);
 }
 
@@ -982,36 +568,6 @@ export class GratkaClient {
   }
 
   /**
-   * Decode a listing URL back to search parameters
-   */
-  async decodeListingUrl(url: string, signal?: AbortSignal): Promise<GratkaDecodeListingUrlResponse> {
-    const data = await this.execute<{
-      decodeListingUrl: GratkaDecodeListingUrlResponse;
-    }>(DECODE_LISTING_URL_QUERY, { url }, { signal });
-
-    return data.decodeListingUrl;
-  }
-
-  /**
-   * Get full property listing data
-   */
-  async getPropertyListingData(url: string, signal?: AbortSignal): Promise<GratkaPropertyListingDataResponse> {
-    const data = await this.execute<GratkaPropertyListingDataResponse>(
-      GET_PROPERTY_LISTING_DATA_QUERY,
-      { url },
-      { signal }
-    );
-
-    // #region agent log
-    const firstProp = data.searchResult?.properties?.nodes?.[0];
-    const locationKeys = firstProp?.location ? Object.keys(firstProp.location) : [];
-    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'client.ts:getPropertyListingData',message:'API response received',data:{propsCount:data.searchResult?.properties?.nodes?.length||0,locationKeys:locationKeys,firstPropLocation:firstProp?.location?{hasCoords:!!firstProp.location.coordinates,hasMap:!!firstProp.location.map,coords:firstProp.location.coordinates,mapCenter:firstProp.location.map?.center,locationArr:firstProp.location.location,street:firstProp.location.street}:'no-prop'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-
-    return data;
-  }
-
-  /**
    * Get property cluster data (lightweight)
    *
    * This is a lightweight alternative to getPropertyListingData that returns
@@ -1046,17 +602,6 @@ export class GratkaClient {
     );
 
     return data;
-  }
-
-  /**
-   * Get top promoted properties
-   */
-  async getTopPromotedProperty(url: string, signal?: AbortSignal): Promise<GratkaTopPromotedResponse> {
-    const data = await this.execute<{
-      searchProperties: GratkaTopPromotedResponse;
-    }>(GET_TOP_PROMOTED_PROPERTY_QUERY, { url }, { signal });
-
-    return data.searchProperties;
   }
 
   /**
@@ -1097,41 +642,6 @@ export class GratkaClient {
     return data.getLocationSuggestions;
   }
 
-  /**
-   * Track property views (analytics)
-   */
-  async addPropertyViewStatistic(
-    propertyIds: number[],
-    sessionId: string
-  ): Promise<GratkaAddPropertyViewResponse> {
-    const data = await this.execute<{
-      addPropertyViewOnListingStatistic: GratkaAddPropertyViewResponse;
-    }>(
-      ADD_PROPERTY_VIEW_MUTATION,
-      { ids: propertyIds, sessionId },
-      { cache: false }
-    );
-
-    return data.addPropertyViewOnListingStatistic;
-  }
-
-  /**
-   * Clear all Gratka caches
-   */
-  clearCache(): void {
-    clearGratkaCache();
-  }
-
-  /**
-   * Get cache statistics
-   */
-  getCacheStats(): {
-    properties: { size: number; maxSize: number };
-    clusters: { size: number; maxSize: number };
-    mapMarkers: { size: number; maxSize: number };
-  } {
-    return getGratkaCacheStats();
-  }
 }
 
 // ============================================
@@ -1140,105 +650,6 @@ export class GratkaClient {
 
 /** Default Gratka client instance */
 export const gratkaClient = new GratkaClient();
-
-// ============================================
-// CONVENIENCE FUNCTIONS
-// ============================================
-
-/**
- * Fetch Gratka properties for a map bounds
- */
-export async function fetchGratkaProperties(options: {
-  bounds: { north: number; south: number; east: number; west: number };
-  transaction?: GratkaTransactionType;
-  propertyType?: GratkaPropertyType[];
-  priceMin?: number;
-  priceMax?: number;
-  areaMin?: number;
-  areaMax?: number;
-  rooms?: number[];
-  page?: number;
-  pageSize?: number;
-  signal?: AbortSignal;
-}): Promise<{
-  properties: GratkaPropertyListingDataResponse['searchResult']['properties']['nodes'];
-  totalCount: number;
-  url: string;
-  cached: boolean;
-}> {
-  const stopTimer = createTimer('gratka:fetch-properties');
-  const cacheKey = generateCacheKey(options.bounds, options);
-
-  // Check cache
-  const cached = propertyCache.get(cacheKey);
-  if (isCacheValid(cached)) {
-    logPerf('gratka:cache-hit', 0, { cacheKey: cacheKey.substring(0, 50) });
-    return {
-      properties: cached.data.searchResult.properties.nodes,
-      totalCount: cached.data.searchResult.properties.totalCount,
-      url: '',
-      cached: true,
-    };
-  }
-
-  const params = buildGratkaSearchParams(options);
-  params.pageNumber = options.page ?? 1;
-  params.numberOfResults = options.pageSize ?? GRATKA_DEFAULT_PAGE_SIZE;
-
-  const encoded = await gratkaClient.encodeListingParameters(params);
-  const listingData = await gratkaClient.getPropertyListingData(encoded.url);
-
-  // Update cache
-  propertyCache.set(cacheKey, { data: listingData, timestamp: Date.now() });
-  evictOldEntries(propertyCache, GRATKA_MAX_CACHE_ENTRIES);
-
-  stopTimer({ properties: listingData.searchResult.properties.nodes.length });
-
-  return {
-    properties: listingData.searchResult.properties.nodes,
-    totalCount: listingData.searchResult.properties.totalCount,
-    url: encoded.url,
-    cached: false,
-  };
-}
-
-/**
- * Fetch Gratka map markers for a map bounds
- */
-export async function fetchGratkaMapMarkers(options: {
-  bounds: { north: number; south: number; east: number; west: number };
-  transaction?: GratkaTransactionType;
-  propertyType?: GratkaPropertyType[];
-  priceMin?: number;
-  priceMax?: number;
-  maxMarkers?: number;
-  signal?: AbortSignal;
-}): Promise<{ markers: GratkaSearchMapResponse['markers']; cached: boolean }> {
-  const stopTimer = createTimer('gratka:fetch-markers');
-  const cacheKey = `markers:${generateCacheKey(options.bounds, options)}`;
-
-  // Check cache
-  const cached = mapMarkersCache.get(cacheKey);
-  if (isCacheValid(cached)) {
-    logPerf('gratka:markers-cache-hit', 0, { cacheKey: cacheKey.substring(0, 50) });
-    return { markers: cached.data.markers, cached: true };
-  }
-
-  const params = buildGratkaSearchParams(options);
-
-  const result = await gratkaClient.searchMap(params, {
-    numberOfMarkers: options.maxMarkers ?? GRATKA_DEFAULT_MAX_MARKERS,
-    propertyIds: [],
-  });
-
-  // Update cache
-  mapMarkersCache.set(cacheKey, { data: result, timestamp: Date.now() });
-  evictOldEntries(mapMarkersCache, GRATKA_MAX_CACHE_ENTRIES);
-
-  stopTimer({ markers: result.markers.length });
-
-  return { markers: result.markers, cached: false };
-}
 
 /**
  * Fetch properties within a cluster area
@@ -1294,7 +705,7 @@ export async function fetchGratkaClusterProperties(options: {
   if (options.clusterUrl) {
     // Direct URL mode - most efficient, use the URL from marker.url
     url = options.clusterUrl;
-    cacheKey = `cluster:${url}`;
+    cacheKey = `gratka:cluster:url:${url}`;
   } else {
     // Bounds mode - build URL from coordinates
     if (options.lat === undefined || options.lng === undefined) {
@@ -1309,9 +720,8 @@ export async function fetchGratkaClusterProperties(options: {
     } else {
       // Default radius: ~500 meters (similar to Otodom's OTODOM_CLUSTER_RADIUS_METERS)
       const radiusMeters = options.radiusMeters ?? GRATKA_CLUSTER_RADIUS_METERS;
-      const METERS_PER_DEGREE = 111320; // Approximate meters per degree at equator
-      const latOffset = radiusMeters / METERS_PER_DEGREE;
-      const lngOffset = radiusMeters / (METERS_PER_DEGREE * Math.cos(options.lat * Math.PI / 180));
+      const latOffset = radiusMeters / METERS_PER_DEGREE_LAT;
+      const lngOffset = radiusMeters / metersPerDegreeLng(options.lat);
 
       bounds = {
         north: options.lat + latOffset,
@@ -1321,7 +731,7 @@ export async function fetchGratkaClusterProperties(options: {
       };
     }
 
-    cacheKey = `cluster:${generateCacheKey(bounds, options)}`;
+    cacheKey = `gratka:cluster:${generateCacheKey(bounds, options)}`;
 
     const params = buildGratkaSearchParams({
       bounds,
@@ -1341,14 +751,14 @@ export async function fetchGratkaClusterProperties(options: {
     url = encoded.url;
   }
 
-  // Check cache
-  const cached = clusterCache.get(cacheKey);
-  if (isCacheValid(cached)) {
+  // Check cache (Redis with in-memory fallback)
+  const cached = await cacheGet<GratkaPropertyClusterDataResponse>(cacheKey);
+  if (cached) {
     logPerf('gratka:cluster-cache-hit', 0, { cacheKey: cacheKey.substring(0, 50) });
-    const totalCount = cached.data.searchResult.properties.totalCount;
+    const totalCount = cached.searchResult.properties.totalCount;
     const pageSize = options.pageSize ?? GRATKA_DEFAULT_PAGE_SIZE;
     return {
-      properties: cached.data.searchResult.properties.nodes,
+      properties: cached.searchResult.properties.nodes,
       totalCount,
       currentPage: options.page ?? 1,
       totalPages: Math.ceil(totalCount / pageSize),
@@ -1360,9 +770,8 @@ export async function fetchGratkaClusterProperties(options: {
   // Use the lightweight cluster data API
   const clusterData = await gratkaClient.getPropertyClusterData(url);
 
-  // Update cache
-  clusterCache.set(cacheKey, { data: clusterData, timestamp: Date.now() });
-  evictOldEntries(clusterCache, GRATKA_MAX_CACHE_ENTRIES);
+  // Update cache (Redis with in-memory fallback, 1 hour TTL)
+  await cacheSet(cacheKey, clusterData, CACHE_CONFIG.PROPERTY_API_TTL_SECONDS);
 
   // Calculate total pages
   const totalCount = clusterData.searchResult.properties.totalCount;
@@ -1379,47 +788,4 @@ export async function fetchGratkaClusterProperties(options: {
     url,
     cached: false,
   };
-}
-
-/**
- * Search Gratka locations (autocomplete)
- */
-export async function searchGratkaLocations(
-  query: string,
-  options?: {
-    propertyType?: GratkaPropertyType;
-    transaction?: GratkaTransactionType;
-    limit?: number;
-  }
-): Promise<GratkaLocationSuggestionsResponse['edges']> {
-  const result = await gratkaClient.getLocationSuggestions({
-    searchQuery: query,
-    propertyType: options?.propertyType ?? 'FLAT',
-    propertyTransaction: options?.transaction ?? 'SALE',
-    first: options?.limit ?? 10,
-    after: null,
-  });
-
-  return result.edges;
-}
-
-/**
- * Fetch property details by IDs
- *
- * Convenience function to get full property data for one or more properties.
- * Useful for:
- * - Getting property details when clicking on a single marker
- * - Fetching details for all properties in a cluster using marker.ids
- *
- * @param ids - Array of property IDs (numbers or strings)
- * @returns Array of property details
- */
-export async function fetchGratkaPropertiesByIds(
-  ids: (number | string)[]
-): Promise<GratkaGetMarkersResponse['properties']> {
-  // Convert all IDs to strings as required by the API
-  const stringIds = ids.map(id => String(id));
-  
-  const result = await gratkaClient.getMarkers(stringIds);
-  return result.properties;
 }

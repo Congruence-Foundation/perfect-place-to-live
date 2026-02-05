@@ -33,6 +33,8 @@ export default function ProfileSelector({
                 : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'
             }`}
             title={t(`${profile.id}.description`)}
+            aria-pressed={isSelected}
+            aria-label={`${profileName}: ${t(`${profile.id}.description`)}`}
           >
             <IconComponent className="h-4 w-4" />
             <span className="text-[10px] font-medium leading-tight text-center">

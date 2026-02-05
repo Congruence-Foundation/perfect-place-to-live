@@ -2,7 +2,7 @@
 
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import { cn } from '@/lib/utils';
-import { SCORE_GRADIENT } from '@/constants/colors';
+import { SCORE_COLORS } from '@/constants/colors';
 
 interface ScoreRangeSliderProps {
   value: [number, number];
@@ -10,6 +10,9 @@ interface ScoreRangeSliderProps {
   className?: string;
   disabled?: boolean;
 }
+
+const THUMB_CLASS = 'block h-4 w-4 rounded-full border-2 border-white bg-white shadow-md ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-grab active:cursor-grabbing';
+const THUMB_STYLE = { boxShadow: '0 1px 3px rgba(0,0,0,0.3)' };
 
 /**
  * A dual-handle range slider with a red-to-green gradient background.
@@ -50,7 +53,7 @@ export function ScoreRangeSlider({
         <div 
           className="absolute inset-0 rounded-full"
           style={{
-            background: `linear-gradient(to right, ${SCORE_GRADIENT.POOR} 0%, ${SCORE_GRADIENT.AVERAGE} 50%, ${SCORE_GRADIENT.EXCELLENT} 100%)`,
+            background: `linear-gradient(to right, ${SCORE_COLORS.POOR} 0%, ${SCORE_COLORS.AVERAGE} 50%, ${SCORE_COLORS.GOOD} 100%)`,
           }}
         />
         {/* Semi-transparent overlay for unselected areas */}
@@ -70,21 +73,8 @@ export function ScoreRangeSlider({
         <SliderPrimitive.Range className="absolute h-full" />
       </SliderPrimitive.Track>
       
-      {/* Left thumb */}
-      <SliderPrimitive.Thumb 
-        className="block h-4 w-4 rounded-full border-2 border-white bg-white shadow-md ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-grab active:cursor-grabbing"
-        style={{
-          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-        }}
-      />
-      
-      {/* Right thumb */}
-      <SliderPrimitive.Thumb 
-        className="block h-4 w-4 rounded-full border-2 border-white bg-white shadow-md ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-grab active:cursor-grabbing"
-        style={{
-          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-        }}
-      />
+      <SliderPrimitive.Thumb className={THUMB_CLASS} style={THUMB_STYLE} aria-label="Minimum score" />
+      <SliderPrimitive.Thumb className={THUMB_CLASS} style={THUMB_STYLE} aria-label="Maximum score" />
     </SliderPrimitive.Root>
   );
 }

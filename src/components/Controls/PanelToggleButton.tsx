@@ -55,6 +55,8 @@ export function PanelToggleButton({
         className
       )}
       title={title}
+      aria-expanded={isOpen}
+      aria-label={title}
     >
       {showErrorIcon ? (
         <ErrorIcon className={iconSizeClasses} />

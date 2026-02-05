@@ -48,6 +48,14 @@ export interface MapExtension {
 export interface ExtensionRegistry {
   /** Register a new extension */
   register: (extension: MapExtension) => void;
+  /** Unregister an extension by ID (returns true if found and removed) */
+  unregister: (extensionId: string) => boolean;
   /** Get all registered extensions */
   getAll: () => MapExtension[];
+  /** Get a specific extension by ID */
+  get: (extensionId: string) => MapExtension | undefined;
+  /** Check if an extension is registered */
+  has: (extensionId: string) => boolean;
+  /** Clear all registered extensions (useful for testing/HMR) */
+  clear: () => void;
 }

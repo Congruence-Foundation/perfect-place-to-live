@@ -93,17 +93,33 @@ export function getTileKeyString(tile: TileCoord): string {
  * Convert latitude/longitude to tile coordinates at a given zoom level
  * Uses Web Mercator projection (EPSG:3857)
  * 
- * @param lat - Latitude in degrees
+ * @param lat - Latitude in degrees (clamped to ±85.051° for Web Mercator)
  * @param lng - Longitude in degrees
  * @param zoom - Zoom level
  * @returns Tile coordinates
  */
 export function latLngToTile(lat: number, lng: number, zoom: number): TileCoord {
   const n = Math.pow(2, zoom);
-  const x = Math.floor((lng + 180) / 360 * n);
-  const latRad = lat * DEG_TO_RAD;
+  
+  // Clamp latitude to Web Mercator bounds (±85.051°) to avoid Math.tan/cos issues
+  // At ±90°, tan(lat) approaches infinity and cos(lat) approaches 0
+  const clampedLat = Math.max(-85.051, Math.min(85.051, lat));
+  
+  // Normalize longitude to [-180, 180) range
+  let normalizedLng = ((lng + 180) % 360) - 180;
+  if (normalizedLng < -180) normalizedLng += 360;
+  
+  const x = Math.floor((normalizedLng + 180) / 360 * n);
+  const latRad = clampedLat * DEG_TO_RAD;
   const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
-  return { z: zoom, x, y };
+  
+  // Clamp x and y to valid tile range
+  const maxTile = n - 1;
+  return { 
+    z: zoom, 
+    x: Math.max(0, Math.min(maxTile, x)), 
+    y: Math.max(0, Math.min(maxTile, y)) 
+  };
 }
 
 /**
@@ -120,7 +136,7 @@ export const PROPERTY_TILE_ZOOM = PROPERTY_TILE_CONFIG.TILE_ZOOM;
  * @param radius - Number of tile layers to add around the viewport
  * @returns Expanded array of tile coordinates
  */
-export function getExpandedTilesForRadius(
+function getExpandedTilesForRadius(
   tiles: TileCoord[],
   radius: number
 ): TileCoord[] {
@@ -285,27 +301,6 @@ export function getPoiTileKey(z: number, x: number, y: number, factorId: string)
 }
 
 /**
- * Calculate how many neighboring tiles are needed for POI buffer
- * based on max factor distance and tile size
- * 
- * @param maxDistanceMeters - Maximum factor distance in meters
- * @param bufferScale - Multiplier for safety margin (default 2x)
- * @returns Number of tiles to expand in each direction
- */
-export function calculatePoiTileRadius(
-  maxDistanceMeters: number,
-  bufferScale: number = POI_TILE_CONFIG.DEFAULT_POI_BUFFER_SCALE
-): number {
-  const tileSizeMeters = POI_TILE_CONFIG.TILE_SIZE_METERS;
-  
-  // Calculate radius: (maxDistance * scale) / tileSize, rounded up
-  const radius = Math.ceil((maxDistanceMeters * bufferScale) / tileSizeMeters);
-  
-  // Cap at reasonable maximum to prevent excessive fetching
-  return Math.min(radius, POI_TILE_CONFIG.MAX_POI_TILE_RADIUS);
-}
-
-/**
  * Get all POI tiles needed for scoring a set of heatmap tiles
  * 
  * @param heatmapTiles - Array of heatmap tile coordinates
@@ -320,6 +315,13 @@ export function getPoiTilesForHeatmapTiles(
 ): TileCoord[] {
   if (heatmapTiles.length === 0) return [];
   
-  const poiRadius = calculatePoiTileRadius(maxDistanceMeters, bufferScale);
+  // Calculate how many neighboring tiles are needed for POI buffer
+  // Formula: (maxDistance * scale) / tileSize, rounded up, capped at max
+  const tileSizeMeters = POI_TILE_CONFIG.TILE_SIZE_METERS;
+  const poiRadius = Math.min(
+    Math.ceil((maxDistanceMeters * bufferScale) / tileSizeMeters),
+    POI_TILE_CONFIG.MAX_POI_TILE_RADIUS
+  );
+  
   return getExpandedTilesForRadius(heatmapTiles, poiRadius);
 }

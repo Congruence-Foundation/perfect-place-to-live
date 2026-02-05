@@ -6,7 +6,7 @@ const memoryCache = new Map<string, { data: unknown; expiresAt: number }>();
 
 // Lazy-initialize Redis client with proper singleton pattern
 let redis: Redis | null = null;
-let redisInitializing = false;
+let redisInitPromise: Promise<Redis | null> | null = null;
 
 /**
  * Check if Upstash Redis is available
@@ -16,38 +16,41 @@ function isRedisAvailable(): boolean {
 }
 
 /**
- * Get Redis client (lazy initialization with race condition protection)
- * Uses a flag to prevent multiple concurrent initializations
+ * Get Redis client (lazy initialization with proper race condition protection)
+ * Uses promise-based synchronization to ensure only one initialization occurs
  */
-function getRedis(): Redis | null {
+async function getRedisAsync(): Promise<Redis | null> {
   if (!isRedisAvailable()) return null;
   
   // Return existing client if already initialized
   if (redis) return redis;
   
-  // Prevent concurrent initialization attempts
-  if (redisInitializing) {
-    // Another call is initializing, return null for this request
-    // The next request will get the initialized client
-    return null;
+  // If initialization is in progress, wait for it
+  if (redisInitPromise) {
+    return redisInitPromise;
   }
   
-  // Mark as initializing to prevent race conditions
-  redisInitializing = true;
-  
-  try {
-    // Double-check after acquiring the "lock"
-    if (!redis) {
-      redis = new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL!,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-      });
+  // Start initialization and store the promise
+  redisInitPromise = (async () => {
+    try {
+      // Double-check after acquiring the "lock"
+      if (!redis) {
+        redis = new Redis({
+          url: process.env.UPSTASH_REDIS_REST_URL!,
+          token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+        });
+      }
+      return redis;
+    } catch (error) {
+      console.error('Redis initialization error:', error);
+      return null;
+    } finally {
+      // Clear the promise after initialization completes
+      redisInitPromise = null;
     }
-  } finally {
-    redisInitializing = false;
-  }
+  })();
   
-  return redis;
+  return redisInitPromise;
 }
 
 /**
@@ -55,7 +58,7 @@ function getRedis(): Redis | null {
  */
 export async function cacheGet<T>(key: string): Promise<T | null> {
   try {
-    const client = getRedis();
+    const client = await getRedisAsync();
     if (client) {
       return await client.get<T>(key);
     }
@@ -83,7 +86,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
  */
 export async function cacheSet<T>(key: string, value: T, ttl: number = CACHE_CONFIG.DEFAULT_TTL_SECONDS): Promise<void> {
   try {
-    const client = getRedis();
+    const client = await getRedisAsync();
     if (client) {
       await client.set(key, value, { ex: ttl });
       return;
@@ -150,7 +153,7 @@ export function getCacheStatus(): CacheStatus {
  * Returns latency in milliseconds or null if unavailable/failed
  */
 export async function testCacheConnection(): Promise<{ success: boolean; latencyMs?: number; error?: string }> {
-  const client = getRedis();
+  const client = await getRedisAsync();
   if (!client) {
     return { success: false, error: 'Redis not configured' };
   }
@@ -173,7 +176,7 @@ export async function testCacheConnection(): Promise<{ success: boolean; latency
  * Note: DBSIZE may return 0 with some Upstash configurations due to REST API limitations.
  */
 export async function getRedisStats(): Promise<{ keyCount: number } | null> {
-  const client = getRedis();
+  const client = await getRedisAsync();
   if (!client) {
     return null;
   }

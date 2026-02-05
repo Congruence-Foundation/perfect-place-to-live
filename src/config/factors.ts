@@ -3,8 +3,9 @@ import { POI_CATEGORIES, POICategory, getOsmTags } from './poi-categories';
 
 /**
  * Profile type definition for factor presets
+ * Internal type - not exported as it's only used within this module
  */
-export interface FactorProfile {
+interface FactorProfile {
   id: string;
   name: string;
   description: string;

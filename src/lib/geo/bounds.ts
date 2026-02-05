@@ -55,13 +55,9 @@ export function expandBounds(bounds: Bounds, buffer: number): Bounds {
 
 /**
  * Check if a point is within bounds (inclusive)
- * 
- * @param lat - Latitude of the point
- * @param lng - Longitude of the point
- * @param bounds - Geographic bounds to check against
- * @returns true if point is within bounds
+ * Internal helper function used by filterPoisToBounds
  */
-export function isPointInBounds(lat: number, lng: number, bounds: Bounds): boolean {
+function isPointInBounds(lat: number, lng: number, bounds: Bounds): boolean {
   return (
     lat >= bounds.south &&
     lat <= bounds.north &&
@@ -113,13 +109,7 @@ export function filterPoisToBounds(
   buffer: number = 0
 ): Record<string, POI[]> {
   const result: Record<string, POI[]> = {};
-  
-  const effectiveBounds = buffer > 0 ? {
-    south: bounds.south - buffer,
-    north: bounds.north + buffer,
-    west: bounds.west - buffer,
-    east: bounds.east + buffer,
-  } : bounds;
+  const effectiveBounds = buffer > 0 ? expandBounds(bounds, buffer) : bounds;
   
   poiData.forEach((pois, factorId) => {
     result[factorId] = pois.filter((poi) => isPointInBounds(poi.lat, poi.lng, effectiveBounds));

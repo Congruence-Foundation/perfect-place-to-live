@@ -1,40 +1,46 @@
 import type { Bounds, POI, FactorDef } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { getCombinedBounds, OVERPASS_API_URL, snapBoundsForCacheKey } from '@/lib/geo';
-import { OVERPASS_CONFIG } from '@/constants/performance';
+import { OVERPASS_CONFIG, POI_CACHE_KEY_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
 import {
   distributePOIsByFactorToTiles,
 } from './tile-utils';
 
-// Rate limiting: track last request time and pending promise for request coalescing
+// Rate limiting: track last request time and use a mutex for proper synchronization
 let lastRequestTime = 0;
-let rateLimitPromise: Promise<void> | null = null;
-
-/** Minimum interval between Overpass API requests (ms) */
-const MIN_REQUEST_INTERVAL_MS = 200;
+let rateLimitMutex: Promise<void> = Promise.resolve();
 
 /**
- * Wait for rate limit with mutex pattern to prevent race conditions
- * Multiple concurrent calls will queue up properly
+ * Wait for rate limit with proper mutex pattern to prevent race conditions
+ * Multiple concurrent calls will queue up properly using promise chaining
  */
 async function waitForRateLimit(): Promise<void> {
-  // Wait for any pending rate limit to complete first
-  while (rateLimitPromise) {
-    await rateLimitPromise;
+  // Chain onto the existing mutex to ensure sequential execution
+  const previousMutex = rateLimitMutex;
+  
+  let resolveMutex: () => void;
+  rateLimitMutex = new Promise(resolve => {
+    resolveMutex = resolve;
+  });
+  
+  // Wait for previous rate limit check to complete
+  await previousMutex;
+  
+  try {
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTime;
+    
+    if (timeSinceLastRequest < OVERPASS_CONFIG.MIN_REQUEST_INTERVAL_MS) {
+      const waitTime = OVERPASS_CONFIG.MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    lastRequestTime = Date.now();
+  } finally {
+    // Release the mutex
+    resolveMutex!();
   }
-  
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastRequestTime;
-  
-  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
-    const waitTime = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
-    rateLimitPromise = new Promise(resolve => setTimeout(resolve, waitTime));
-    await rateLimitPromise;
-    rateLimitPromise = null;
-  }
-  
-  lastRequestTime = Date.now();
 }
 
 /**
@@ -343,14 +349,11 @@ export async function fetchPOIsForTilesBatched(
   return distributePOIsByFactorToTiles(allPOIsByFactor, tiles, factorIds);
 }
 
-/** Precision for cache key bounds rounding (2 = ~1km precision) */
-const CACHE_KEY_PRECISION = 2;
-
 /**
  * Generate a cache key for POI queries
  */
 export function generatePOICacheKey(factorId: string, bounds: Bounds): string {
   // Use shared bounds snapping utility
-  const snapped = snapBoundsForCacheKey(bounds, CACHE_KEY_PRECISION);
+  const snapped = snapBoundsForCacheKey(bounds, POI_CACHE_KEY_CONFIG.BOUNDS_PRECISION);
   return `poi:${factorId}:${snapped.south},${snapped.west},${snapped.north},${snapped.east}`;
 }

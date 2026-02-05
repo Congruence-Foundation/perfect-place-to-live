@@ -2,12 +2,11 @@
 
 import { useTranslations } from 'next-intl';
 import { WeightSliders, ProfileSelector, ExtensionsSidebar } from '@/components/Controls';
-import { Button } from '@/components/ui/button';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import type { Factor } from '@/types';
-import { SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
 import { Z_INDEX } from '@/constants/z-index';
 import { FACTOR_PROFILES } from '@/config/factors';
+import { CollapsibleFactorsSection } from './CollapsibleFactorsSection';
 
 interface DesktopControlPanelProps {
   isPanelOpen: boolean;
@@ -75,47 +74,14 @@ export function DesktopControlPanel({
 
         {/* Factors Section - Collapsible */}
         <div className="px-5 pb-4">
-          <div className={`rounded-xl bg-muted/50 transition-colors ${isFactorsExpanded ? '' : 'hover:bg-muted'}`}>
-            {/* Header - always visible */}
-            <div className="flex items-center justify-between p-3">
-              <button
-                onClick={onToggleFactorsExpanded}
-                className="flex items-center gap-3 flex-1"
-              >
-                <div className="w-8 h-8 rounded-lg bg-background flex items-center justify-center shadow-sm">
-                  <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="text-left">
-                  <span className="text-sm font-medium block">{tControls('factors')}</span>
-                  <span className="text-xs text-muted-foreground">{tControls('active', { count: enabledFactorCount })}</span>
-                </div>
-              </button>
-              <div className="flex items-center gap-1">
-                {isFactorsExpanded && (
-                  <Button variant="ghost" size="sm" onClick={onResetFactors} className="h-7 px-2 text-xs animate-in fade-in slide-in-from-right-2 duration-200">
-                    <RotateCcw className="h-3 w-3 mr-1" />
-                    {tControls('reset')}
-                  </Button>
-                )}
-                <button
-                  onClick={onToggleFactorsExpanded}
-                  className="p-1 hover:bg-background/50 rounded transition-colors"
-                >
-                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isFactorsExpanded ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
-            </div>
-
-            {/* Expanded content - inside the panel */}
-            {isFactorsExpanded && (
-              <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="border-t border-background/50 pt-3">
-                  {/* Factor Sliders */}
-                  <WeightSliders factors={factors} onFactorChange={onFactorChange} />
-                </div>
-              </div>
-            )}
-          </div>
+          <CollapsibleFactorsSection
+            isExpanded={isFactorsExpanded}
+            onToggleExpanded={onToggleFactorsExpanded}
+            enabledFactorCount={enabledFactorCount}
+            onReset={onResetFactors}
+          >
+            <WeightSliders factors={factors} onFactorChange={onFactorChange} />
+          </CollapsibleFactorsSection>
         </div>
 
         {/* Divider */}

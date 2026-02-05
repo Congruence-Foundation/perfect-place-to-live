@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { fetchPOIsWithFallback, type POIDataSource } from '@/lib/poi';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
 import type { HeatmapRequest } from '@/types';
@@ -70,15 +70,7 @@ export async function POST(request: NextRequest) {
       
       // If still too many points even with max grid size, reject
       if (estimatedPoints > MAX_GRID_POINTS * MAX_GRID_POINTS_TOLERANCE) {
-        return NextResponse.json(
-          { 
-            error: 'Viewport too large',
-            message: `Please zoom in to see the heatmap.`,
-            estimatedPoints,
-            maxPoints: MAX_GRID_POINTS,
-          },
-          { status: 400 }
-        );
+        return errorResponse(new Error('Viewport too large: Please zoom in to see the heatmap'), 400);
       }
     }
 

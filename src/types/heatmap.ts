@@ -16,9 +16,6 @@ export type ClusterPriceAnalysisMode = 'off' | 'simplified' | 'detailed';
  */
 export type ClusterPriceDisplay = 'none' | 'range' | 'median' | 'median_spread';
 
-// Re-export POIDataSource type for convenience
-export type { POIDataSource } from './poi';
-
 export interface HeatmapPoint {
   lat: number;
   lng: number;

@@ -1,10 +1,14 @@
 /**
- * Property Types (Backward Compatibility)
+ * Property Types (Backward Compatibility Layer)
  *
- * This file re-exports types from the new location for backward compatibility.
- * New code should import directly from '../lib/otodom/types' or '../lib'.
+ * This file re-exports types from the unified types location for backward compatibility.
+ * It allows existing code to continue importing from '@/extensions/real-estate/types'
+ * while the actual type definitions live in '../lib/shared/types' and '../lib/otodom/types'.
  *
- * @deprecated Import from '../lib/otodom/types' or '../lib' instead
+ * For new code, prefer importing directly from:
+ * - '../lib/shared' for unified types (UnifiedProperty, EnrichedUnifiedProperty, etc.)
+ * - '../lib/otodom' for Otodom-specific types
+ * - '../lib/gratka' for Gratka-specific types
  */
 
 // Re-export all Otodom types for backward compatibility
@@ -23,21 +27,22 @@ export type {
   OtodomPropertyImage as PropertyImage,
   OtodomProperty,
   OtodomPropertyFilters as PropertyFilters,
-  OtodomPropertyRequest as PropertyRequest,
   OtodomPropertyResponse as PropertyResponse,
   OtodomPropertyCluster as PropertyCluster,
-  OtodomClusterPropertiesResponse as ClusterPropertiesResponse,
   OtodomPropertyPriceAnalysis as PropertyPriceAnalysis,
   OtodomEnrichedProperty as EnrichedProperty,
+} from '../lib/otodom/types';
+
+// Re-export shared types for backward compatibility
+export type {
   LocationQualityTier,
   PriceCategory,
   PriceValueFilter,
   PriceValueRange,
-} from '../lib/otodom/types';
+} from '../lib/shared/types';
 
 export {
   OTODOM_DEFAULT_FILTERS as DEFAULT_PROPERTY_FILTERS,
-  isEnrichedProperty,
 } from '../lib/otodom/types';
 
 // Re-export ClusterPriceDisplay from core types for backward compatibility

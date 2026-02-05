@@ -1,6 +1,8 @@
 /**
  * Real estate extension types
- * Re-exports all property-related types
+ * 
+ * Re-exports property-related types for backward compatibility.
+ * For new code, prefer importing from '../lib/shared' for unified types.
  */
 
 export type {
@@ -18,10 +20,8 @@ export type {
   PropertyImage,
   OtodomProperty,
   PropertyFilters,
-  PropertyRequest,
   PropertyResponse,
   PropertyCluster,
-  ClusterPropertiesResponse,
   LocationQualityTier,
   PriceCategory,
   PropertyPriceAnalysis,
@@ -31,4 +31,4 @@ export type {
   ClusterPriceDisplay,
 } from './property';
 
-export { DEFAULT_PROPERTY_FILTERS, isEnrichedProperty } from './property';
+export { DEFAULT_PROPERTY_FILTERS } from './property';

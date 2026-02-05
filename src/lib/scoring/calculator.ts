@@ -59,56 +59,39 @@ export function logKStats(points: HeatmapPoint[], context?: string): void {
 }
 
 /**
- * Distance curve strategy interface
- * Each strategy transforms a distance ratio (0-1) to a score (0-1)
- */
-interface DistanceCurveStrategy {
-  /**
-   * Apply the distance curve transformation
-   * @param ratio - Distance ratio (0 = at POI, 1 = at maxDistance)
-   * @param sensitivity - Curve sensitivity parameter
-   * @returns Transformed score (0-1)
-   */
-  apply(ratio: number, sensitivity: number): number;
-}
-
-/**
- * Distance curve strategies
- * Each provides different sensitivity to distance changes:
+ * Distance curve functions
+ * Each transforms a distance ratio (0-1) to a score (0-1) with different sensitivity:
  * - linear: uniform sensitivity across all distances
  * - log: more sensitive to small distances (street-level precision)
  * - exp: sharp drop-off near POI, 2-sigma coverage at maxDistance
  * - power: moderate sensitivity with square root curve
+ * 
+ * Note: sensitivity is clamped to [0.1, 10] to prevent division by zero and extreme values
  */
-const DISTANCE_CURVE_STRATEGIES: Record<DistanceCurve, DistanceCurveStrategy> = {
-  linear: {
-    apply: (ratio: number) => ratio,
+type DistanceCurveFn = (ratio: number, sensitivity: number) => number;
+
+const DISTANCE_CURVES: Record<DistanceCurve, DistanceCurveFn> = {
+  linear: (ratio) => ratio,
+  
+  // Logarithmic - sensitivity controls the base: higher = more sensitive
+  log: (ratio, sensitivity) => {
+    const safeSensitivity = Math.max(0.1, Math.min(10, sensitivity));
+    const logBase = 1 + (Math.E - 1) * safeSensitivity;
+    return Math.log(1 + ratio * (logBase - 1)) / Math.log(logBase);
   },
-  log: {
-    // Logarithmic - very sensitive to small distances
-    // sensitivity controls the base: higher = more sensitive
-    apply: (ratio: number, sensitivity: number) => {
-      const logBase = 1 + (Math.E - 1) * sensitivity;
-      return Math.log(1 + ratio * (logBase - 1)) / Math.log(logBase);
-    },
+  
+  // Exponential decay - sensitivity controls decay rate (default k=3 gives 95% at maxDistance)
+  exp: (ratio, sensitivity) => {
+    const safeSensitivity = Math.max(0.1, Math.min(10, sensitivity));
+    const k = 3 * safeSensitivity;
+    return 1 - Math.exp(-k * ratio);
   },
-  exp: {
-    // Exponential decay - sharp drop-off near POI
-    // sensitivity controls decay rate: higher = sharper drop-off
-    // Default sensitivity=1 gives k=3 (95% at maxDistance)
-    apply: (ratio: number, sensitivity: number) => {
-      const k = 3 * sensitivity;
-      return 1 - Math.exp(-k * ratio);
-    },
-  },
-  power: {
-    // Power curve - sensitivity controls exponent
-    // Default sensitivity=1 gives n=0.5 (square root)
-    // Lower sensitivity = more sensitive to small distances
-    apply: (ratio: number, sensitivity: number) => {
-      const n = 0.5 / sensitivity;
-      return Math.pow(ratio, n);
-    },
+  
+  // Power curve - sensitivity controls exponent (default n=0.5 is square root)
+  power: (ratio, sensitivity) => {
+    const safeSensitivity = Math.max(0.1, Math.min(10, sensitivity));
+    const n = 0.5 / safeSensitivity;
+    return Math.pow(ratio, n);
   },
 };
 
@@ -129,8 +112,8 @@ function applyDistanceCurve(
   sensitivity: number = 1
 ): number {
   const ratio = Math.min(distance, maxDistance) / maxDistance;
-  const strategy = DISTANCE_CURVE_STRATEGIES[curve] || DISTANCE_CURVE_STRATEGIES.linear;
-  return strategy.apply(ratio, sensitivity);
+  const curveFn = DISTANCE_CURVES[curve] || DISTANCE_CURVES.linear;
+  return curveFn(ratio, sensitivity);
 }
 
 /**
@@ -200,7 +183,7 @@ function calculateDensityBonus(
  * Lower K = better location (closer to positive amenities, farther from negative ones)
  * Weight sign determines polarity: positive = prefer nearby, negative = avoid nearby
  */
-export function calculateK(
+function calculateK(
   point: Point,
   poiData: Map<string, POI[]>,
   factors: Factor[],

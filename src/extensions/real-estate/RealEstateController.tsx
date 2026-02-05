@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useCallback } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslations } from 'next-intl';
 import { useMapStore } from '@/stores/mapStore';
@@ -16,10 +16,23 @@ import {
   enrichPropertiesSimplified,
   filterPropertiesByScore,
   filterClustersByScore,
+  hasHeatmapVariation,
 } from './lib';
 import { createTimer } from '@/lib/profiling';
 import { createClusterId } from '@/lib/geo';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
+
+/** Maximum properties to fetch per cluster in detailed mode */
+const DETAILED_MODE_CLUSTER_FETCH_LIMIT = 50;
+
+/** Batch size for concurrent cluster fetches */
+const CLUSTER_FETCH_BATCH_SIZE = 5;
+
+/** Delay between batch fetches in milliseconds */
+const CLUSTER_FETCH_BATCH_DELAY_MS = 100;
+
+/** Threshold for significant cluster count change (triggers cache clear) */
+const CLUSTER_CHANGE_THRESHOLD = 50;
 
 /**
  * RealEstateController - Self-contained controller for the real estate extension
@@ -188,14 +201,7 @@ export function RealEstateController() {
     const abortController = new AbortController();
     batchFetchAbortRef.current = abortController;
 
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RealEstateController:batchFetch:start',message:'Starting batch fetch',data:{totalClusters:rawClusters.length,clustersToFetch:clustersToFetch.length,alreadyFetched:fetchedClusterIdsRef.current.size,threshold:detailedModeThreshold},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'BATCH'})}).catch(()=>{});
-    // #endregion
-
     // Batch fetch with concurrency limit
-    const BATCH_SIZE = 5;
-    let successCount = 0;
-    
     const fetchCluster = async (cluster: UnifiedCluster) => {
       const clusterId = createClusterId(cluster.lat, cluster.lng);
       
@@ -212,7 +218,7 @@ export function RealEstateController() {
             lat: cluster.lat,
             lng: cluster.lng,
             filters,
-            limit: 50, // Fetch up to 50 properties per cluster
+            limit: DETAILED_MODE_CLUSTER_FETCH_LIMIT,
             source: cluster.source,
             clusterUrl: cluster.url,
             clusterBounds: cluster.bounds,
@@ -228,7 +234,6 @@ export function RealEstateController() {
         const data = await response.json() as { properties: UnifiedProperty[] };
         if (data.properties.length > 0) {
           cacheClusterProperties(clusterId, data.properties);
-          successCount++;
         }
       } catch (error) {
         // Ignore abort errors
@@ -245,23 +250,17 @@ export function RealEstateController() {
 
     // Process in batches
     const processBatches = async () => {
-      for (let i = 0; i < clustersToFetch.length; i += BATCH_SIZE) {
+      for (let i = 0; i < clustersToFetch.length; i += CLUSTER_FETCH_BATCH_SIZE) {
         if (abortController.signal.aborted) break;
         
-        const batch = clustersToFetch.slice(i, i + BATCH_SIZE);
+        const batch = clustersToFetch.slice(i, i + CLUSTER_FETCH_BATCH_SIZE);
         await Promise.all(batch.map(fetchCluster));
         
         // Small delay between batches to avoid overwhelming the server
-        if (i + BATCH_SIZE < clustersToFetch.length && !abortController.signal.aborted) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+        if (i + CLUSTER_FETCH_BATCH_SIZE < clustersToFetch.length && !abortController.signal.aborted) {
+          await new Promise(resolve => setTimeout(resolve, CLUSTER_FETCH_BATCH_DELAY_MS));
         }
       }
-
-      // #region agent log
-      if (!abortController.signal.aborted) {
-        fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RealEstateController:batchFetch:complete',message:'Batch fetch complete',data:{attempted:clustersToFetch.length,successCount,totalFetched:fetchedClusterIdsRef.current.size},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'BATCH'})}).catch(()=>{});
-      }
-      // #endregion
     };
 
     processBatches();
@@ -275,11 +274,12 @@ export function RealEstateController() {
   const prevRawClustersLengthRef = useRef(0);
   useEffect(() => {
     // If clusters changed significantly, clear the fetched set to allow re-fetching
-    if (Math.abs(rawClusters.length - prevRawClustersLengthRef.current) > 50) {
+    if (Math.abs(rawClusters.length - prevRawClustersLengthRef.current) > CLUSTER_CHANGE_THRESHOLD) {
       fetchedClusterIdsRef.current.clear();
     }
     prevRawClustersLengthRef.current = rawClusters.length;
   }, [rawClusters.length]);
+
   // ============================================
   // COMPUTED: Enrich and filter properties
   // ============================================
@@ -309,7 +309,7 @@ export function RealEstateController() {
 
   // Get only standalone properties for rendering as markers
   const standaloneEnrichedProperties = useMemo((): EnrichedUnifiedProperty[] => {
-    void cacheVersion;
+    void cacheVersion; // Trigger recalculation when cache changes
     if (clusterPropertiesCache.size === 0) {
       return enrichedProperties;
     }
@@ -323,16 +323,9 @@ export function RealEstateController() {
       return standaloneEnrichedProperties;
     }
     
-    // Check if heatmap data is valid (has variation in K values)
-    // If all K values are the same, the heatmap data is likely invalid (no POIs)
-    // In this case, skip score filtering to avoid hiding all properties
-    if (heatmapPoints.length > 0) {
-      const firstK = heatmapPoints[0].value;
-      const hasVariation = heatmapPoints.some(p => Math.abs(p.value - firstK) > 0.001);
-      if (!hasVariation) {
-        // All K values are the same - heatmap data is invalid, skip filtering
-        return standaloneEnrichedProperties;
-      }
+    // Skip score filtering if heatmap data is invalid (no variation in K values)
+    if (heatmapPoints.length > 0 && !hasHeatmapVariation(heatmapPoints)) {
+      return standaloneEnrichedProperties;
     }
     
     const stopTimer = createTimer('realestate:score-filter');
@@ -355,16 +348,9 @@ export function RealEstateController() {
       return rawClusters;
     }
     
-    // Check if heatmap data is valid (has variation in K values)
-    // If all K values are the same, the heatmap data is likely invalid (no POIs)
-    // In this case, skip score filtering to avoid hiding all clusters
-    if (heatmapPoints.length > 0) {
-      const firstK = heatmapPoints[0].value;
-      const hasVariation = heatmapPoints.some(p => Math.abs(p.value - firstK) > 0.001);
-      if (!hasVariation) {
-        // All K values are the same - heatmap data is invalid, skip filtering
-        return rawClusters;
-      }
+    // Skip score filtering if heatmap data is invalid (no variation in K values)
+    if (heatmapPoints.length > 0 && !hasHeatmapVariation(heatmapPoints)) {
+      return rawClusters;
     }
     
     return filterClustersByScore(rawClusters, heatmapPoints, scoreRange, gridCellSize);

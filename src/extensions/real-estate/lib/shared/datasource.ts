@@ -202,15 +202,15 @@ export async function createDataSource(
   switch (source) {
     case 'otodom': {
       if (!OtodomAdapter) {
-        const module = await import('../otodom/adapter');
-        OtodomAdapter = module.OtodomAdapter;
+        const otodomModule = await import('../otodom/adapter');
+        OtodomAdapter = otodomModule.OtodomAdapter;
       }
       return new OtodomAdapter();
     }
     case 'gratka': {
       if (!GratkaAdapter) {
-        const module = await import('../gratka/adapter');
-        GratkaAdapter = module.GratkaAdapter;
+        const gratkaModule = await import('../gratka/adapter');
+        GratkaAdapter = gratkaModule.GratkaAdapter;
       }
       return new GratkaAdapter();
     }
@@ -235,37 +235,4 @@ export async function createMultiSource(
 
   const adapters = await Promise.all(sources.map(createDataSource));
   return new MultiSourceDataSource(adapters);
-}
-
-// ============================================================================
-// Synchronous Factory (for use when adapters are already loaded)
-// ============================================================================
-
-// Cache for loaded adapters
-const adapterCache = new Map<PropertyDataSource, IPropertyDataSource>();
-
-/**
- * Get a cached data source adapter (synchronous)
- *
- * Note: This requires the adapter to have been loaded previously via createDataSource.
- * Use createDataSource for initial loading.
- */
-export function getDataSource(source: PropertyDataSource): IPropertyDataSource | null {
-  return adapterCache.get(source) ?? null;
-}
-
-/**
- * Register a data source adapter in the cache
- *
- * Called by adapters when they're loaded.
- */
-export function registerDataSource(adapter: IPropertyDataSource): void {
-  adapterCache.set(adapter.name, adapter);
-}
-
-/**
- * Get all registered data sources
- */
-export function getRegisteredSources(): PropertyDataSource[] {
-  return Array.from(adapterCache.keys());
 }

@@ -3,22 +3,15 @@ import { EARTH_RADIUS_METERS, METERS_PER_DEGREE_LAT, DEG_TO_RAD } from './consta
 import { SPATIAL_INDEX_CONFIG } from '@/constants/performance';
 
 /**
- * Convert degrees to radians
- */
-function toRad(degrees: number): number {
-  return degrees * DEG_TO_RAD;
-}
-
-/**
  * Calculate the Haversine distance between two points in meters
  */
 export function haversineDistance(p1: Point, p2: Point): number {
-  const dLat = toRad(p2.lat - p1.lat);
-  const dLng = toRad(p2.lng - p1.lng);
+  const dLat = (p2.lat - p1.lat) * DEG_TO_RAD;
+  const dLng = (p2.lng - p1.lng) * DEG_TO_RAD;
 
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(p1.lat)) * Math.cos(toRad(p2.lat)) * Math.sin(dLng / 2) ** 2;
+    Math.cos(p1.lat * DEG_TO_RAD) * Math.cos(p2.lat * DEG_TO_RAD) * Math.sin(dLng / 2) ** 2;
 
   return EARTH_RADIUS_METERS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }

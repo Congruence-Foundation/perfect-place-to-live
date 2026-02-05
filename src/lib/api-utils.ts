@@ -119,10 +119,17 @@ export function acceptsMsgpack(request: Request): boolean {
 /**
  * Format TTL seconds to human-readable string
  * 
- * @param seconds - TTL in seconds
+ * @param seconds - TTL in seconds (must be non-negative)
  * @returns Human-readable duration string (e.g., "2 days", "1 hour", "30 minutes")
  */
 export function formatTTL(seconds: number): string {
+  // Handle edge cases
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return 'invalid';
+  }
+  if (seconds === 0) {
+    return '0 seconds';
+  }
   if (seconds >= SECONDS_PER_DAY) {
     const days = Math.floor(seconds / SECONDS_PER_DAY);
     return `${days} day${days > 1 ? 's' : ''}`;
@@ -135,7 +142,7 @@ export function formatTTL(seconds: number): string {
     const minutes = Math.floor(seconds / SECONDS_PER_MINUTE);
     return `${minutes} minute${minutes > 1 ? 's' : ''}`;
   }
-  return `${seconds} second${seconds > 1 ? 's' : ''}`;
+  return `${seconds} second${seconds !== 1 ? 's' : ''}`;
 }
 
 /**
@@ -161,18 +168,34 @@ export function getValidatedFactors(
 /**
  * Type guard to validate tile coordinates
  * 
+ * Validates that:
+ * - All coordinates are finite numbers (not NaN, not Infinity)
+ * - All coordinates are non-negative integers
+ * - Zoom level is within reasonable bounds (0-22)
+ * - x and y are within valid range for the zoom level
+ * 
  * @param tile - The value to check
  * @returns Whether the value is a valid TileCoord
  */
 export function isValidTileCoord(tile: unknown): tile is TileCoord {
-  return (
-    tile != null &&
-    typeof tile === 'object' &&
-    typeof (tile as TileCoord).z === 'number' &&
-    typeof (tile as TileCoord).x === 'number' &&
-    typeof (tile as TileCoord).y === 'number' &&
-    !isNaN((tile as TileCoord).z) &&
-    !isNaN((tile as TileCoord).x) &&
-    !isNaN((tile as TileCoord).y)
-  );
+  if (tile == null || typeof tile !== 'object') return false;
+  const { z, x, y } = tile as TileCoord;
+  
+  // Check all are finite numbers
+  if (typeof z !== 'number' || typeof x !== 'number' || typeof y !== 'number') return false;
+  if (!Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+  
+  // Check all are non-negative integers
+  if (z < 0 || x < 0 || y < 0) return false;
+  if (!Number.isInteger(z) || !Number.isInteger(x) || !Number.isInteger(y)) return false;
+  
+  // Check zoom is within reasonable bounds (standard web map zoom levels)
+  if (z > 22) return false;
+  
+  // Check x and y are within valid range for the zoom level
+  // At zoom z, there are 2^z tiles in each dimension
+  const maxTileIndex = Math.pow(2, z) - 1;
+  if (x > maxTileIndex || y > maxTileIndex) return false;
+  
+  return true;
 }

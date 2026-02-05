@@ -113,11 +113,6 @@ export async function POST(request: NextRequest) {
       const stopCacheTimer = createTimer('properties-api:cache-check');
       const cached = await getCachedTile(cacheKey);
       if (cached) {
-        // #region agent log
-        const cachedGratkaCount = cached.properties?.filter(p => p.source === 'gratka').length || 0;
-        const cachedOtodomCount = cached.properties?.filter(p => p.source === 'otodom').length || 0;
-        fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:properties:cache-hit',message:'Returning cached tile',data:{tile:`${tile.z}:${tile.x}:${tile.y}`,propsCount:cached.properties?.length||0,gratkaCount:cachedGratkaCount,otodomCount:cachedOtodomCount,dataSources},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'CACHE'})}).catch(()=>{});
-        // #endregion
         stopCacheTimer({ hit: true, tile: `${tile.z}:${tile.x}:${tile.y}` });
         stopTotalTimer({ cached: true, tile: `${tile.z}:${tile.x}:${tile.y}` });
         return NextResponse.json({
@@ -143,11 +138,6 @@ export async function POST(request: NextRequest) {
     // Fetch properties
     const result = await dataSource.searchProperties(searchParams);
     
-    // #region agent log
-    const sampleProp = result.properties.find(p => p.source === 'gratka');
-    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:properties:fresh-fetch',message:'Fresh data fetched',data:{propsCount:result.properties.length,gratkaCount:result.properties.filter(p=>p.source==='gratka').length,sampleGratka:sampleProp?{id:sampleProp.id,lat:sampleProp.lat,lng:sampleProp.lng,hasCoords:sampleProp.lat!==0&&sampleProp.lng!==0}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FRESH'})}).catch(()=>{});
-    // #endregion
-    
     stopFetchTimer({ 
       properties: result.properties.length, 
       clusters: result.clusters?.length || 0,
@@ -162,12 +152,6 @@ export async function POST(request: NextRequest) {
         totalCount: result.totalCount,
         fetchedAt: new Date().toISOString(),
       };
-      
-      // #region agent log
-      const gratkaCount = result.properties.filter(p => p.source === 'gratka').length;
-      const otodomCount = result.properties.filter(p => p.source === 'otodom').length;
-      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:properties:cache-set',message:'Caching tile data',data:{tile:`${tile!.z}:${tile!.x}:${tile!.y}`,propsCount:result.properties.length,gratkaCount,otodomCount,dataSources,cacheKey},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'CACHE'})}).catch(()=>{});
-      // #endregion
       
       // Don't await - cache in background
       setCachedTile(cacheKey, cacheEntry);

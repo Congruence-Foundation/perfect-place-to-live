@@ -88,12 +88,6 @@ export const OTODOM_SEARCH_MAP_PINS_HASH = '51e8703aff1dd9b3ad3bae1ab6c543254e19
 /** Otodom SearchMapQuery hash */
 export const OTODOM_SEARCH_MAP_QUERY_HASH = 'cef9f63d93a284e3a896b78d67ff42139214c4317f6dfa73231cc1b136a2313d';
 
-/** Cache TTL for property responses (ms) - 3 minutes */
-export const OTODOM_CACHE_TTL_MS = 3 * 60 * 1000;
-
-/** Maximum entries in property cache */
-export const OTODOM_MAX_CACHE_ENTRIES = 50;
-
 /** Cluster search radius for Otodom API requests (meters) */
 export const OTODOM_CLUSTER_RADIUS_METERS = 500;
 
@@ -113,11 +107,11 @@ export const OTODOM_DEFAULT_CLUSTER_PAGE_LIMIT = 36;
 /** Gratka GraphQL API URL */
 export const GRATKA_API_URL = 'https://gratka.pl/api-gratka';
 
-/** Cache TTL for Gratka property responses (ms) - 3 minutes */
-export const GRATKA_CACHE_TTL_MS = 3 * 60 * 1000;
+/** Gratka base URL for property links */
+export const GRATKA_BASE_URL = 'https://gratka.pl';
 
-/** Maximum entries in Gratka property cache */
-export const GRATKA_MAX_CACHE_ENTRIES = 50;
+/** Gratka CDN URL for property images */
+export const GRATKA_CDN_URL = 'https://thumbs.cdngr.pl';
 
 /** Default page size for Gratka API requests */
 export const GRATKA_DEFAULT_PAGE_SIZE = 35;
@@ -162,6 +156,9 @@ export const SPATIAL_INDEX_CELL_SIZE_METERS = 100;
 
 /** Threshold for using linear search vs spatial index */
 export const SPATIAL_INDEX_LINEAR_THRESHOLD = 100;
+
+/** Threshold for detecting heatmap K value variation (values closer than this are considered identical) */
+export const HEATMAP_VARIATION_THRESHOLD = 0.001;
 
 // =============================================================================
 // Filter Default Values (for cache key generation)

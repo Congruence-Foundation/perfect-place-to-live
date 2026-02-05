@@ -50,6 +50,7 @@ export default function ToggleButtonGroup<T extends string>({
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-background hover:bg-muted border-input'
               }`}
+              aria-pressed={isSelected}
             >
               {option.label}
             </button>

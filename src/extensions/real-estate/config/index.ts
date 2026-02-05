@@ -49,4 +49,8 @@ export {
   DEFAULT_RENT_PRICE,
   DEFAULT_SELL_PRICE,
   getDefaultPriceRange,
+  // Score and price value defaults
+  DEFAULT_SCORE_RANGE,
+  DEFAULT_PRICE_VALUE_RANGE,
+  DEFAULT_DATA_SOURCES,
 } from './constants';

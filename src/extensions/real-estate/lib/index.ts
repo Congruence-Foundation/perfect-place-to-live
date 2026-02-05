@@ -9,26 +9,12 @@
 // Otodom Module
 // ============================================================================
 export {
-  // Client
-  OtodomClient,
-  otodomClient,
-  fetchOtodomProperties,
+  // Client (used by API routes)
   fetchClusterProperties,
-  validateEstateType,
-  // Adapter
-  OtodomAdapter,
-  getOtodomAdapter,
-  // Conversion utilities
-  mapOtodomTransaction,
-  mapOtodomEstateType,
-  toOtodomOwnerType,
-  toOtodomSortKey,
-  toOtodomRoomCount,
+  // Conversion utility (used by cluster API route)
   fromOtodomRoomCount,
   // Types
   OTODOM_DEFAULT_FILTERS,
-  DEFAULT_PROPERTY_FILTERS,
-  isEnrichedProperty,
 } from './otodom';
 
 export type {
@@ -46,66 +32,18 @@ export type {
   OtodomPropertyImage,
   OtodomProperty,
   OtodomPropertyFilters,
-  OtodomPropertyRequest,
   OtodomPropertyResponse,
   OtodomPropertyCluster,
-  OtodomClusterPropertiesResponse,
   OtodomPropertyPriceAnalysis,
   OtodomEnrichedProperty,
-  OtodomClientConfig,
-  LocationQualityTier,
-  PriceCategory,
-  PriceValueFilter,
-  PriceValueRange,
-  // Legacy aliases
-  TransactionType,
-  EstateType,
-  OwnerType,
-  MarketType,
-  RoomCount,
-  FloorLevel,
-  FlatBuildingType,
-  HouseBuildingType,
-  BuildingMaterial,
-  PropertyExtra,
-  Price,
-  PropertyImage,
-  PropertyFilters,
-  PropertyRequest,
-  PropertyResponse,
-  PropertyCluster,
-  ClusterPropertiesResponse,
-  PropertyPriceAnalysis,
-  EnrichedProperty,
 } from './otodom';
 
 // ============================================================================
 // Gratka Module
 // ============================================================================
 export {
-  // Client
-  GratkaClient,
-  gratkaClient,
-  fetchGratkaProperties,
-  fetchGratkaMapMarkers,
+  // Client (used by API routes)
   fetchGratkaClusterProperties,
-  fetchGratkaPropertiesByIds,
-  searchGratkaLocations,
-  generateGratkaSessionId,
-  formatGratkaPrice,
-  formatGratkaArea,
-  buildGratkaSearchParams,
-  // Adapter
-  GratkaAdapter,
-  getGratkaAdapter,
-  // Conversion utilities
-  mapGratkaTransaction,
-  toGratkaTransaction,
-  mapGratkaPropertyType,
-  toGratkaPropertyType,
-  toGratkaOwnerType,
-  toGratkaSortKey,
-  mapGratkaContactType,
 } from './gratka';
 
 export type {
@@ -115,12 +53,6 @@ export type {
   GratkaMarketType,
   GratkaSortKey,
   GratkaSortOrder,
-  GratkaListingMode,
-  GratkaContactType,
-  GratkaLocationType,
-  GratkaBuildingMaterial,
-  GratkaBuildingType,
-  GratkaHouseType,
   GratkaCoordinates,
   GratkaMapBounds,
   GratkaLocationIdentifier,
@@ -128,7 +60,6 @@ export type {
   GratkaLocationInput,
   GratkaSearchParameters,
   GratkaSearchOrder,
-  GratkaExtraParameter,
   GratkaListingParametersInput,
   GratkaMarkerConfiguration,
   GratkaLocationSuggestionsInput,
@@ -140,28 +71,15 @@ export type {
   GratkaPrice,
   GratkaPropertyLocation,
   GratkaPropertyNode,
-  GratkaClusterPropertyNode,
   GratkaMapMarker,
-  GratkaLocationInfo,
   GratkaLocationSuggestion,
-  GratkaPageInfo,
-  GratkaBlogPost,
-  GratkaBreadcrumbNode,
-  GratkaBreadcrumbs,
-  GratkaHeaderTitle,
   GratkaEncodeListingParametersResponse,
-  GratkaDecodeListingUrlResponse,
-  GratkaSearchResult,
-  GratkaPropertyListingDataResponse,
   GratkaPropertyClusterDataResponse,
   GratkaGetMarkersResponse,
-  GratkaTopPromotedResponse,
   GratkaSearchMapResponse,
   GratkaLocationSuggestionsResponse,
-  GratkaAddPropertyViewResponse,
   GratkaGraphQLError,
   GratkaGraphQLResponse,
-  GratkaClientConfig,
 } from './gratka';
 
 // ============================================================================
@@ -170,15 +88,10 @@ export type {
 export {
   // Utilities
   createUnifiedId,
-  parseUnifiedId,
   isEnrichedUnifiedProperty,
   // Data Source Factory
-  MultiSourceDataSource,
   createDataSource,
   createMultiSource,
-  getDataSource,
-  registerDataSource,
-  getRegisteredSources,
 } from './shared';
 
 export type {
@@ -195,13 +108,13 @@ export type {
   UnifiedSearchParams,
   UnifiedSearchResult,
   UnifiedLocationSuggestion,
-  // Price Analysis Types (unified)
-  LocationQualityTier as UnifiedLocationQualityTier,
-  PriceCategory as UnifiedPriceCategory,
-  PropertyPriceAnalysis as UnifiedPropertyPriceAnalysis,
+  // Price Analysis Types
+  LocationQualityTier,
+  PriceCategory,
+  PropertyPriceAnalysis,
   EnrichedUnifiedProperty,
-  PriceValueFilter as UnifiedPriceValueFilter,
-  PriceValueRange as UnifiedPriceValueRange,
+  PriceValueFilter,
+  PriceValueRange,
   // Data Source Interface
   IPropertyDataSource,
   DataSourceFeature,
@@ -217,6 +130,7 @@ export {
   analyzeClusterPrices,
   analyzeClusterPricesFromCache,
   getPricePerMeter,
+  findMinMaxCategories,
 } from './price-analysis';
 export type { ClusterPriceAnalysis, ClusterAnalysisMap } from './price-analysis';
 
@@ -232,4 +146,4 @@ export {
 // ============================================================================
 // Score Lookup
 // ============================================================================
-export { filterPropertiesByScore, filterClustersByScore, findNearestHeatmapPoint } from './score-lookup';
+export { filterPropertiesByScore, filterClustersByScore, findNearestHeatmapPoint, hasHeatmapVariation } from './score-lookup';

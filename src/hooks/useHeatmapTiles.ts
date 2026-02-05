@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * useHeatmapTiles - React Query-based heatmap tile fetching hook
+ * useHeatmapTiles - Heatmap tile fetching hook
  * 
  * Fetches heatmap data using the batch endpoint with:
  * - Tile-aligned POI caching for efficient cache reuse
@@ -59,7 +59,7 @@ function getTilesKey(tiles: TileCoord[]): string {
 /**
  * Options for the useHeatmapTiles hook
  */
-export interface UseHeatmapTilesOptions {
+interface UseHeatmapTilesOptions {
   bounds: Bounds | null;
   factors: Factor[];
   distanceCurve: DistanceCurve;
@@ -74,7 +74,7 @@ export interface UseHeatmapTilesOptions {
 /**
  * Return type for the useHeatmapTiles hook
  */
-export interface UseHeatmapTilesResult {
+interface UseHeatmapTilesResult {
   heatmapPoints: HeatmapPoint[];
   pois: Record<string, POI[]>;
   isLoading: boolean;
@@ -244,14 +244,42 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
 
   // Clear accumulated data when config changes (scores would be different)
   const prevConfigHashRef = useRef(configHash);
+  const prevTileSetRef = useRef<Set<string>>(new Set());
+  
   useEffect(() => {
     if (prevConfigHashRef.current !== configHash) {
       accumulatedPointsRef.current.clear();
       lastValidPoisRef.current = {};
       setBatchResult(null); // Clear old results to avoid showing stale scores
       prevConfigHashRef.current = configHash;
+      prevTileSetRef.current.clear();
     }
   }, [configHash]);
+  
+  // Clear accumulated data when tiles change significantly (zoom change)
+  // This prevents the "double overlay" effect when zooming out
+  // We detect significant change by checking if less than 50% of tiles overlap
+  useEffect(() => {
+    const currentTileSet = new Set(allTiles.map(t => `${t.z}:${t.x}:${t.y}`));
+    const prevTileSet = prevTileSetRef.current;
+    
+    if (prevTileSet.size > 0 && currentTileSet.size > 0) {
+      // Count overlapping tiles
+      let overlap = 0;
+      for (const tile of currentTileSet) {
+        if (prevTileSet.has(tile)) overlap++;
+      }
+      
+      // If less than 50% overlap, clear accumulated data (likely a zoom change)
+      const overlapRatio = overlap / Math.max(prevTileSet.size, currentTileSet.size);
+      if (overlapRatio < 0.5) {
+        accumulatedPointsRef.current.clear();
+        lastValidPoisRef.current = {};
+      }
+    }
+    
+    prevTileSetRef.current = currentTileSet;
+  }, [allTiles]);
 
   // Clear fallback notification
   const clearFallbackNotification = useCallback(() => {

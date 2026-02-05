@@ -12,16 +12,15 @@ import type {
   OtodomPropertyResponse,
   OtodomPropertyCluster,
   OtodomEstateType,
-  OtodomClientConfig,
 } from './types';
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, snapBoundsForCacheKey } from '@/lib/geo';
 import { createTimer, logPerf } from '@/lib/profiling';
+import { cacheGet, cacheSet } from '@/lib/cache';
+import { CACHE_CONFIG } from '@/constants/performance';
 import {
   OTODOM_API_URL,
   OTODOM_SEARCH_MAP_PINS_HASH,
   OTODOM_SEARCH_MAP_QUERY_HASH,
-  OTODOM_CACHE_TTL_MS,
-  OTODOM_MAX_CACHE_ENTRIES,
   OTODOM_CLUSTER_RADIUS_METERS,
   OTODOM_DEFAULT_AREA_MIN,
   OTODOM_DEFAULT_AREA_MAX,
@@ -36,9 +35,10 @@ import {
 // ============================================================================
 
 /**
- * Valid estate types for runtime validation
+ * Valid estate types for runtime validation.
+ * Currently only FLAT and HOUSE are supported by the map search API.
  */
-const VALID_ESTATE_TYPES: readonly OtodomEstateType[] = ['FLAT', 'HOUSE'] as const;
+const SUPPORTED_ESTATE_TYPES = new Set<OtodomEstateType>(['FLAT', 'HOUSE']);
 
 /**
  * Common headers for Otodom API requests
@@ -46,10 +46,10 @@ const VALID_ESTATE_TYPES: readonly OtodomEstateType[] = ['FLAT', 'HOUSE'] as con
 const OTODOM_HEADERS: HeadersInit = {
   'Content-Type': 'application/json',
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'application/json',
+  Accept: 'application/json',
   'Accept-Language': 'pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7',
-  'Origin': 'https://www.otodom.pl',
-  'Referer': 'https://www.otodom.pl/',
+  Origin: 'https://www.otodom.pl',
+  Referer: 'https://www.otodom.pl/',
 };
 
 // ============================================================================
@@ -57,20 +57,39 @@ const OTODOM_HEADERS: HeadersInit = {
 // ============================================================================
 
 /**
- * Validate and normalize estate type from API response
- * Returns 'FLAT' as default if the value is invalid
+ * Validate and normalize estate type from API response.
+ * Returns 'FLAT' as default if the value is invalid or unsupported.
  */
-export function validateEstateType(value: unknown): OtodomEstateType {
-  if (typeof value === 'string' && VALID_ESTATE_TYPES.includes(value as OtodomEstateType)) {
+function validateEstateType(value: unknown): OtodomEstateType {
+  if (typeof value === 'string' && SUPPORTED_ESTATE_TYPES.has(value as OtodomEstateType)) {
     return value as OtodomEstateType;
   }
   return 'FLAT'; // Default fallback
 }
 
 /**
- * Module-level cache for property responses
+ * Execute a POST request to Otodom API with error handling
  */
-const propertyCache = new Map<string, { data: OtodomPropertyResponse; timestamp: number }>();
+async function otodomPost<T>(
+  requestBody: object,
+  signal?: AbortSignal,
+  operationName: string = 'Otodom API'
+): Promise<T> {
+  const response = await fetch(OTODOM_API_URL, {
+    method: 'POST',
+    headers: OTODOM_HEADERS,
+    body: JSON.stringify(requestBody),
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.error(`${operationName} error:`, response.status, errorText);
+    throw new Error(`Otodom API error: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
 
 /**
  * Generate a cache key from bounds and filters
@@ -174,13 +193,6 @@ function addHouseFilters(filterAttributes: Record<string, unknown>, filters: Oto
 }
 
 /**
- * Check if filters specify a single estate type
- */
-function isSingleEstateType(filters: OtodomPropertyFilters, type: OtodomEstateType): boolean {
-  return filters.estate?.length === 1 && filters.estate[0] === type;
-}
-
-/**
  * Build the GraphQL request body for SearchMapPins
  */
 function buildSearchMapPinsRequest(bounds: Bounds, filters: OtodomPropertyFilters, estateType: OtodomEstateType): object {
@@ -197,11 +209,12 @@ function buildSearchMapPinsRequest(bounds: Bounds, filters: OtodomPropertyFilter
 
   addCommonFilters(filterAttributes, filters);
 
-  if (estateType === 'FLAT' && isSingleEstateType(filters, 'FLAT')) {
+  // Apply type-specific filters only when filtering for a single estate type
+  const isSingleType = filters.estate?.length === 1;
+  if (isSingleType && estateType === 'FLAT') {
     addFlatFilters(filterAttributes, filters);
   }
-
-  if (estateType === 'HOUSE' && isSingleEstateType(filters, 'HOUSE')) {
+  if (isSingleType && estateType === 'HOUSE') {
     addHouseFilters(filterAttributes, filters);
   }
 
@@ -243,7 +256,6 @@ interface OtodomMapPinItem {
     estate: string;
     title: string;
     createdAtFirst: string;
-    openDays: string;
     transaction: string;
     totalPrice: { value: number; currency: string };
     images: { medium: string; large: string }[];
@@ -439,20 +451,7 @@ async function fetchSingleEstateType(
   const requestBody = buildSearchMapPinsRequest(bounds, filters, estateType);
   const stopTimer = createTimer('otodom:fetch-single-type');
 
-  const response = await fetch(OTODOM_API_URL, {
-    method: 'POST',
-    headers: OTODOM_HEADERS,
-    body: JSON.stringify(requestBody),
-    signal,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    console.error('Otodom API error:', response.status, errorText);
-    throw new Error(`Otodom API error: ${response.status} ${response.statusText}`);
-  }
-
-  const data: OtodomSearchMapPinsResponse = await response.json();
+  const data = await otodomPost<OtodomSearchMapPinsResponse>(requestBody, signal, 'Otodom SearchMapPins');
   const result = transformOtodomResponse(data, estateType);
   stopTimer({ estateType, properties: result.properties.length, clusters: result.clusters.length });
   return result;
@@ -470,11 +469,11 @@ export async function fetchOtodomProperties(
   const stopTotalTimer = createTimer('otodom:fetch-total');
   const cacheKey = generatePropertyCacheKey(bounds, filters);
 
-  // Check cache
-  const cached = propertyCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < OTODOM_CACHE_TTL_MS) {
+  // Check cache (Redis with in-memory fallback)
+  const cached = await cacheGet<OtodomPropertyResponse>(cacheKey);
+  if (cached) {
     logPerf('otodom:cache-hit', 0, { cacheKey: cacheKey.substring(0, 50) });
-    return { ...cached.data, cached: true };
+    return { ...cached, cached: true };
   }
 
   const estateTypes = filters.estate ?? ['FLAT'];
@@ -514,16 +513,8 @@ export async function fetchOtodomProperties(
     fetchedAt: new Date().toISOString(),
   };
 
-  // Update cache
-  propertyCache.set(cacheKey, { data: result, timestamp: Date.now() });
-
-  // Clean old cache entries
-  if (propertyCache.size > OTODOM_MAX_CACHE_ENTRIES) {
-    const entries = Array.from(propertyCache.entries());
-    entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-    const toDelete = entries.slice(0, entries.length - OTODOM_MAX_CACHE_ENTRIES);
-    toDelete.forEach(([key]) => propertyCache.delete(key));
-  }
+  // Update cache (Redis with in-memory fallback, 1 hour TTL)
+  await cacheSet(cacheKey, result, CACHE_CONFIG.PROPERTY_API_TTL_SECONDS);
 
   stopTotalTimer({ properties: allProperties.length, clusters: allClusters.length, estateTypes: estateTypes.length });
   return result;
@@ -565,12 +556,11 @@ function buildSearchMapQueryRequest(
     transaction: filters.transaction,
     market: filters.market ?? 'ALL',
     ownerTypeSingleSelect: filters.ownerType ?? 'ALL',
+    areaMin: filters.areaMin,
+    areaMax: filters.areaMax,
   };
 
-  if (filters.priceMin !== undefined) filterAttributes.priceMin = filters.priceMin;
-  if (filters.priceMax !== undefined) filterAttributes.priceMax = filters.priceMax;
-  if (filters.areaMin !== undefined) filterAttributes.areaMin = filters.areaMin;
-  if (filters.areaMax !== undefined) filterAttributes.areaMax = filters.areaMax;
+  addCommonFilters(filterAttributes, filters);
 
   return {
     extensions: {
@@ -631,21 +621,7 @@ export async function fetchClusterProperties(
   const fetchResults = await Promise.all(
     estateTypes.map(async (estateType) => {
       const requestBody = buildSearchMapQueryRequest(geoJson, filters, estateType, page, limit);
-
-      const response = await fetch(OTODOM_API_URL, {
-        method: 'POST',
-        headers: OTODOM_HEADERS,
-        body: JSON.stringify(requestBody),
-        signal,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        console.error('Otodom SearchMapQuery API error:', response.status, errorText);
-        throw new Error(`Otodom API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data: OtodomSearchAdsResponse = await response.json();
+      const data = await otodomPost<OtodomSearchAdsResponse>(requestBody, signal, 'Otodom SearchMapQuery');
 
       if (!data?.data?.searchAds) {
         console.warn('Otodom API returned empty or invalid response for estate type:', estateType);
@@ -677,96 +653,3 @@ export async function fetchClusterProperties(
     totalPages,
   };
 }
-
-// ============================================================================
-// OTODOM CLIENT CLASS
-// ============================================================================
-
-/**
- * Otodom.pl API Client
- *
- * Provides methods to interact with the Otodom GraphQL API for real estate listings.
- */
-export class OtodomClient {
-  private readonly baseUrl: string;
-  private readonly headers: HeadersInit;
-  private readonly cacheTtlMs: number;
-  private readonly maxCacheEntries: number;
-
-  constructor(config: OtodomClientConfig = {}) {
-    this.baseUrl = config.baseUrl ?? OTODOM_API_URL;
-    this.headers = {
-      ...OTODOM_HEADERS,
-      ...config.headers,
-    };
-    this.cacheTtlMs = config.cacheTtlMs ?? OTODOM_CACHE_TTL_MS;
-    this.maxCacheEntries = config.maxCacheEntries ?? OTODOM_MAX_CACHE_ENTRIES;
-  }
-
-  /**
-   * Search for properties within map bounds
-   */
-  async searchMapPins(
-    bounds: Bounds,
-    filters: OtodomPropertyFilters,
-    signal?: AbortSignal
-  ): Promise<OtodomPropertyResponse> {
-    return fetchOtodomProperties(bounds, filters, signal);
-  }
-
-  /**
-   * Fetch properties within a cluster area
-   */
-  async searchClusterProperties(options: {
-    lat: number;
-    lng: number;
-    filters: OtodomPropertyFilters;
-    page?: number;
-    limit?: number;
-    shape?: string;
-    radiusMeters?: number;
-    estateType?: string;
-    signal?: AbortSignal;
-  }): Promise<{
-    properties: OtodomProperty[];
-    totalCount: number;
-    currentPage: number;
-    totalPages: number;
-  }> {
-    return fetchClusterProperties(
-      options.lat,
-      options.lng,
-      options.filters,
-      options.page ?? 1,
-      options.limit ?? OTODOM_DEFAULT_CLUSTER_PAGE_LIMIT,
-      options.shape,
-      options.radiusMeters ?? OTODOM_CLUSTER_RADIUS_METERS,
-      options.estateType,
-      options.signal
-    );
-  }
-
-  /**
-   * Clear the property cache
-   */
-  clearCache(): void {
-    propertyCache.clear();
-  }
-
-  /**
-   * Get cache statistics
-   */
-  getCacheStats(): { size: number; maxSize: number } {
-    return {
-      size: propertyCache.size,
-      maxSize: this.maxCacheEntries,
-    };
-  }
-}
-
-// ============================================================================
-// DEFAULT INSTANCE
-// ============================================================================
-
-/** Default Otodom client instance */
-export const otodomClient = new OtodomClient();
