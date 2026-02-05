@@ -1,13 +1,12 @@
 import type { Point, POI } from '@/types';
-import { EARTH_RADIUS_METERS, METERS_PER_DEGREE_LAT } from './constants';
+import { EARTH_RADIUS_METERS, METERS_PER_DEGREE_LAT, DEG_TO_RAD } from './constants';
 import { SPATIAL_INDEX_CONFIG } from '@/constants/performance';
 
 /**
  * Convert degrees to radians
- * Note: Duplicated here to avoid circular dependency with distance.ts
  */
 function toRad(degrees: number): number {
-  return degrees * (Math.PI / 180);
+  return degrees * DEG_TO_RAD;
 }
 
 /**
@@ -25,16 +24,43 @@ export function haversineDistance(p1: Point, p2: Point): number {
 }
 
 /**
- * Simple KD-tree-like spatial index for faster nearest neighbor queries
- * This is a simplified version that divides space into grid cells
+ * Interface for items that have geographic coordinates
  */
-export class SpatialIndex {
-  private cells: Map<string, POI[]> = new Map();
-  private cellSize: number;
+export interface GeoLocated {
+  lat: number;
+  lng: number;
+}
 
-  constructor(pois: POI[], cellSizeDegrees: number = SPATIAL_INDEX_CONFIG.DEFAULT_CELL_SIZE_DEGREES) {
+/**
+ * Distance function type for spatial index
+ */
+export type DistanceFunction<T extends GeoLocated> = (p1: Point, p2: T) => number;
+
+/**
+ * Generic grid-based spatial index for faster nearest neighbor queries.
+ * Works with any type that has lat/lng coordinates.
+ * 
+ * @typeParam T - Type of items to index, must have lat and lng properties
+ */
+export class GenericSpatialIndex<T extends GeoLocated> {
+  private cells: Map<string, T[]> = new Map();
+  private cellSize: number;
+  private distanceFn: DistanceFunction<T>;
+
+  /**
+   * Create a new spatial index
+   * @param items - Array of items to index
+   * @param distanceFn - Function to calculate distance between a point and an item
+   * @param cellSizeDegrees - Size of grid cells in degrees (default: 0.01 ≈ 1km)
+   */
+  constructor(
+    items: T[],
+    distanceFn: DistanceFunction<T>,
+    cellSizeDegrees: number = SPATIAL_INDEX_CONFIG.DEFAULT_CELL_SIZE_DEGREES
+  ) {
     this.cellSize = cellSizeDegrees;
-    this.buildIndex(pois);
+    this.distanceFn = distanceFn;
+    this.buildIndex(items);
   }
 
   private getCellKey(lat: number, lng: number): string {
@@ -43,33 +69,33 @@ export class SpatialIndex {
     return `${cellLat},${cellLng}`;
   }
 
-  private buildIndex(pois: POI[]): void {
-    for (const poi of pois) {
-      const key = this.getCellKey(poi.lat, poi.lng);
+  private buildIndex(items: T[]): void {
+    for (const item of items) {
+      const key = this.getCellKey(item.lat, item.lng);
       const cell = this.cells.get(key) || [];
-      cell.push(poi);
+      cell.push(item);
       this.cells.set(key, cell);
     }
   }
 
   /**
-   * Find nearest POI using spatial index
-   * Searches in expanding rings of cells until a POI is found
+   * Find nearest item using spatial index
+   * Searches in expanding rings of cells until an item is found
    */
-  findNearest(point: Point, maxDistance: number): { poi: POI; distance: number } | null {
+  findNearest(point: Point, maxDistance: number): { item: T; distance: number } | null {
     const centerCellLat = Math.floor(point.lat / this.cellSize);
     const centerCellLng = Math.floor(point.lng / this.cellSize);
 
     // Convert max distance to approximate cell radius
     const maxCellRadius = Math.ceil(maxDistance / (this.cellSize * METERS_PER_DEGREE_LAT)) + 1;
 
-    let nearestPOI: POI | null = null;
+    let nearestItem: T | null = null;
     let minDistance = Infinity;
 
     // Search in expanding rings
     for (let radius = 0; radius <= maxCellRadius; radius++) {
-      // If we found a POI and the current ring is beyond the minimum distance, stop
-      if (nearestPOI && radius * this.cellSize * METERS_PER_DEGREE_LAT > minDistance) {
+      // If we found an item and the current ring is beyond the minimum distance, stop
+      if (nearestItem && radius * this.cellSize * METERS_PER_DEGREE_LAT > minDistance) {
         break;
       }
 
@@ -82,14 +108,14 @@ export class SpatialIndex {
           }
 
           const key = `${centerCellLat + dLat},${centerCellLng + dLng}`;
-          const cellPOIs = this.cells.get(key);
+          const cellItems = this.cells.get(key);
 
-          if (cellPOIs) {
-            for (const poi of cellPOIs) {
-              const distance = haversineDistance(point, { lat: poi.lat, lng: poi.lng });
+          if (cellItems) {
+            for (const item of cellItems) {
+              const distance = this.distanceFn(point, item);
               if (distance < minDistance && distance <= maxDistance) {
                 minDistance = distance;
-                nearestPOI = poi;
+                nearestItem = item;
               }
             }
           }
@@ -97,11 +123,11 @@ export class SpatialIndex {
       }
     }
 
-    return nearestPOI ? { poi: nearestPOI, distance: minDistance } : null;
+    return nearestItem ? { item: nearestItem, distance: minDistance } : null;
   }
 
   /**
-   * Find distance to nearest POI using spatial index
+   * Find distance to nearest item using spatial index
    */
   findNearestDistance(point: Point, maxDistance: number): number {
     const result = this.findNearest(point, maxDistance);
@@ -109,7 +135,7 @@ export class SpatialIndex {
   }
 
   /**
-   * Count POIs within a given radius using spatial index
+   * Count items within a given radius using spatial index
    */
   countWithinRadius(point: Point, radius: number): number {
     const centerCellLat = Math.floor(point.lat / this.cellSize);
@@ -124,11 +150,11 @@ export class SpatialIndex {
     for (let dLat = -cellRadius; dLat <= cellRadius; dLat++) {
       for (let dLng = -cellRadius; dLng <= cellRadius; dLng++) {
         const key = `${centerCellLat + dLat},${centerCellLng + dLng}`;
-        const cellPOIs = this.cells.get(key);
+        const cellItems = this.cells.get(key);
 
-        if (cellPOIs) {
-          for (const poi of cellPOIs) {
-            const distance = haversineDistance(point, { lat: poi.lat, lng: poi.lng });
+        if (cellItems) {
+          for (const item of cellItems) {
+            const distance = this.distanceFn(point, item);
             if (distance <= radius) {
               count++;
             }
@@ -138,5 +164,15 @@ export class SpatialIndex {
     }
 
     return count;
+  }
+}
+
+/**
+ * POI-specific spatial index using haversine distance
+ * This is a convenience class that wraps GenericSpatialIndex for POI types
+ */
+export class SpatialIndex extends GenericSpatialIndex<POI> {
+  constructor(pois: POI[], cellSizeDegrees: number = SPATIAL_INDEX_CONFIG.DEFAULT_CELL_SIZE_DEGREES) {
+    super(pois, (p1, p2) => haversineDistance(p1, { lat: p2.lat, lng: p2.lng }), cellSizeDegrees);
   }
 }

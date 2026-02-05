@@ -67,6 +67,7 @@ function chunkArray<T>(array: T[], numChunks: number): T[][] {
  * |--------------------------|--------------------------------|------------------------|
  * | EARTH_RADIUS_METERS      | src/lib/geo/constants.ts       | EARTH_RADIUS_METERS    |
  * | METERS_PER_DEGREE_LAT    | src/lib/geo/constants.ts       | METERS_PER_DEGREE_LAT  |
+ * | DEG_TO_RAD               | src/lib/geo/constants.ts       | DEG_TO_RAD             |
  * | DENSITY_BONUS_RADIUS_RATIO| src/constants/performance.ts  | DENSITY_BONUS.RADIUS_RATIO |
  * | DENSITY_BONUS_MAX        | src/constants/performance.ts   | DENSITY_BONUS.MAX      |
  * | DENSITY_BONUS_SCALE      | src/constants/performance.ts   | DENSITY_BONUS.SCALE    |
@@ -95,12 +96,13 @@ const { parentPort, workerData } = require('worker_threads');
 // and src/lib/geo/constants.ts
 const EARTH_RADIUS_METERS = 6371000;
 const METERS_PER_DEGREE_LAT = 111320;
+const DEG_TO_RAD = Math.PI / 180;
 const DENSITY_BONUS_RADIUS_RATIO = 0.5;
 const DENSITY_BONUS_MAX = 0.15;
 const DENSITY_BONUS_SCALE = 3;
 
 function toRad(degrees) {
-  return degrees * (Math.PI / 180);
+  return degrees * DEG_TO_RAD;
 }
 
 function haversineDistance(p1, p2) {

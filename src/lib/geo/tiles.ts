@@ -9,11 +9,74 @@ import type { Factor } from '@/types/factors';
 import { PROPERTY_TILE_CONFIG, HEATMAP_TILE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
 import { getTilesForBounds } from './grid';
 import { djb2Hash } from '@/lib/utils';
+import { DEG_TO_RAD } from './constants';
 
 /**
  * Tile coordinate type - re-exported from @/types for convenience
  */
 export type TileCoord = TileCoordinates;
+
+/**
+ * Result of tile calculation with radius expansion
+ */
+export interface TileCalculationResult {
+  /** Tiles within the viewport bounds */
+  viewportTiles: TileCoord[];
+  /** All tiles including expanded radius */
+  allTiles: TileCoord[];
+  /** Whether the viewport has too many tiles */
+  isTooLarge: boolean;
+}
+
+/**
+ * Options for tile calculation
+ */
+export interface TileCalculationOptions {
+  /** Viewport bounds */
+  bounds: Bounds | null;
+  /** Zoom level for tiles */
+  tileZoom: number;
+  /** Number of tiles to expand around viewport */
+  radius: number;
+  /** Maximum viewport tiles before marking as too large */
+  maxViewportTiles: number;
+  /** Maximum total tiles (will reduce radius if exceeded) */
+  maxTotalTiles: number;
+}
+
+/**
+ * Calculate tiles for a viewport with radius expansion
+ * Automatically reduces radius if too many tiles would be generated
+ * 
+ * @param options - Tile calculation options
+ * @returns Viewport tiles, expanded tiles, and whether viewport is too large
+ */
+export function calculateTilesWithRadius(options: TileCalculationOptions): TileCalculationResult {
+  const { bounds, tileZoom, radius, maxViewportTiles, maxTotalTiles } = options;
+  
+  if (!bounds) {
+    return { viewportTiles: [], allTiles: [], isTooLarge: false };
+  }
+
+  const viewport = getTilesForBounds(bounds, tileZoom);
+
+  if (viewport.length > maxViewportTiles) {
+    return { viewportTiles: [], allTiles: [], isTooLarge: true };
+  }
+
+  let expanded = getExpandedTilesForRadius(viewport, radius);
+
+  // Reduce radius if too many tiles
+  if (expanded.length > maxTotalTiles) {
+    let reducedRadius = radius;
+    while (expanded.length > maxTotalTiles && reducedRadius > 0) {
+      reducedRadius--;
+      expanded = getExpandedTilesForRadius(viewport, reducedRadius);
+    }
+  }
+
+  return { viewportTiles: viewport, allTiles: expanded, isTooLarge: false };
+}
 
 /**
  * Generate a string key from tile coordinates
@@ -38,7 +101,7 @@ export function getTileKeyString(tile: TileCoord): string {
 export function latLngToTile(lat: number, lng: number, zoom: number): TileCoord {
   const n = Math.pow(2, zoom);
   const x = Math.floor((lng + 180) / 360 * n);
-  const latRad = lat * Math.PI / 180;
+  const latRad = lat * DEG_TO_RAD;
   const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
   return { z: zoom, x, y };
 }

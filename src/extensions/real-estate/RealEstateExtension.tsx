@@ -14,7 +14,7 @@ export function createRealEstateExtension(): MapExtension {
   return {
     id: REAL_ESTATE_EXTENSION_ID,
     name: 'Real Estate',
-    description: 'Display property listings from Otodom on the map',
+    description: 'Display property listings from multiple sources (Otodom, Gratka)',
     Controller: RealEstateController,
     SidebarPanel: RealEstateSidebarPanel,
     BottomSheetContent: RealEstateFiltersContent,

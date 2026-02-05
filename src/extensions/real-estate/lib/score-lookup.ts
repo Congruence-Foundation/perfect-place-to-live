@@ -1,6 +1,7 @@
 import type { HeatmapPoint } from '@/types/heatmap';
-import type { OtodomProperty, PropertyCluster } from '../types/property';
+import type { UnifiedProperty, UnifiedCluster } from './shared/types';
 import { distanceInMeters, METERS_PER_DEGREE_LAT } from '@/lib/geo';
+import { GenericSpatialIndex, type GeoLocated } from '@/lib/geo/haversine';
 import { UI_CONFIG } from '@/constants/performance';
 import {
   SPATIAL_INDEX_CELL_SIZE_METERS,
@@ -8,64 +9,10 @@ import {
 } from '../config/constants';
 
 /**
- * Simple grid-based spatial index for heatmap points
- * Provides O(1) average lookup instead of O(n) linear search
+ * Distance function for heatmap points using distanceInMeters
  */
-class HeatmapSpatialIndex {
-  private cells: Map<string, HeatmapPoint[]> = new Map();
-  private cellSize: number;
-
-  constructor(points: HeatmapPoint[], cellSizeMeters: number = SPATIAL_INDEX_CELL_SIZE_METERS) {
-    // Convert cell size from meters to degrees (approximate)
-    this.cellSize = cellSizeMeters / METERS_PER_DEGREE_LAT;
-    
-    // Build the index
-    for (const point of points) {
-      const key = this.getCellKey(point.lat, point.lng);
-      const cell = this.cells.get(key) || [];
-      cell.push(point);
-      this.cells.set(key, cell);
-    }
-  }
-
-  private getCellKey(lat: number, lng: number): string {
-    const cellLat = Math.floor(lat / this.cellSize);
-    const cellLng = Math.floor(lng / this.cellSize);
-    return `${cellLat},${cellLng}`;
-  }
-
-  /**
-   * Find the nearest point within a search radius
-   */
-  findNearest(lat: number, lng: number, searchRadiusMeters: number): HeatmapPoint | null {
-    // Convert search radius to cell units
-    const searchRadiusCells = Math.ceil(searchRadiusMeters / METERS_PER_DEGREE_LAT / this.cellSize) + 1;
-    const centerCellLat = Math.floor(lat / this.cellSize);
-    const centerCellLng = Math.floor(lng / this.cellSize);
-
-    let nearestPoint: HeatmapPoint | null = null;
-    let nearestDistance = Infinity;
-
-    // Search in expanding rings from center
-    for (let dLat = -searchRadiusCells; dLat <= searchRadiusCells; dLat++) {
-      for (let dLng = -searchRadiusCells; dLng <= searchRadiusCells; dLng++) {
-        const key = `${centerCellLat + dLat},${centerCellLng + dLng}`;
-        const cellPoints = this.cells.get(key);
-        
-        if (cellPoints) {
-          for (const point of cellPoints) {
-            const distance = distanceInMeters(lat, lng, point.lat, point.lng);
-            if (distance < nearestDistance && distance <= searchRadiusMeters) {
-              nearestDistance = distance;
-              nearestPoint = point;
-            }
-          }
-        }
-      }
-    }
-
-    return nearestPoint;
-  }
+function heatmapDistanceFn(p1: { lat: number; lng: number }, p2: HeatmapPoint): number {
+  return distanceInMeters(p1.lat, p1.lng, p2.lat, p2.lng);
 }
 
 /**
@@ -79,13 +26,13 @@ class HeatmapSpatialIndex {
  * would add complexity without significant benefit since we don't need to
  * cache multiple spatial indexes simultaneously.
  */
-let cachedIndex: HeatmapSpatialIndex | null = null;
+let cachedIndex: GenericSpatialIndex<HeatmapPoint> | null = null;
 let cachedPointsHash: string | null = null;
 
 /**
  * Get or create a spatial index for the given heatmap points
  */
-function getSpatialIndex(heatmapPoints: HeatmapPoint[]): HeatmapSpatialIndex {
+function getSpatialIndex(heatmapPoints: HeatmapPoint[]): GenericSpatialIndex<HeatmapPoint> {
   // Simple hash based on first and last points and length
   const hash = heatmapPoints.length > 0
     ? `${heatmapPoints.length}:${heatmapPoints[0].lat}:${heatmapPoints[heatmapPoints.length - 1].lat}`
@@ -95,7 +42,9 @@ function getSpatialIndex(heatmapPoints: HeatmapPoint[]): HeatmapSpatialIndex {
     return cachedIndex;
   }
   
-  cachedIndex = new HeatmapSpatialIndex(heatmapPoints);
+  // Convert cell size from meters to degrees (approximate)
+  const cellSizeDegrees = SPATIAL_INDEX_CELL_SIZE_METERS / METERS_PER_DEGREE_LAT;
+  cachedIndex = new GenericSpatialIndex(heatmapPoints, heatmapDistanceFn, cellSizeDegrees);
   cachedPointsHash = hash;
   return cachedIndex;
 }
@@ -138,7 +87,8 @@ export function findNearestHeatmapPoint(
 
   // Use spatial index for larger arrays
   const index = getSpatialIndex(heatmapPoints);
-  return index.findNearest(lat, lng, searchRadius);
+  const result = index.findNearest({ lat, lng }, searchRadius);
+  return result ? result.item : null;
 }
 
 /**
@@ -167,14 +117,6 @@ function getScoreForLocation(
  */
 function qualityToKValue(quality: number): number {
   return 1 - (quality / 100);
-}
-
-/**
- * Interface for items that have geographic coordinates
- */
-interface GeoLocated {
-  lat: number;
-  lng: number;
 }
 
 /**
@@ -229,18 +171,20 @@ function filterByScore<T extends GeoLocated>(
  * Filter properties based on their location's heatmap score.
  * Only returns properties whose score falls within the specified quality range.
  * 
- * @param properties - Array of properties to filter
+ * Now works with unified property format.
+ * 
+ * @param properties - Array of properties to filter (unified format)
  * @param heatmapPoints - Array of heatmap points with scores
  * @param qualityRange - [min, max] quality range (0-100, where 100 is best)
  * @param gridCellSize - Grid cell size in meters
  * @returns Filtered array of properties
  */
-export function filterPropertiesByScore(
-  properties: OtodomProperty[],
+export function filterPropertiesByScore<T extends UnifiedProperty>(
+  properties: T[],
   heatmapPoints: HeatmapPoint[],
   qualityRange: [number, number],
   gridCellSize: number
-): OtodomProperty[] {
+): T[] {
   return filterByScore(properties, heatmapPoints, qualityRange, gridCellSize);
 }
 
@@ -248,17 +192,19 @@ export function filterPropertiesByScore(
  * Filter property clusters based on their location's heatmap score.
  * Similar to filterPropertiesByScore but for clusters.
  * 
- * @param clusters - Array of property clusters to filter
+ * Now works with unified cluster format.
+ * 
+ * @param clusters - Array of property clusters to filter (unified format)
  * @param heatmapPoints - Array of heatmap points with scores
  * @param qualityRange - [min, max] quality range (0-100, where 100 is best)
  * @param gridCellSize - Grid cell size in meters
  * @returns Filtered array of clusters
  */
 export function filterClustersByScore(
-  clusters: PropertyCluster[],
+  clusters: UnifiedCluster[],
   heatmapPoints: HeatmapPoint[],
   qualityRange: [number, number],
   gridCellSize: number
-): PropertyCluster[] {
+): UnifiedCluster[] {
   return filterByScore(clusters, heatmapPoints, qualityRange, gridCellSize);
 }

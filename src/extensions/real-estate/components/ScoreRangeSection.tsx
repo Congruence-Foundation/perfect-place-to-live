@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
-import ScoreRangeSlider from '@/components/Controls/ScoreRangeSlider';
+import { ScoreRangeSlider } from '@/components/Controls/ScoreRangeSlider';
 
 interface ScoreRangeSectionProps {
   /** Current score range [min, max] */

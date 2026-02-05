@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchOtodomProperties } from '@/extensions/real-estate/lib';
-import { PropertyRequest, PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/extensions/real-estate/types';
+import { createMultiSource } from '@/extensions/real-estate/lib/shared';
+import type { UnifiedSearchParams, UnifiedEstateType } from '@/extensions/real-estate/lib/shared';
+import type { PropertyDataSource } from '@/extensions/real-estate/config';
+import { PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/extensions/real-estate/types';
 import { isValidBounds, tileToBounds } from '@/lib/geo';
 import { hashFilters } from '@/lib/geo/tiles';
 import { getCachedTile, setCachedTile, generateTileCacheKey, type TileCacheEntry } from '@/lib/tile-cache';
 import { errorResponse, handleApiError, isValidTileCoord } from '@/lib/api-utils';
 import { createTimer } from '@/lib/profiling';
+import type { Bounds } from '@/types/poi';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,17 +16,56 @@ export const dynamic = 'force-dynamic';
 /**
  * Extended request body that supports both bounds and tile coordinates
  */
-interface ExtendedPropertyRequest extends PropertyRequest {
+interface ExtendedPropertyRequest {
+  bounds?: Bounds;
   tile?: {
     z: number;
     x: number;
     y: number;
   };
+  filters?: Partial<PropertyFilters>;
+  /** Data sources to fetch from (defaults to ['otodom']) */
+  dataSources?: PropertyDataSource[];
+}
+
+/**
+ * Convert PropertyFilters to UnifiedSearchParams
+ */
+function toUnifiedSearchParams(
+  bounds: Bounds,
+  filters: PropertyFilters
+): UnifiedSearchParams {
+  // Map estate types to unified format
+  const estateTypes = Array.isArray(filters.estate) ? filters.estate : [filters.estate];
+  const propertyTypes: UnifiedEstateType[] = estateTypes.map(e => {
+    // Otodom uses same names as unified
+    return e as UnifiedEstateType;
+  });
+
+  // Map room counts from string enum to numbers
+  const roomCountMap: Record<string, number> = {
+    'ONE': 1, 'TWO': 2, 'THREE': 3, 'FOUR': 4, 'FIVE': 5,
+    'SIX': 6, 'SEVEN': 7, 'EIGHT': 8, 'NINE': 9, 'TEN': 10, 'MORE': 11,
+  };
+  const rooms = filters.roomsNumber?.map(r => roomCountMap[r] || 1);
+
+  return {
+    bounds,
+    transaction: filters.transaction,
+    propertyTypes,
+    priceMin: filters.priceMin,
+    priceMax: filters.priceMax,
+    areaMin: filters.areaMin,
+    areaMax: filters.areaMax,
+    rooms,
+    market: filters.market,
+    owner: filters.ownerType,
+  };
 }
 
 /**
  * POST /api/properties
- * Fetch properties from Otodom for the given bounds or tile coordinates
+ * Fetch properties from configured data sources for the given bounds or tile coordinates
  * 
  * Supports two modes:
  * 1. Bounds-based: { bounds: {...}, filters: {...} }
@@ -35,7 +77,12 @@ export async function POST(request: NextRequest) {
   const stopTotalTimer = createTimer('properties-api:total');
   try {
     const body: ExtendedPropertyRequest = await request.json();
-    const { bounds: requestBounds, tile, filters: requestFilters } = body;
+    const { 
+      bounds: requestBounds, 
+      tile, 
+      filters: requestFilters,
+      dataSources = ['otodom'],
+    } = body;
 
     // Merge with default filters
     const filters: PropertyFilters = {
@@ -56,7 +103,9 @@ export async function POST(request: NextRequest) {
     if (isValidTileCoord(tile)) {
       // Tile-based request
       bounds = tileToBounds(tile.z, tile.x, tile.y);
-      const filterHash = hashFilters(filters);
+      // Include data sources in cache key by appending to filter hash
+      const baseFilterHash = hashFilters(filters);
+      const filterHash = `${baseFilterHash}-${dataSources.sort().join(',')}`;
       cacheKey = generateTileCacheKey(tile.z, tile.x, tile.y, filterHash);
       isTileRequest = true;
 
@@ -64,6 +113,11 @@ export async function POST(request: NextRequest) {
       const stopCacheTimer = createTimer('properties-api:cache-check');
       const cached = await getCachedTile(cacheKey);
       if (cached) {
+        // #region agent log
+        const cachedGratkaCount = cached.properties?.filter(p => p.source === 'gratka').length || 0;
+        const cachedOtodomCount = cached.properties?.filter(p => p.source === 'otodom').length || 0;
+        fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:properties:cache-hit',message:'Returning cached tile',data:{tile:`${tile.z}:${tile.x}:${tile.y}`,propsCount:cached.properties?.length||0,gratkaCount:cachedGratkaCount,otodomCount:cachedOtodomCount,dataSources},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'CACHE'})}).catch(()=>{});
+        // #endregion
         stopCacheTimer({ hit: true, tile: `${tile.z}:${tile.x}:${tile.y}` });
         stopTotalTimer({ cached: true, tile: `${tile.z}:${tile.x}:${tile.y}` });
         return NextResponse.json({
@@ -79,10 +133,26 @@ export async function POST(request: NextRequest) {
       return errorResponse(new Error('Invalid bounds: Please provide valid map bounds or tile coordinates'), 400);
     }
 
-    // Fetch properties from Otodom
-    const stopFetchTimer = createTimer('properties-api:otodom-fetch');
-    const result = await fetchOtodomProperties(bounds, filters);
-    stopFetchTimer({ properties: result.properties.length, clusters: result.clusters?.length || 0 });
+    // Create data source (single or multi-source)
+    const stopFetchTimer = createTimer('properties-api:fetch');
+    const dataSource = await createMultiSource(dataSources);
+    
+    // Convert filters to unified format
+    const searchParams = toUnifiedSearchParams(bounds, filters);
+    
+    // Fetch properties
+    const result = await dataSource.searchProperties(searchParams);
+    
+    // #region agent log
+    const sampleProp = result.properties.find(p => p.source === 'gratka');
+    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:properties:fresh-fetch',message:'Fresh data fetched',data:{propsCount:result.properties.length,gratkaCount:result.properties.filter(p=>p.source==='gratka').length,sampleGratka:sampleProp?{id:sampleProp.id,lat:sampleProp.lat,lng:sampleProp.lng,hasCoords:sampleProp.lat!==0&&sampleProp.lng!==0}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FRESH'})}).catch(()=>{});
+    // #endregion
+    
+    stopFetchTimer({ 
+      properties: result.properties.length, 
+      clusters: result.clusters?.length || 0,
+      sources: dataSources.join(','),
+    });
 
     // Cache tile requests
     if (isTileRequest && cacheKey) {
@@ -93,11 +163,23 @@ export async function POST(request: NextRequest) {
         fetchedAt: new Date().toISOString(),
       };
       
+      // #region agent log
+      const gratkaCount = result.properties.filter(p => p.source === 'gratka').length;
+      const otodomCount = result.properties.filter(p => p.source === 'otodom').length;
+      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'route.ts:properties:cache-set',message:'Caching tile data',data:{tile:`${tile!.z}:${tile!.x}:${tile!.y}`,propsCount:result.properties.length,gratkaCount,otodomCount,dataSources,cacheKey},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'CACHE'})}).catch(()=>{});
+      // #endregion
+      
       // Don't await - cache in background
       setCachedTile(cacheKey, cacheEntry);
     }
 
-    stopTotalTimer({ cached: false, properties: result.properties.length, clusters: result.clusters?.length || 0 });
+    stopTotalTimer({ 
+      cached: false, 
+      properties: result.properties.length, 
+      clusters: result.clusters?.length || 0,
+      sources: dataSources.join(','),
+    });
+    
     return NextResponse.json({
       ...result,
       cached: false,
@@ -106,7 +188,7 @@ export async function POST(request: NextRequest) {
     return handleApiError(error, {
       context: 'Properties API',
       errorMappings: [
-        { pattern: 'Otodom API error', status: 502 },
+        { pattern: 'API error', status: 502 },
         { pattern: 'Invalid filters', status: 400 },
         { pattern: 'Invalid bounds', status: 400 },
       ],

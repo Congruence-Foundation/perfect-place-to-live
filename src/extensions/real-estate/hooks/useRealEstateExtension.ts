@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { PriceValueRange } from '../types';
 import { useRealEstateStore } from '../store';
 import type { PropertyDataSource } from '../config';
-import { getDefaultPriceRange } from '../components/TransactionTypeButtons';
+import { getDefaultPriceRange } from '../config/constants';
 
 /**
  * Props returned by useRealEstateExtension hook for UI components

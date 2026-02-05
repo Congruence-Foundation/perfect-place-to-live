@@ -1,22 +1,24 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslations } from 'next-intl';
 import { useMapStore } from '@/stores/mapStore';
 import { useRealEstateStore } from './store';
 import { useRealEstateMarkers } from './hooks/useRealEstateMarkers';
 import { useTileQueries } from './hooks/useTileQueries';
-import type { EnrichedProperty, PropertyCluster } from './types';
+import type { EnrichedUnifiedProperty, UnifiedCluster, UnifiedProperty } from './lib/shared';
 import {
   enrichPropertiesWithPriceScore,
   filterPropertiesByPriceValue,
   analyzeClusterPrices,
+  analyzeClusterPricesFromCache,
   enrichPropertiesSimplified,
   filterPropertiesByScore,
   filterClustersByScore,
 } from './lib';
 import { createTimer } from '@/lib/profiling';
+import { createClusterId } from '@/lib/geo';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
 
 /**
@@ -29,6 +31,8 @@ import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
  * 
  * It returns null (no UI) - it's purely for side effects.
  * This keeps the extension fully self-contained and decoupled from the core.
+ * 
+ * Now supports multiple data sources (Otodom, Gratka) via the dataSources state.
  */
 export function RealEstateController() {
   // Get translations
@@ -59,6 +63,7 @@ export function RealEstateController() {
     scoreRange,
     priceValueRange,
     priceAnalysisRadius,
+    dataSources,
     clusterPropertiesCache,
     cacheVersion,
     setRawData,
@@ -76,6 +81,7 @@ export function RealEstateController() {
       scoreRange: s.scoreRange,
       priceValueRange: s.priceValueRange,
       priceAnalysisRadius: s.priceAnalysisRadius,
+      dataSources: s.dataSources,
       clusterPropertiesCache: s.clusterPropertiesCache,
       cacheVersion: s.cacheVersion,
       setRawData: s.setRawData,
@@ -106,6 +112,7 @@ export function RealEstateController() {
     filters,
     priceAnalysisRadius,
     enabled,
+    dataSources,
   });
 
   // Check if zoom is below minimum display level
@@ -149,6 +156,131 @@ export function RealEstateController() {
   }, [enabled, isBelowMinZoom, clearProperties]);
 
   // ============================================
+  // DETAILED MODE: Batch fetch all cluster properties
+  // ============================================
+  const batchFetchAbortRef = useRef<AbortController | null>(null);
+  const batchFetchInProgressRef = useRef<Set<string>>(new Set());
+  const fetchedClusterIdsRef = useRef<Set<string>>(new Set());
+
+  // Batch fetch cluster properties for detailed mode
+  useEffect(() => {
+    // Only fetch in detailed mode when we have clusters and heatmap data
+    if (clusterPriceAnalysis !== 'detailed' || !enabled || rawClusters.length === 0 || heatmapPoints.length === 0) {
+      return;
+    }
+
+    // Find clusters that need fetching (not already fetched and not in progress)
+    const clustersToFetch = rawClusters.filter(cluster => {
+      const clusterId = createClusterId(cluster.lat, cluster.lng);
+      return !fetchedClusterIdsRef.current.has(clusterId) && 
+             !batchFetchInProgressRef.current.has(clusterId) &&
+             cluster.count <= detailedModeThreshold; // Only fetch small clusters
+    });
+
+    if (clustersToFetch.length === 0) {
+      return;
+    }
+
+    // Cancel any previous batch fetch (only if clusters changed significantly)
+    if (batchFetchAbortRef.current) {
+      batchFetchAbortRef.current.abort();
+    }
+    const abortController = new AbortController();
+    batchFetchAbortRef.current = abortController;
+
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RealEstateController:batchFetch:start',message:'Starting batch fetch',data:{totalClusters:rawClusters.length,clustersToFetch:clustersToFetch.length,alreadyFetched:fetchedClusterIdsRef.current.size,threshold:detailedModeThreshold},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'BATCH'})}).catch(()=>{});
+    // #endregion
+
+    // Batch fetch with concurrency limit
+    const BATCH_SIZE = 5;
+    let successCount = 0;
+    
+    const fetchCluster = async (cluster: UnifiedCluster) => {
+      const clusterId = createClusterId(cluster.lat, cluster.lng);
+      
+      // Mark as in progress
+      batchFetchInProgressRef.current.add(clusterId);
+      // Mark as fetched immediately to prevent re-fetching
+      fetchedClusterIdsRef.current.add(clusterId);
+
+      try {
+        const response = await fetch('/api/properties/cluster', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lat: cluster.lat,
+            lng: cluster.lng,
+            filters,
+            limit: 50, // Fetch up to 50 properties per cluster
+            source: cluster.source,
+            clusterUrl: cluster.url,
+            clusterBounds: cluster.bounds,
+            radius: cluster.radiusInMeters,
+            shape: cluster.shape,
+            estateType: cluster.estateType,
+          }),
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json() as { properties: UnifiedProperty[] };
+        if (data.properties.length > 0) {
+          cacheClusterProperties(clusterId, data.properties);
+          successCount++;
+        }
+      } catch (error) {
+        // Ignore abort errors
+        if (error instanceof Error && error.name === 'AbortError') {
+          // Remove from fetched so it can be retried
+          fetchedClusterIdsRef.current.delete(clusterId);
+          return;
+        }
+        // On other errors, keep in fetched to avoid infinite retries
+      } finally {
+        batchFetchInProgressRef.current.delete(clusterId);
+      }
+    };
+
+    // Process in batches
+    const processBatches = async () => {
+      for (let i = 0; i < clustersToFetch.length; i += BATCH_SIZE) {
+        if (abortController.signal.aborted) break;
+        
+        const batch = clustersToFetch.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(fetchCluster));
+        
+        // Small delay between batches to avoid overwhelming the server
+        if (i + BATCH_SIZE < clustersToFetch.length && !abortController.signal.aborted) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      // #region agent log
+      if (!abortController.signal.aborted) {
+        fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RealEstateController:batchFetch:complete',message:'Batch fetch complete',data:{attempted:clustersToFetch.length,successCount,totalFetched:fetchedClusterIdsRef.current.size},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'BATCH'})}).catch(()=>{});
+      }
+      // #endregion
+    };
+
+    processBatches();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [clusterPriceAnalysis, enabled, rawClusters, heatmapPoints.length, detailedModeThreshold, filters, cacheClusterProperties]);
+
+  // Clear fetched cluster IDs when clusters change significantly (e.g., viewport change)
+  const prevRawClustersLengthRef = useRef(0);
+  useEffect(() => {
+    // If clusters changed significantly, clear the fetched set to allow re-fetching
+    if (Math.abs(rawClusters.length - prevRawClustersLengthRef.current) > 50) {
+      fetchedClusterIdsRef.current.clear();
+    }
+    prevRawClustersLengthRef.current = rawClusters.length;
+  }, [rawClusters.length]);
+  // ============================================
   // COMPUTED: Enrich and filter properties
   // ============================================
   
@@ -165,7 +297,7 @@ export function RealEstateController() {
   }, [rawProperties, clusterPropertiesCache, cacheVersion]);
 
   // Enrich properties with price analysis
-  const enrichedProperties = useMemo((): EnrichedProperty[] => {
+  const enrichedProperties = useMemo((): EnrichedUnifiedProperty[] => {
     if (!enabled || allPropertiesForAnalytics.length === 0 || heatmapPoints.length === 0) {
       return allPropertiesForAnalytics.map(p => ({ ...p }));
     }
@@ -176,7 +308,7 @@ export function RealEstateController() {
   }, [enabled, allPropertiesForAnalytics, heatmapPoints, gridCellSize]);
 
   // Get only standalone properties for rendering as markers
-  const standaloneEnrichedProperties = useMemo((): EnrichedProperty[] => {
+  const standaloneEnrichedProperties = useMemo((): EnrichedUnifiedProperty[] => {
     void cacheVersion;
     if (clusterPropertiesCache.size === 0) {
       return enrichedProperties;
@@ -186,10 +318,23 @@ export function RealEstateController() {
   }, [enrichedProperties, rawProperties, clusterPropertiesCache, cacheVersion]);
 
   // Filter properties by heatmap score
-  const scoreFilteredProperties = useMemo((): EnrichedProperty[] => {
+  const scoreFilteredProperties = useMemo((): EnrichedUnifiedProperty[] => {
     if (!enabled || (scoreRange[0] === 0 && scoreRange[1] === 100)) {
       return standaloneEnrichedProperties;
     }
+    
+    // Check if heatmap data is valid (has variation in K values)
+    // If all K values are the same, the heatmap data is likely invalid (no POIs)
+    // In this case, skip score filtering to avoid hiding all properties
+    if (heatmapPoints.length > 0) {
+      const firstK = heatmapPoints[0].value;
+      const hasVariation = heatmapPoints.some(p => Math.abs(p.value - firstK) > 0.001);
+      if (!hasVariation) {
+        // All K values are the same - heatmap data is invalid, skip filtering
+        return standaloneEnrichedProperties;
+      }
+    }
+    
     const stopTimer = createTimer('realestate:score-filter');
     const result = filterPropertiesByScore(standaloneEnrichedProperties, heatmapPoints, scoreRange, gridCellSize);
     stopTimer({ before: standaloneEnrichedProperties.length, after: result.length });
@@ -197,7 +342,7 @@ export function RealEstateController() {
   }, [enabled, standaloneEnrichedProperties, heatmapPoints, scoreRange, gridCellSize]);
 
   // Filter properties by price value
-  const filteredProperties = useMemo((): EnrichedProperty[] => {
+  const filteredProperties = useMemo((): EnrichedUnifiedProperty[] => {
     if (priceValueRange[0] === 0 && priceValueRange[1] === 100) {
       return scoreFilteredProperties;
     }
@@ -205,10 +350,23 @@ export function RealEstateController() {
   }, [scoreFilteredProperties, priceValueRange]);
 
   // Filter clusters by heatmap score
-  const filteredClusters = useMemo((): PropertyCluster[] => {
+  const filteredClusters = useMemo((): UnifiedCluster[] => {
     if (!enabled || (scoreRange[0] === 0 && scoreRange[1] === 100)) {
       return rawClusters;
     }
+    
+    // Check if heatmap data is valid (has variation in K values)
+    // If all K values are the same, the heatmap data is likely invalid (no POIs)
+    // In this case, skip score filtering to avoid hiding all clusters
+    if (heatmapPoints.length > 0) {
+      const firstK = heatmapPoints[0].value;
+      const hasVariation = heatmapPoints.some(p => Math.abs(p.value - firstK) > 0.001);
+      if (!hasVariation) {
+        // All K values are the same - heatmap data is invalid, skip filtering
+        return rawClusters;
+      }
+    }
+    
     return filterClustersByScore(rawClusters, heatmapPoints, scoreRange, gridCellSize);
   }, [enabled, rawClusters, heatmapPoints, scoreRange, gridCellSize]);
 
@@ -221,20 +379,24 @@ export function RealEstateController() {
     const stopTimer = createTimer('realestate:cluster-analysis');
 
     if (clusterPriceAnalysis === 'simplified') {
+      // Simplified mode: use distance-based matching with nearby properties
       const result = analyzeClusterPrices(filteredClusters, enrichedProperties);
       stopTimer({ mode: 'simplified', clusters: filteredClusters.length, properties: enrichedProperties.length });
       return result;
     }
 
     if (clusterPriceAnalysis === 'detailed' && heatmapPoints.length > 0) {
+      // Detailed mode: use actual cached cluster properties
+      // First enrich all properties (including cached cluster properties)
       const detailedEnriched = enrichPropertiesSimplified(allPropertiesForAnalytics, heatmapPoints, gridCellSize);
-      const result = analyzeClusterPrices(filteredClusters, detailedEnriched);
-      stopTimer({ mode: 'detailed', clusters: filteredClusters.length, properties: detailedEnriched.length });
+      // Then analyze using the cache to match properties to their clusters
+      const result = analyzeClusterPricesFromCache(filteredClusters, detailedEnriched, clusterPropertiesCache);
+      stopTimer({ mode: 'detailed', clusters: filteredClusters.length, properties: detailedEnriched.length, cacheSize: clusterPropertiesCache.size });
       return result;
     }
 
     return new Map();
-  }, [clusterPriceAnalysis, enabled, filteredClusters, enrichedProperties, allPropertiesForAnalytics, heatmapPoints, gridCellSize]);
+  }, [clusterPriceAnalysis, enabled, filteredClusters, enrichedProperties, allPropertiesForAnalytics, heatmapPoints, gridCellSize, clusterPropertiesCache]);
 
   // ============================================
   // EFFECT: Update computed data in store
@@ -257,6 +419,7 @@ export function RealEstateController() {
     map: isMapReady ? map : null,
     layerGroup: isMapReady ? layerGroup : null,
     properties: filteredProperties,
+    allEnrichedProperties: enrichedProperties,
     clusters: filteredClusters,
     enabled,
     filters,
@@ -266,6 +429,7 @@ export function RealEstateController() {
     heatmapPoints,
     gridCellSize,
     clusterPropertiesCache,
+    clusterAnalysisData,
     onClusterPropertiesFetched: cacheClusterProperties,
     translations: markerTranslations,
   });

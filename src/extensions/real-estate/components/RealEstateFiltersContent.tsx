@@ -5,6 +5,7 @@ import { RealEstateSidebar } from '@/components/Controls';
 import { PriceValueFilter } from './filters/PriceValueFilter';
 import { TransactionTypeButtons } from './TransactionTypeButtons';
 import { ScoreRangeSection } from './ScoreRangeSection';
+import { DataSourcesPanel } from './DataSourcesPanel';
 import { useRealEstateExtension } from '../hooks';
 
 interface RealEstateFiltersContentProps {
@@ -64,6 +65,13 @@ export function RealEstateFiltersContent({ children }: RealEstateFiltersContentP
             isBelowMinZoom={realEstate.isBelowMinZoom}
             error={realEstate.error}
           />
+          {/* Data Sources Panel */}
+          <div className="mt-3">
+            <DataSourcesPanel
+              enabledSources={realEstate.dataSources}
+              onSourcesChange={realEstate.setDataSources}
+            />
+          </div>
           {children}
         </>
       )}

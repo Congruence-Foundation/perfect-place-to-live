@@ -46,4 +46,7 @@ export {
   CLICK_FETCH_LIMIT,
   BACKGROUND_FETCH_LIMIT,
   POPUP_EVENT_LISTENER_DELAY,
+  DEFAULT_RENT_PRICE,
+  DEFAULT_SELL_PRICE,
+  getDefaultPriceRange,
 } from './constants';

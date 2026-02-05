@@ -3,13 +3,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import MapContainer, { MapContainerRef } from '@/components/Map/MapContainer';
-import { WeightSliders, CitySearch, ProfileSelector, MapSettings, DebugInfo, AppInfo, LanguageSwitcher, BottomSheet, ExtensionsSidebar, RefreshButton } from '@/components/Controls';
-import { Button } from '@/components/ui/button';
-import { InfoTooltip } from '@/components/ui/info-tooltip';
-import { DEFAULT_FACTORS, applyProfile, FACTOR_PROFILES } from '@/config/factors';
+import { CitySearch, MapSettings, DebugInfo, AppInfo, LanguageSwitcher, BottomSheet, RefreshButton, DesktopControlPanel } from '@/components/Controls';
+import { DEFAULT_FACTORS, applyProfile } from '@/config/factors';
 import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource, HeatmapSettings } from '@/types';
 import { useHeatmapTiles, useIsMobile, useNotification, useDebounce } from '@/hooks';
-import { Loader2, ChevronLeft, ChevronRight, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Toast } from '@/components/ui/toast';
 import { useMapStore } from '@/stores/mapStore';
 import { ExtensionControllers } from '@/components/ExtensionControllers';
@@ -83,7 +81,6 @@ function HomeContent({
 }: HomeContentProps) {
   const tApp = useTranslations('app');
   const tControls = useTranslations('controls');
-  const tProfiles = useTranslations('profiles');
 
   const isMobile = useIsMobile();
   
@@ -110,10 +107,13 @@ function HomeContent({
   });
 
   // Track bottom sheet height for mobile loading overlay positioning
-  const [bottomSheetHeight, setBottomSheetHeight] = useState(() => {
-    if (typeof window === 'undefined') return UI_CONFIG.DEFAULT_BOTTOM_SHEET_HEIGHT;
-    return window.innerHeight * UI_CONFIG.BOTTOM_SHEET_HEIGHT_RATIO;
-  });
+  // Use fallback value initially to avoid SSR hydration mismatch
+  const [bottomSheetHeight, setBottomSheetHeight] = useState<number>(UI_CONFIG.DEFAULT_BOTTOM_SHEET_HEIGHT);
+  
+  // Update to actual window height after mount
+  useEffect(() => {
+    setBottomSheetHeight(window.innerHeight * UI_CONFIG.BOTTOM_SHEET_HEIGHT_RATIO);
+  }, []);
 
   const mapRef = useRef<MapContainerRef>(null);
   const { notification, showNotification } = useNotification();
@@ -283,8 +283,6 @@ function HomeContent({
 
   const panelWidth = isPanelOpen && !isMobile ? UI_CONFIG.PANEL_WIDTH : 0;
 
-  const currentProfile = FACTOR_PROFILES.find(p => p.id === selectedProfile);
-
   return (
     <main className="h-screen w-screen flex overflow-hidden relative">
       {/* Search Box - Floating on top center */}
@@ -305,91 +303,19 @@ function HomeContent({
         <CitySearch onCitySelect={handleCitySelect} isMobile={isMobile} />
       </div>
 
-      {/* Desktop: Control Panel - Clean, borderless design */}
+      {/* Desktop: Control Panel */}
       {!isMobile && (
-        <div
-          className={`${
-            isPanelOpen ? 'w-80' : 'w-0'
-          } transition-all duration-300 flex-shrink-0 overflow-hidden bg-background/95 backdrop-blur-sm relative`}
-          style={{ zIndex: Z_INDEX.CONTROL_PANEL }}
-        >
-          <div className="w-80 h-full overflow-y-auto scrollbar-hidden">
-            {/* Header */}
-            <div className="px-5 pt-5 pb-4 flex items-center gap-2">
-              <h1 className="text-xl font-semibold tracking-tight">{tApp('title')}</h1>
-              <InfoTooltip>
-                <p className="text-xs">{tApp('description')}</p>
-              </InfoTooltip>
-            </div>
-
-            {/* Profiles Section */}
-            <div className="px-5 pb-3">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{tControls('profile')}</span>
-              </div>
-              <ProfileSelector
-                selectedProfile={selectedProfile}
-                onProfileSelect={handleProfileSelect}
-              />
-              {currentProfile && (
-                <p className="text-xs text-muted-foreground mt-2 text-center">
-                  {tProfiles(`${currentProfile.id}.description`)}
-                </p>
-              )}
-            </div>
-
-            {/* Factors Section - Collapsible */}
-            <div className="px-5 pb-4">
-              <div className={`rounded-xl bg-muted/50 transition-colors ${isFactorsExpanded ? '' : 'hover:bg-muted'}`}>
-                {/* Header - always visible */}
-                <div className="flex items-center justify-between p-3">
-                  <button
-                    onClick={() => setIsFactorsExpanded(!isFactorsExpanded)}
-                    className="flex items-center gap-3 flex-1"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-background flex items-center justify-center shadow-sm">
-                      <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="text-left">
-                      <span className="text-sm font-medium block">{tControls('factors')}</span>
-                      <span className="text-xs text-muted-foreground">{tControls('active', { count: enabledFactorCount })}</span>
-                    </div>
-                  </button>
-                  <div className="flex items-center gap-1">
-                    {isFactorsExpanded && (
-                      <Button variant="ghost" size="sm" onClick={handleResetFactors} className="h-7 px-2 text-xs animate-in fade-in slide-in-from-right-2 duration-200">
-                        <RotateCcw className="h-3 w-3 mr-1" />
-                        {tControls('reset')}
-                      </Button>
-                    )}
-                    <button
-                      onClick={() => setIsFactorsExpanded(!isFactorsExpanded)}
-                      className="p-1 hover:bg-background/50 rounded transition-colors"
-                    >
-                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isFactorsExpanded ? 'rotate-180' : ''}`} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Expanded content - inside the panel */}
-                {isFactorsExpanded && (
-                  <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="border-t border-background/50 pt-3">
-                      {/* Factor Sliders */}
-                      <WeightSliders factors={factors} onFactorChange={handleFactorChange} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="mx-5 border-t" />
-
-            {/* Extensions Section */}
-            <ExtensionsSidebar />
-          </div>
-        </div>
+        <DesktopControlPanel
+          isPanelOpen={isPanelOpen}
+          factors={factors}
+          selectedProfile={selectedProfile}
+          isFactorsExpanded={isFactorsExpanded}
+          enabledFactorCount={enabledFactorCount}
+          onFactorChange={handleFactorChange}
+          onProfileSelect={handleProfileSelect}
+          onResetFactors={handleResetFactors}
+          onToggleFactorsExpanded={() => setIsFactorsExpanded(!isFactorsExpanded)}
+        />
       )}
 
       {/* Desktop: Collapse/Expand Toggle */}

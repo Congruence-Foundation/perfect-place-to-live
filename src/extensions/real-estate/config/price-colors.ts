@@ -19,8 +19,9 @@ const NO_DATA_COLOR = '#9ca3af';
 /**
  * Price category theme configuration
  * Each category has a primary color (for icons/glow) and a background color (for badges)
+ * Internal constant - used to derive PRICE_CATEGORY_COLORS and PRICE_BADGE_COLORS
  */
-export const PRICE_CATEGORY_THEME: Record<PriceCategory, { primary: string; bg: string }> = {
+const PRICE_CATEGORY_THEME: Record<PriceCategory, { primary: string; bg: string }> = {
   great_deal: { primary: '#16a34a', bg: '#f0fdf4' },  // Green-600 / Green-50
   good_deal: { primary: '#22c55e', bg: '#f0fdf4' },   // Green-500 / Green-50
   fair: { primary: '#3b82f6', bg: '#eff6ff' },        // Blue-500 / Blue-50

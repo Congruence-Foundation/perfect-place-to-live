@@ -4,8 +4,9 @@ import { CACHE_CONFIG } from '@/constants/performance';
 // In-memory cache for development/fallback
 const memoryCache = new Map<string, { data: unknown; expiresAt: number }>();
 
-// Lazy-initialize Redis client
+// Lazy-initialize Redis client with proper singleton pattern
 let redis: Redis | null = null;
+let redisInitializing = false;
 
 /**
  * Check if Upstash Redis is available
@@ -16,6 +17,7 @@ function isRedisAvailable(): boolean {
 
 /**
  * Get Redis client (lazy initialization with race condition protection)
+ * Uses a flag to prevent multiple concurrent initializations
  */
 function getRedis(): Redis | null {
   if (!isRedisAvailable()) return null;
@@ -23,11 +25,27 @@ function getRedis(): Redis | null {
   // Return existing client if already initialized
   if (redis) return redis;
   
-  // Synchronous initialization (safe because Redis constructor is synchronous)
-  redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-  });
+  // Prevent concurrent initialization attempts
+  if (redisInitializing) {
+    // Another call is initializing, return null for this request
+    // The next request will get the initialized client
+    return null;
+  }
+  
+  // Mark as initializing to prevent race conditions
+  redisInitializing = true;
+  
+  try {
+    // Double-check after acquiring the "lock"
+    if (!redis) {
+      redis = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL!,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+      });
+    }
+  } finally {
+    redisInitializing = false;
+  }
   
   return redis;
 }

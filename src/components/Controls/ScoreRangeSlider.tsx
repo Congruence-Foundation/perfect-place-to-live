@@ -18,7 +18,7 @@ interface ScoreRangeSliderProps {
  * Left side (0) = Poor location (red)
  * Right side (100) = Excellent location (green)
  */
-export default function ScoreRangeSlider({
+export function ScoreRangeSlider({
   value,
   onChange,
   className,

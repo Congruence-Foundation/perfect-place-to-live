@@ -3,15 +3,17 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import type { HeatmapPoint, ClusterPriceAnalysisMode } from '@/types';
 import type {
-  EnrichedProperty,
-  PropertyCluster,
   PropertyFilters,
   ClusterPriceDisplay,
-  OtodomProperty,
-  ClusterPropertiesResponse,
-  PriceCategory,
-  EstateType,
 } from '../types';
+import type {
+  UnifiedProperty,
+  UnifiedCluster,
+  EnrichedUnifiedProperty,
+  PriceCategory,
+  UnifiedEstateType,
+} from '../lib/shared';
+import type { ClusterAnalysisMap } from '../lib/price-analysis';
 import { generatePropertyMarkerHtml, getPropertyMarkerClassName } from '../lib';
 import {
   generateClusterPriceLabel,
@@ -53,35 +55,40 @@ interface MarkerContext {
   L: typeof import('leaflet');
   map: L.Map;
   layerGroup: L.LayerGroup;
-  propertyMarkersRef: React.MutableRefObject<Map<number, L.Marker>>;
+  propertyMarkersRef: React.MutableRefObject<Map<string, L.Marker>>;
   clusterMarkersRef: React.MutableRefObject<Map<string, L.Marker>>;
-  clusterPopupDataRef: React.MutableRefObject<Map<string, EnrichedProperty[]>>;
+  clusterPopupDataRef: React.MutableRefObject<Map<string, EnrichedUnifiedProperty[]>>;
   clusterUpdateLockRef: React.MutableRefObject<Set<string>>;
   currentClusterRequestRef: React.MutableRefObject<string | null>;
+  abortControllerRef: React.MutableRefObject<AbortController | null>;
 }
 
 /** Options for updating property markers */
 interface PropertyMarkerOptions {
-  properties: EnrichedProperty[];
+  properties: EnrichedUnifiedProperty[];
+  clusterPriceAnalysis: ClusterPriceAnalysisMode;
   createPropertyIcon: (
-    estateType: EstateType,
+    estateType: UnifiedEstateType,
     priceCategory?: PriceCategory,
-    price?: number
+    price?: number | null
   ) => L.DivIcon | null;
 }
 
 /** Options for updating cluster markers */
 interface ClusterMarkerOptions {
-  clusters: PropertyCluster[];
-  properties: EnrichedProperty[];
+  clusters: UnifiedCluster[];
+  properties: EnrichedUnifiedProperty[];
+  /** All enriched properties (including cluster properties) for enrichment lookup */
+  allEnrichedProperties: EnrichedUnifiedProperty[];
   filters: PropertyFilters;
   clusterPriceDisplay: ClusterPriceDisplay;
   clusterPriceAnalysis: ClusterPriceAnalysisMode;
   detailedModeThreshold: number;
   heatmapPoints: HeatmapPoint[];
   gridCellSize: number;
-  clusterPropertiesCache: Map<string, OtodomProperty[]>;
-  onClusterPropertiesFetched: (clusterId: string, properties: OtodomProperty[]) => void;
+  clusterPropertiesCache: Map<string, UnifiedProperty[]>;
+  clusterAnalysisData: ClusterAnalysisMap;
+  onClusterPropertiesFetched: (clusterId: string, properties: UnifiedProperty[]) => void;
   /** Translations for error messages */
   translations: {
     noOffersFound: string;
@@ -97,7 +104,7 @@ interface ClusterMarkerOptions {
  * Build request body for cluster properties API
  */
 function buildClusterFetchBody(
-  cluster: PropertyCluster,
+  cluster: UnifiedCluster,
   filters: PropertyFilters,
   limit: number
 ): object {
@@ -110,6 +117,10 @@ function buildClusterFetchBody(
     shape: cluster.shape,
     radius: cluster.radiusInMeters || DEFAULT_CLUSTER_RADIUS,
     estateType: cluster.estateType,
+    source: cluster.source,
+    // Gratka-specific: pass URL and bounds for efficient cluster fetching
+    clusterUrl: cluster.url,
+    clusterBounds: cluster.bounds,
   };
 }
 
@@ -121,7 +132,7 @@ function attachPopupNavigationListeners(
   currentPropertyIndex: { value: number },
   currentImageIndex: { value: number },
   fetchedCount: number,
-  props: EnrichedProperty[],
+  props: EnrichedUnifiedProperty[],
   updatePopup: () => void
 ): void {
   const prevBtn = document.getElementById(`${clusterId}-prev`);
@@ -185,33 +196,56 @@ function attachPopupNavigationListeners(
 function updatePropertyMarkers(
   ctx: MarkerContext,
   options: PropertyMarkerOptions
-): Set<number> {
+): Set<string> {
   const { L, map, layerGroup, propertyMarkersRef } = ctx;
-  const { properties, createPropertyIcon } = options;
+  const { properties, clusterPriceAnalysis, createPropertyIcon } = options;
   
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealEstateMarkers.ts:updatePropertyMarkers',message:'Updating property markers',data:{totalProperties:properties.length,gratkaProperties:properties.filter(p=>p.source==='gratka').length,otodomProperties:properties.filter(p=>p.source==='otodom').length,sampleGratka:properties.filter(p=>p.source==='gratka').slice(0,2).map(p=>({id:p.id,lat:p.lat,lng:p.lng,hasCoords:p.lat!==0&&p.lng!==0}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
+
   const stopPropertyMarkersTimer = createTimer('markers:property-markers');
-  const currentPropertyIds = new Set<number>();
+  const currentPropertyIds = new Set<string>();
   let newPropertyMarkers = 0;
+  let skippedNoIcon = 0;
+  let updatedPropertyMarkers = 0;
 
   for (const property of properties) {
     currentPropertyIds.add(property.id);
 
-    // Skip if marker already exists
-    if (propertyMarkersRef.current.has(property.id)) {
+    // Only show price category glow if price analysis is enabled (not 'off')
+    const priceCategory = clusterPriceAnalysis !== 'off' ? property.priceAnalysis?.priceCategory : undefined;
+
+    // Check if marker already exists
+    const existingMarker = propertyMarkersRef.current.get(property.id);
+    if (existingMarker) {
+      // Update existing marker's icon to reflect current price analysis mode
+      const icon = createPropertyIcon(
+        property.estateType,
+        priceCategory,
+        property.price
+      );
+      if (icon) {
+        existingMarker.setIcon(icon);
+        updatedPropertyMarkers++;
+      }
       continue;
     }
 
     newPropertyMarkers++;
     const galleryId = `gallery-${property.id}`;
     const popupContent = generatePropertyPopupHtml(property, galleryId);
-
+    
     const icon = createPropertyIcon(
-      property.estate,
-      property.priceAnalysis?.priceCategory,
-      property.hidePrice ? undefined : property.totalPrice.value
+      property.estateType,
+      priceCategory,
+      property.price
     );
 
-    if (!icon) continue;
+    if (!icon) {
+      skippedNoIcon++;
+      continue;
+    }
 
     const marker = L.marker([property.lat, property.lng], { icon });
 
@@ -244,6 +278,7 @@ function updatePropertyMarkers(
   
   stopPropertyMarkersTimer({ 
     new: newPropertyMarkers, 
+    updated: updatedPropertyMarkers,
     removed: removedPropertyMarkers, 
     total: propertyMarkersRef.current.size 
   });
@@ -256,18 +291,19 @@ function updatePropertyMarkers(
  */
 async function fetchClusterPropertiesBackground(
   ctx: MarkerContext,
-  cluster: PropertyCluster,
+  cluster: UnifiedCluster,
   clusterId: string,
   clusterMarker: L.Marker,
   options: ClusterMarkerOptions
 ): Promise<void> {
-  const { clusterUpdateLockRef, clusterMarkersRef } = ctx;
+  const { clusterUpdateLockRef, clusterMarkersRef, abortControllerRef } = ctx;
   const { 
     filters, 
     properties, 
     heatmapPoints, 
     gridCellSize, 
     clusterPriceDisplay,
+    clusterPriceAnalysis,
     onClusterPropertiesFetched 
   } = options;
 
@@ -275,36 +311,58 @@ async function fetchClusterPropertiesBackground(
   if (clusterUpdateLockRef.current.has(clusterId)) return;
   clusterUpdateLockRef.current.add(clusterId);
 
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealEstateMarkers.ts:fetchClusterPropertiesBackground',message:'Starting background fetch',data:{clusterId,source:cluster.source,hasUrl:!!cluster.url,hasBounds:!!cluster.bounds,count:cluster.count,heatmapPointsCount:heatmapPoints.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'1,2,4'})}).catch(()=>{});
+  // #endregion
+
   try {
     const response = await fetch('/api/properties/cluster', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildClusterFetchBody(cluster, filters, BACKGROUND_FETCH_LIMIT)),
+      signal: abortControllerRef.current?.signal,
     });
 
     if (!response.ok) return;
 
-    const data: ClusterPropertiesResponse = await response.json();
+    const data = await response.json() as { properties: UnifiedProperty[]; totalCount: number };
     if (data.properties.length === 0) return;
+
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealEstateMarkers.ts:fetchClusterPropertiesBackground:result',message:'Cluster properties fetched',data:{clusterId,source:cluster.source,propertiesCount:data.properties.length,firstProperty:data.properties[0]?{id:data.properties[0].id,price:data.properties[0].price,pricePerMeter:data.properties[0].pricePerMeter,area:data.properties[0].area,lat:data.properties[0].lat,lng:data.properties[0].lng}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'2,3,5'})}).catch(()=>{});
+    // #endregion
 
     onClusterPropertiesFetched(clusterId, data.properties);
 
-    const enrichedFetchedProps = enrichClusterProperties(
-      data.properties,
-      properties,
-      heatmapPoints,
-      gridCellSize
-    );
-    const validPrices = getValidPrices(data.properties);
-    const newPriceLabel = generateClusterPriceLabel(validPrices, clusterPriceDisplay);
-    const { minCategory: newMin, maxCategory: newMax } = getClusterPriceCategories(enrichedFetchedProps);
+    // Only update icon with glow if price analysis is enabled
+    if (clusterPriceAnalysis !== 'off') {
+      const enrichedFetchedProps = enrichClusterProperties(
+        data.properties,
+        properties,
+        heatmapPoints,
+        gridCellSize
+      );
 
-    const newIcon = createClusterDivIcon(ctx.L, cluster.count, newPriceLabel, newMin, newMax);
+      const validPrices = getValidPrices(data.properties);
+      const newPriceLabel = generateClusterPriceLabel(validPrices, clusterPriceDisplay);
+      const { minCategory: newMin, maxCategory: newMax } = getClusterPriceCategories(enrichedFetchedProps);
 
-    if (clusterMarkersRef.current.has(clusterId)) {
-      clusterMarker.setIcon(newIcon);
+      // #region agent log
+      const enrichedWithAnalysis = enrichedFetchedProps.filter(p => p.priceAnalysis && p.priceAnalysis.priceCategory !== 'no_data');
+      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealEstateMarkers.ts:fetchClusterPropertiesBackground:enriched',message:'Cluster properties enriched',data:{clusterId,source:cluster.source,totalEnriched:enrichedFetchedProps.length,withPriceAnalysis:enrichedWithAnalysis.length,heatmapPointsCount:heatmapPoints.length,gridCellSize,newMin,newMax,willShowGlow:!!(newMin||newMax),firstEnriched:enrichedFetchedProps[0]?{id:enrichedFetchedProps[0].id,priceAnalysis:enrichedFetchedProps[0].priceAnalysis}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3-background-fetch'})}).catch(()=>{});
+      // #endregion
+
+      const newIcon = createClusterDivIcon(ctx.L, cluster.count, newPriceLabel, newMin, newMax);
+
+      // Update the current marker from the ref (not the passed marker, which may be stale if the marker was recreated)
+      const currentMarker = clusterMarkersRef.current.get(clusterId);
+      if (currentMarker) {
+        currentMarker.setIcon(newIcon);
+      }
     }
   } catch (error) {
+    // Ignore abort errors - they're expected on unmount
+    if (error instanceof Error && error.name === 'AbortError') return;
     // Log background fetch errors for debugging
     console.warn('Background cluster fetch failed:', clusterId, error);
   } finally {
@@ -317,15 +375,15 @@ async function fetchClusterPropertiesBackground(
  */
 async function handleClusterClick(
   ctx: MarkerContext,
-  cluster: PropertyCluster,
+  cluster: UnifiedCluster,
   clusterId: string,
   clusterMarker: L.Marker,
   options: ClusterMarkerOptions
 ): Promise<void> {
-  const { L, map, clusterMarkersRef, propertyMarkersRef, clusterPopupDataRef, clusterUpdateLockRef, currentClusterRequestRef } = ctx;
+  const { L, map, clusterMarkersRef, propertyMarkersRef, clusterPopupDataRef, clusterUpdateLockRef, currentClusterRequestRef, abortControllerRef } = ctx;
   const { 
     filters, 
-    properties, 
+    allEnrichedProperties, 
     heatmapPoints, 
     gridCellSize, 
     clusterPriceDisplay,
@@ -361,6 +419,7 @@ async function handleClusterClick(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildClusterFetchBody(cluster, filters, CLICK_FETCH_LIMIT)),
+      signal: abortControllerRef.current?.signal,
     });
 
     // Check if this is still the current request (prevent stale updates)
@@ -373,7 +432,7 @@ async function handleClusterClick(
       throw new Error(errorData.error || `Failed to fetch properties (${response.status})`);
     }
 
-    const data: ClusterPropertiesResponse = await response.json();
+    const data = await response.json() as { properties: UnifiedProperty[]; totalCount: number };
 
     // Check again after parsing response
     if (currentClusterRequestRef.current !== requestId) {
@@ -387,18 +446,32 @@ async function handleClusterClick(
 
     onClusterPropertiesFetched(clusterId, data.properties);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealEstateMarkers.ts:handleClusterClick:beforeEnrich',message:'Before enrichClusterProperties',data:{clusterId,fetchedPropsCount:data.properties.length,allEnrichedPropsCount:allEnrichedProperties.length,sampleFetchedId:data.properties[0]?.id,sampleAllEnrichedId:allEnrichedProperties[0]?.id,allEnrichedWithAnalysis:allEnrichedProperties.filter(p=>p.priceAnalysis&&p.priceAnalysis.priceCategory!=='no_data').length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2'})}).catch(()=>{});
+    // #endregion
+
     const enrichedClusterProps = enrichClusterProperties(
       data.properties,
-      properties,
+      allEnrichedProperties,
       heatmapPoints,
       gridCellSize
     );
+
+    // #region agent log
+    const enrichedWithAnalysis = enrichedClusterProps.filter(p => p.priceAnalysis && p.priceAnalysis.priceCategory !== 'no_data');
+    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealEstateMarkers.ts:handleClusterClick:afterEnrich',message:'After enrichClusterProperties',data:{clusterId,enrichedCount:enrichedClusterProps.length,withAnalysisCount:enrichedWithAnalysis.length,sampleEnriched:enrichedClusterProps[0]?{id:enrichedClusterProps[0].id,hasPriceAnalysis:!!enrichedClusterProps[0].priceAnalysis,priceCategory:enrichedClusterProps[0].priceAnalysis?.priceCategory}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H4'})}).catch(()=>{});
+    // #endregion
 
     // Update cluster icon
     if (clusterPriceAnalysis !== 'off') {
       const validPrices = getValidPrices(enrichedClusterProps);
       const newPriceLabel = generateClusterPriceLabel(validPrices, clusterPriceDisplay);
       const { minCategory, maxCategory } = getClusterPriceCategories(enrichedClusterProps);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealEstateMarkers.ts:handleClusterClick:glowCategories',message:'Glow categories computed',data:{clusterId,minCategory,maxCategory,validPricesCount:validPrices.length,newPriceLabel,willHaveGlow:!!(minCategory||maxCategory)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+      // #endregion
+      
       const newIcon = createClusterDivIcon(L, cluster.count, newPriceLabel, minCategory, maxCategory);
       clusterMarker.setIcon(newIcon);
     }
@@ -442,6 +515,8 @@ async function handleClusterClick(
 
     updatePopup();
   } catch (error) {
+    // Ignore abort errors - they're expected on unmount
+    if (error instanceof Error && error.name === 'AbortError') return;
     // Only show error if this is still the current request
     if (currentClusterRequestRef.current === requestId) {
       console.error('Error fetching cluster properties:', error);
@@ -468,19 +543,65 @@ function updateClusterMarkers(
     clusterPriceDisplay, 
     clusterPriceAnalysis, 
     detailedModeThreshold,
-    clusterPropertiesCache 
+    clusterPropertiesCache,
+    clusterAnalysisData,
   } = options;
 
   const stopClusterMarkersTimer = createTimer('markers:cluster-markers');
   const currentClusterIds = new Set<string>();
   let newClusterMarkers = 0;
 
+  // Track which markers need icon updates (existing markers with new cache data)
+  let updatedClusterMarkers = 0;
+
   for (const cluster of clusters) {
     const clusterId = createClusterId(cluster.lat, cluster.lng);
     currentClusterIds.add(clusterId);
 
-    // Skip if marker already exists
-    if (clusterMarkersRef.current.has(clusterId)) {
+    const cachedClusterProps = clusterPropertiesCache.get(clusterId);
+    const useDetailedMode = clusterPriceAnalysis === 'detailed' && cluster.count <= detailedModeThreshold;
+    const existingMarker = clusterMarkersRef.current.get(clusterId);
+
+    // If marker already exists, check if we need to update its icon
+    if (existingMarker) {
+      // Update existing marker if we're in detailed mode and have cached props
+      if (useDetailedMode && cachedClusterProps && cachedClusterProps.length > 0) {
+        let priceLabel = '';
+        let minCategory: PriceCategory | null = null;
+        let maxCategory: PriceCategory | null = null;
+
+        // Get price label from cached props
+        const validPrices = getValidPrices(cachedClusterProps);
+        priceLabel = generateClusterPriceLabel(validPrices, clusterPriceDisplay);
+
+        // Get glow categories from analysis data or enriched props
+        // (useDetailedMode already ensures clusterPriceAnalysis === 'detailed')
+        const analysisData = clusterAnalysisData?.get(clusterId);
+        if (analysisData && analysisData.propertyCount > 0) {
+          minCategory = analysisData.minCategory;
+          maxCategory = analysisData.maxCategory;
+        } else {
+          // Fallback: compute from enriched cached props
+          const enrichedPropsMap = new Map<string, EnrichedUnifiedProperty>();
+          for (const p of properties) {
+            enrichedPropsMap.set(p.id, p);
+          }
+          const enrichedCachedProps = cachedClusterProps
+            .map(p => enrichedPropsMap.get(p.id))
+            .filter((p): p is EnrichedUnifiedProperty => !!p && !!p.priceAnalysis);
+
+          if (enrichedCachedProps.length > 0) {
+            const result = getClusterPriceCategories(enrichedCachedProps);
+            minCategory = result.minCategory;
+            maxCategory = result.maxCategory;
+          }
+        }
+
+        // Update the marker icon
+        const newIcon = createClusterDivIcon(L, cluster.count, priceLabel, minCategory, maxCategory);
+        existingMarker.setIcon(newIcon);
+        updatedClusterMarkers++;
+      }
       continue;
     }
 
@@ -491,20 +612,34 @@ function updateClusterMarkers(
     let initialMinCategory: PriceCategory | null = null;
     let initialMaxCategory: PriceCategory | null = null;
 
-    const cachedClusterProps = clusterPropertiesCache.get(clusterId);
-    const useDetailedMode = clusterPriceAnalysis === 'detailed' && cluster.count <= detailedModeThreshold;
+    // For detailed mode, use pre-computed cluster analysis data for immediate glow
+    // For simplified mode, glow only appears after clicking on the cluster
+    if (useDetailedMode && clusterAnalysisData) {
+      const analysisData = clusterAnalysisData.get(clusterId);
+      if (analysisData && analysisData.propertyCount > 0) {
+        initialMinCategory = analysisData.minCategory;
+        initialMaxCategory = analysisData.maxCategory;
+      }
+    }
 
+    // #region agent log
+    const analysisData = clusterAnalysisData?.get(clusterId);
+    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRealEstateMarkers.ts:updateClusterMarkers',message:'Creating cluster marker',data:{clusterId,clusterSource:cluster.source,clusterCount:cluster.count,clusterPriceAnalysis,useDetailedMode,hasCachedProps:!!cachedClusterProps,cachedPropsCount:cachedClusterProps?.length||0,hasClusterAnalysisData:!!clusterAnalysisData,hasAnalysisData:!!analysisData,analysisPropertyCount:analysisData?.propertyCount,analysisMinCat:analysisData?.minCategory,analysisMaxCat:analysisData?.maxCategory,initialMinCategory,initialMaxCategory,willShowGlow:!!(initialMinCategory||initialMaxCategory)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-cross-source'})}).catch(()=>{});
+    // #endregion
+
+    // For detailed mode with cached props, also compute price label
     if (useDetailedMode && cachedClusterProps && cachedClusterProps.length > 0) {
       const validPrices = getValidPrices(cachedClusterProps);
       initialPriceLabel = generateClusterPriceLabel(validPrices, clusterPriceDisplay);
 
-      const enrichedPropsMap = new Map<number, EnrichedProperty>();
+      // If we have cached props with enriched data, use those for more accurate categories
+      const enrichedPropsMap = new Map<string, EnrichedUnifiedProperty>();
       for (const p of properties) {
         enrichedPropsMap.set(p.id, p);
       }
       const enrichedCachedProps = cachedClusterProps
         .map(p => enrichedPropsMap.get(p.id))
-        .filter((p): p is EnrichedProperty => !!p && !!p.priceAnalysis);
+        .filter((p): p is EnrichedUnifiedProperty => !!p && !!p.priceAnalysis);
 
       if (enrichedCachedProps.length > 0) {
         const result = getClusterPriceCategories(enrichedCachedProps);
@@ -556,6 +691,7 @@ function updateClusterMarkers(
   
   stopClusterMarkersTimer({ 
     new: newClusterMarkers, 
+    updated: updatedClusterMarkers,
     removed: removedClusterMarkers, 
     total: clusterMarkersRef.current.size 
   });
@@ -574,10 +710,12 @@ export interface UseRealEstateMarkersOptions {
   map: L.Map | null;
   /** Layer group for markers */
   layerGroup: L.LayerGroup | null;
-  /** Properties to display */
-  properties: EnrichedProperty[];
+  /** Properties to display (standalone only, for rendering markers) */
+  properties: EnrichedUnifiedProperty[];
+  /** All enriched properties (including cluster properties) for enrichment lookup */
+  allEnrichedProperties: EnrichedUnifiedProperty[];
   /** Property clusters to display */
-  clusters: PropertyCluster[];
+  clusters: UnifiedCluster[];
   /** Whether to show markers */
   enabled: boolean;
   /** Property filters for API calls */
@@ -593,9 +731,11 @@ export interface UseRealEstateMarkersOptions {
   /** Grid cell size */
   gridCellSize: number;
   /** Cluster properties cache */
-  clusterPropertiesCache: Map<string, OtodomProperty[]>;
+  clusterPropertiesCache: Map<string, UnifiedProperty[]>;
+  /** Pre-computed cluster analysis data from controller (optional, may be undefined during initial render) */
+  clusterAnalysisData?: ClusterAnalysisMap;
   /** Callback when cluster properties are fetched */
-  onClusterPropertiesFetched: (clusterId: string, properties: OtodomProperty[]) => void;
+  onClusterPropertiesFetched: (clusterId: string, properties: UnifiedProperty[]) => void;
   /** Translations for error messages */
   translations: {
     noOffersFound: string;
@@ -612,6 +752,7 @@ export function useRealEstateMarkers({
   map,
   layerGroup,
   properties,
+  allEnrichedProperties,
   clusters,
   enabled,
   filters,
@@ -621,15 +762,16 @@ export function useRealEstateMarkers({
   heatmapPoints,
   gridCellSize,
   clusterPropertiesCache,
+  clusterAnalysisData,
   onClusterPropertiesFetched,
   translations,
 }: UseRealEstateMarkersOptions) {
   // Refs for tracking markers
-  const propertyMarkersRef = useRef<Map<number, L.Marker>>(new Map());
+  const propertyMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const clusterMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   
   // Ref for storing cluster popup data (replaces window object storage)
-  const clusterPopupDataRef = useRef<Map<string, EnrichedProperty[]>>(new Map());
+  const clusterPopupDataRef = useRef<Map<string, EnrichedUnifiedProperty[]>>(new Map());
   
   // Track previous analysis mode to detect changes
   const prevClusterPriceAnalysisRef = useRef(clusterPriceAnalysis);
@@ -643,12 +785,15 @@ export function useRealEstateMarkers({
   
   // Track cluster icon update locks to prevent background/click fetch races
   const clusterUpdateLockRef = useRef<Set<string>>(new Set());
+  
+  // AbortController for cancelling in-flight fetch requests on unmount
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Create property icon
   const createPropertyIcon = useCallback((
-    estateType: EstateType,
+    estateType: UnifiedEstateType,
     priceCategory?: PriceCategory,
-    price?: number
+    price?: number | null
   ) => {
     if (!L) return null;
     return L.divIcon({
@@ -667,11 +812,23 @@ export function useRealEstateMarkers({
       prevDetailedModeThresholdRef.current !== detailedModeThreshold
     ) {
       // Only clear if layerGroup is available
-      if (layerGroup && clusterMarkersRef.current.size > 0) {
-        clusterMarkersRef.current.forEach((marker) => {
-          layerGroup.removeLayer(marker);
-        });
-        clusterMarkersRef.current.clear();
+      if (layerGroup) {
+        // Clear cluster markers
+        if (clusterMarkersRef.current.size > 0) {
+          clusterMarkersRef.current.forEach((marker) => {
+            layerGroup.removeLayer(marker);
+          });
+          clusterMarkersRef.current.clear();
+        }
+        
+        // Also clear property markers when analysis mode changes
+        // This ensures property glow is updated when switching to/from 'off' mode
+        if (propertyMarkersRef.current.size > 0) {
+          propertyMarkersRef.current.forEach((marker) => {
+            layerGroup.removeLayer(marker);
+          });
+          propertyMarkersRef.current.clear();
+        }
       }
       
       prevClusterPriceAnalysisRef.current = clusterPriceAnalysis;
@@ -703,6 +860,9 @@ export function useRealEstateMarkers({
   useEffect(() => {
     if (!L || !map || !layerGroup) return;
 
+    // Create new AbortController for this effect cycle
+    abortControllerRef.current = new AbortController();
+
     const updateMarkers = () => {
       const stopUpdateTimer = createTimer('markers:update-total');
       
@@ -727,11 +887,13 @@ export function useRealEstateMarkers({
         clusterPopupDataRef,
         clusterUpdateLockRef,
         currentClusterRequestRef,
+        abortControllerRef,
       };
 
       // Update property markers
       updatePropertyMarkers(ctx, {
         properties,
+        clusterPriceAnalysis,
         createPropertyIcon,
       });
 
@@ -739,6 +901,7 @@ export function useRealEstateMarkers({
       const clusterOptions: ClusterMarkerOptions = {
         clusters,
         properties,
+        allEnrichedProperties,
         filters,
         clusterPriceDisplay,
         clusterPriceAnalysis,
@@ -746,6 +909,7 @@ export function useRealEstateMarkers({
         heatmapPoints,
         gridCellSize,
         clusterPropertiesCache,
+        clusterAnalysisData: clusterAnalysisData ?? new Map(),
         onClusterPropertiesFetched,
         translations,
       };
@@ -758,11 +922,17 @@ export function useRealEstateMarkers({
     };
 
     updateMarkers();
+
+    // Cleanup: abort any in-flight requests when effect re-runs or unmounts
+    return () => {
+      abortControllerRef.current?.abort();
+    };
   }, [
     L,
     map,
     layerGroup,
     properties,
+    allEnrichedProperties,
     clusters,
     enabled,
     filters,
@@ -771,8 +941,8 @@ export function useRealEstateMarkers({
     detailedModeThreshold,
     heatmapPoints,
     gridCellSize,
-    // Note: clusterPropertiesCache is a ref, so we don't include it here
-    // The cache is read inside the effect but doesn't trigger re-runs
+    clusterAnalysisData,
+    clusterPropertiesCache,
     onClusterPropertiesFetched,
     createPropertyIcon,
     translations,

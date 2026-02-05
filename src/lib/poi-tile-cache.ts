@@ -184,6 +184,21 @@ async function fetchAndCacheUncached(
   // Single batched fetch for all tiles and factors
   const fetchedData = await fetchPOIsBatched(uniqueTiles, uniqueFactors, dataSource);
 
+  // Check if we got any POIs at all
+  let totalPOIs = 0;
+  for (const tileData of fetchedData.values()) {
+    for (const pois of Object.values(tileData)) {
+      totalPOIs += pois.length;
+    }
+  }
+  
+  // If no POIs were fetched, don't cache empty results
+  // This allows future requests to retry fetching
+  const shouldCache = totalPOIs > 0;
+  if (!shouldCache) {
+    console.log(`[POI-Cache] Skipping cache - no POIs fetched for ${uniqueTiles.length} tiles, ${uniqueFactors.length} factors`);
+  }
+
   // Populate caches and add to result (parallel cache writes)
   const cachePromises: Promise<void>[] = [];
   for (const item of uncached) {
@@ -191,8 +206,10 @@ async function fetchAndCacheUncached(
     const tileData = fetchedData.get(tileKey);
     const pois = tileData?.[item.factor.id] || [];
 
-    // Cache the result (async)
-    cachePromises.push(poiTileCache.set(item.cacheKey, pois));
+    // Only cache if we got POIs (don't cache empty results)
+    if (shouldCache) {
+      cachePromises.push(poiTileCache.set(item.cacheKey, pois));
+    }
 
     // Add to result
     const existing = result.get(item.factor.id);

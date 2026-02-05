@@ -1,12 +1,13 @@
-import type { EstateType, PriceCategory } from '../types/property';
+import type { UnifiedEstateType, PriceCategory } from './shared/types';
 import { PRICE_CATEGORY_COLORS } from '../config/price-colors';
 import { formatCompactPrice } from '@/lib/format';
 import { DEFAULT_FALLBACK_COLOR } from '@/constants/colors';
 
 /**
  * Property marker colors by estate type
+ * Uses unified estate types
  */
-export const PROPERTY_MARKER_COLORS: Record<EstateType, string> = {
+export const PROPERTY_MARKER_COLORS: Record<UnifiedEstateType, string> = {
   FLAT: '#3b82f6',      // Blue
   HOUSE: '#16a34a',     // Green
   TERRAIN: '#f59e0b',   // Amber
@@ -18,7 +19,7 @@ export const PROPERTY_MARKER_COLORS: Record<EstateType, string> = {
 /**
  * SVG icon paths for each estate type
  */
-const PROPERTY_MARKER_ICONS: Record<EstateType, string> = {
+const PROPERTY_MARKER_ICONS: Record<UnifiedEstateType, string> = {
   // Apartment building icon
   FLAT: `<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="9" y1="6" x2="9" y2="6.01"></line><line x1="15" y1="6" x2="15" y2="6.01"></line><line x1="9" y1="10" x2="9" y2="10.01"></line><line x1="15" y1="10" x2="15" y2="10.01"></line><line x1="9" y1="14" x2="9" y2="14.01"></line><line x1="15" y1="14" x2="15" y2="14.01"></line><line x1="9" y1="18" x2="15" y2="18"></line>`,
   // House icon
@@ -36,12 +37,14 @@ const PROPERTY_MARKER_ICONS: Record<EstateType, string> = {
 /**
  * Generate HTML for a property marker icon with optional price category indicator and price label
  * Can be used with Leaflet's L.divIcon
+ * 
+ * Now uses unified estate types
  */
 export function generatePropertyMarkerHtml(
-  estateType: EstateType, 
+  estateType: UnifiedEstateType, 
   size: number = 28,
   priceCategory?: PriceCategory,
-  price?: number
+  price?: number | null
 ): string {
   const color = PROPERTY_MARKER_COLORS[estateType] || PROPERTY_MARKER_COLORS.FLAT;
   const iconSvg = PROPERTY_MARKER_ICONS[estateType] || PROPERTY_MARKER_ICONS.FLAT;
@@ -110,7 +113,7 @@ function hexToRgb(hex: string): string | null {
 /**
  * Get the CSS class name for a property marker
  */
-export function getPropertyMarkerClassName(estateType: EstateType, priceCategory?: PriceCategory): string {
+export function getPropertyMarkerClassName(estateType: UnifiedEstateType, priceCategory?: PriceCategory): string {
   const base = `property-marker property-marker-${estateType.toLowerCase()}`;
   if (priceCategory && priceCategory !== 'no_data') {
     return `${base} property-marker-${priceCategory.replace('_', '-')}`;

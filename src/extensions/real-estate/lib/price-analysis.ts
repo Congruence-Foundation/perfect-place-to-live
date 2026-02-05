@@ -1,13 +1,12 @@
 import { median, standardDeviation, quantileRank } from 'simple-statistics';
 import type { HeatmapPoint } from '@/types/heatmap';
 import type {
-  OtodomProperty,
-  EnrichedProperty,
+  UnifiedProperty,
+  UnifiedCluster,
+  EnrichedUnifiedProperty,
   LocationQualityTier,
   PriceCategory,
-  PropertyCluster,
-} from '../types/property';
-import { roomCountToNumber } from '@/lib/format';
+} from './shared/types';
 import { createTimer } from '@/lib/profiling';
 import { findNearestHeatmapPoint } from './score-lookup';
 import { distanceInMeters, createClusterId } from '@/lib/geo';
@@ -50,17 +49,6 @@ const QUALITY_TIERS: Array<{ min: number; max: number; tier: LocationQualityTier
   { min: 60, max: 80, tier: '60-80', label: '60-80%' },
   { min: 80, max: 100, tier: '80-100', label: '80-100%' },
 ];
-
-/**
- * Convert room string (e.g., "TWO", "THREE") to number
- * Uses the shared roomCountToNumber from format.ts
- */
-function roomStringToNumber(roomsNumber: string): number {
-  const result = roomCountToNumber(roomsNumber);
-  // Handle "10+" case from format.ts by treating it as 11
-  if (result === '10+') return 11;
-  return parseInt(result, 10) || 0;
-}
 
 /**
  * Get location quality score (0-100) from heatmap
@@ -140,18 +128,19 @@ function generateGroupDescription(
 }
 
 /**
- * Calculate price per meter for a property
+ * Calculate price per meter for a unified property
  * Returns null if price is hidden, zero, or area is invalid
  */
-export function getPricePerMeter(property: OtodomProperty): number | null {
-  // Skip properties without valid prices (hidePrice or price = 0 means negotiable)
-  if (property.hidePrice || property.totalPrice.value <= 0 || property.areaInSquareMeters <= 0) {
+export function getPricePerMeter(property: UnifiedProperty): number | null {
+  // Skip properties without valid prices (null price means hidden/negotiable)
+  if (property.price === null || property.price <= 0 || property.area <= 0) {
     return null;
   }
-  if (property.pricePerMeter?.value) {
-    return property.pricePerMeter.value;
+  // Use pre-calculated pricePerMeter if available
+  if (property.pricePerMeter !== null && property.pricePerMeter > 0) {
+    return property.pricePerMeter;
   }
-  return property.totalPrice.value / property.areaInSquareMeters;
+  return property.price / property.area;
 }
 
 /**
@@ -166,7 +155,7 @@ function getPriceCategory(priceScore: number): PriceCategory {
 }
 
 interface PropertyWithMetadata {
-  property: OtodomProperty;
+  property: UnifiedProperty;
   pricePerMeter: number;
   rooms: number;
   quality: number;
@@ -186,17 +175,19 @@ interface GroupStatistics {
 
 /**
  * Main function to enrich properties with price analysis
- * @param properties - Properties to enrich
+ * Now works with unified property format
+ * 
+ * @param properties - Properties to enrich (unified format)
  * @param heatmapPoints - Heatmap points for location quality
  * @param gridCellSize - Grid cell size in meters
  * @param maxSearchRadius - Optional extended search radius (defaults to gridCellSize * 1.5)
  */
 export function enrichPropertiesWithPriceScore(
-  properties: OtodomProperty[],
+  properties: UnifiedProperty[],
   heatmapPoints: HeatmapPoint[],
   gridCellSize: number,
   maxSearchRadius?: number
-): EnrichedProperty[] {
+): EnrichedUnifiedProperty[] {
   const stopTotalTimer = createTimer('price-analysis:total');
   const searchRadius = maxSearchRadius ?? gridCellSize * 1.5;
   
@@ -208,14 +199,15 @@ export function enrichPropertiesWithPriceScore(
     const pricePerMeter = getPricePerMeter(property);
     if (pricePerMeter === null) continue;
 
-    const rooms = roomStringToNumber(property.roomsNumber);
-    if (rooms === 0) continue;
+    // Unified properties have rooms as number | null
+    const rooms = property.rooms;
+    if (rooms === null || rooms === 0) continue;
 
     const quality = getLocationQuality(property.lat, property.lng, heatmapPoints, searchRadius);
     if (quality === null) continue;
 
     const { tier: qualityTier, label: qualityLabel } = getQualityTier(quality);
-    const areaRange = getAreaRange(property.areaInSquareMeters);
+    const areaRange = getAreaRange(property.area);
     const roomRanges = getRoomRanges(rooms);
 
     propertiesWithMetadata.push({
@@ -231,6 +223,15 @@ export function enrichPropertiesWithPriceScore(
   }
   stopMetadataTimer({ total: properties.length, valid: propertiesWithMetadata.length });
 
+  // #region agent log
+  const sourceBreakdown = propertiesWithMetadata.reduce((acc, pm) => {
+    const source = pm.property.source || 'unknown';
+    acc[source] = (acc[source] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'price-analysis.ts:enrichPropertiesWithPriceScore',message:'Price analysis input',data:{totalProperties:properties.length,validForAnalysis:propertiesWithMetadata.length,sourceBreakdown},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'PRICE'})}).catch(()=>{});
+  // #endregion
+
   // Step 2: Build groups (properties can belong to multiple groups due to overlapping room ranges)
   const stopGroupsTimer = createTimer('price-analysis:groups');
   const groups = new Map<string, PropertyWithMetadata[]>();
@@ -238,7 +239,7 @@ export function enrichPropertiesWithPriceScore(
   for (const pm of propertiesWithMetadata) {
     // Add to each applicable room range group
     for (const roomRange of pm.roomRanges) {
-      const key = generateGroupKey(pm.property.estate, roomRange, pm.areaRange, pm.qualityTier);
+      const key = generateGroupKey(pm.property.estateType, roomRange, pm.areaRange, pm.qualityTier);
       if (!groups.has(key)) {
         groups.set(key, []);
       }
@@ -246,6 +247,21 @@ export function enrichPropertiesWithPriceScore(
     }
   }
   stopGroupsTimer({ groups: groups.size });
+
+  // #region agent log
+  // Check if groups contain mixed sources
+  const mixedGroups: Array<{key: string, otodom: number, gratka: number}> = [];
+  for (const [key, members] of groups) {
+    const otodomCount = members.filter(m => m.property.source === 'otodom').length;
+    const gratkaCount = members.filter(m => m.property.source === 'gratka').length;
+    if (otodomCount > 0 && gratkaCount > 0) {
+      mixedGroups.push({ key, otodom: otodomCount, gratka: gratkaCount });
+    }
+  }
+  // Log group sizes to understand distribution
+  const groupSizes = Array.from(groups.entries()).map(([key, members]) => ({ key, size: members.length })).sort((a, b) => b.size - a.size);
+  fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'price-analysis.ts:groups',message:'Price analysis groups',data:{totalGroups:groups.size,mixedSourceGroups:mixedGroups.length,sampleMixedGroups:mixedGroups.slice(0,3),minGroupSize:PRICE_ANALYSIS_MIN_GROUP_SIZE,largestGroups:groupSizes.slice(0,5),smallestGroups:groupSizes.slice(-5)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'PRICE'})}).catch(()=>{});
+  // #endregion
 
   // Step 3: Calculate statistics for each group
   const stopStatsTimer = createTimer('price-analysis:stats');
@@ -280,21 +296,55 @@ export function enrichPropertiesWithPriceScore(
 
   // Step 4: Calculate price analysis for each property
   const stopScoresTimer = createTimer('price-analysis:scores');
-  const enrichedMap = new Map<number, EnrichedProperty>();
+  const enrichedMap = new Map<string, EnrichedUnifiedProperty>();
+
+  // Helper to get adjacent quality tiers for fallback
+  const getAdjacentTiers = (tier: LocationQualityTier): LocationQualityTier[] => {
+    const tierIndex = QUALITY_TIERS.findIndex(t => t.tier === tier);
+    const adjacent: LocationQualityTier[] = [];
+    if (tierIndex > 0) adjacent.push(QUALITY_TIERS[tierIndex - 1].tier);
+    if (tierIndex < QUALITY_TIERS.length - 1) adjacent.push(QUALITY_TIERS[tierIndex + 1].tier);
+    return adjacent;
+  };
 
   for (const pm of propertiesWithMetadata) {
     // Find the best group (largest group size) for this property
     let bestGroup: { key: string; stats: GroupStatistics } | null = null;
+    const triedKeys: string[] = [];
 
+    // First, try the exact quality tier
     for (const roomRange of pm.roomRanges) {
-      const key = generateGroupKey(pm.property.estate, roomRange, pm.areaRange, pm.qualityTier);
+      const key = generateGroupKey(pm.property.estateType, roomRange, pm.areaRange, pm.qualityTier);
+      triedKeys.push(key);
       const stats = groupStats.get(key);
       if (stats && (!bestGroup || stats.count > bestGroup.stats.count)) {
         bestGroup = { key, stats };
       }
     }
 
-    const enriched: EnrichedProperty = { ...pm.property };
+    // If no valid group found, try adjacent quality tiers as fallback
+    if (!bestGroup || bestGroup.stats.stdDev === 0) {
+      const adjacentTiers = getAdjacentTiers(pm.qualityTier);
+      for (const adjacentTier of adjacentTiers) {
+        for (const roomRange of pm.roomRanges) {
+          const key = generateGroupKey(pm.property.estateType, roomRange, pm.areaRange, adjacentTier);
+          triedKeys.push(key);
+          const stats = groupStats.get(key);
+          if (stats && stats.stdDev > 0 && (!bestGroup || stats.count > bestGroup.stats.count)) {
+            bestGroup = { key, stats };
+          }
+        }
+      }
+    }
+
+    const enriched: EnrichedUnifiedProperty = { ...pm.property };
+
+    // #region agent log
+    // Log details for properties that will get no_data
+    if (!bestGroup || bestGroup.stats.stdDev === 0) {
+      fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'price-analysis.ts:noDataProperty',message:'Property getting no_data',data:{id:pm.property.id,source:pm.property.source,estateType:pm.property.estateType,rooms:pm.rooms,area:pm.property.area,areaRange:pm.areaRange,qualityTier:pm.qualityTier,triedKeys,bestGroupKey:bestGroup?.key,bestGroupCount:bestGroup?.stats.count,bestGroupStdDev:bestGroup?.stats.stdDev,groupStatsSize:groupStats.size},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'NODATA'})}).catch(()=>{});
+    }
+    // #endregion
 
     if (bestGroup && bestGroup.stats.stdDev > 0) {
       const { stats } = bestGroup;
@@ -352,9 +402,9 @@ export function enrichPropertiesWithPriceScore(
  * 0-20: great_deal, 20-40: good_deal, 40-60: fair, 60-80: above_avg, 80-100: overpriced
  */
 export function filterPropertiesByPriceValue(
-  properties: EnrichedProperty[],
+  properties: EnrichedUnifiedProperty[],
   range: [number, number]
-): EnrichedProperty[] {
+): EnrichedUnifiedProperty[] {
   // If full range, return all
   if (range[0] === 0 && range[1] === 100) {
     return properties;
@@ -408,17 +458,114 @@ const PRICE_CATEGORY_ORDER: Record<PriceCategory, number> = {
 };
 
 /**
- * Analyze cluster prices using nearby enriched properties
- * This is the "simplified" mode that uses already-loaded property data
+ * Analyze cluster prices using cached cluster properties
+ * 
+ * In detailed mode, cluster glow should reflect the best and worst price categories
+ * of properties INSIDE that cluster, not nearby properties.
  * 
  * @param clusters - Property clusters to analyze
- * @param enrichedProperties - Properties with price analysis data
- * @param defaultRadius - Default search radius in meters if cluster doesn't have one
+ * @param enrichedProperties - All enriched properties (for lookup by ID)
+ * @param clusterPropertiesCache - Cache of fetched cluster properties (clusterId -> properties)
+ * @returns Map of cluster ID to min/max price categories
+ */
+export function analyzeClusterPricesFromCache(
+  clusters: UnifiedCluster[],
+  enrichedProperties: EnrichedUnifiedProperty[],
+  clusterPropertiesCache: Map<string, { id: string }[]>
+): ClusterAnalysisMap {
+  const result: ClusterAnalysisMap = new Map();
+
+  // Create a lookup map for enriched properties by ID
+  const enrichedById = new Map<string, EnrichedUnifiedProperty>();
+  for (const p of enrichedProperties) {
+    enrichedById.set(p.id, p);
+  }
+
+  // #region agent log
+  const propsWithAnalysis = enrichedProperties.filter(p => p.priceAnalysis && p.priceAnalysis.priceCategory !== 'no_data');
+  fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'price-analysis.ts:analyzeClusterPricesFromCache:entry',message:'Cache-based cluster analysis',data:{totalClusters:clusters.length,totalEnrichedProps:enrichedProperties.length,propsWithAnalysis:propsWithAnalysis.length,cacheSize:clusterPropertiesCache.size,cachedClusterIds:Array.from(clusterPropertiesCache.keys()).slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'CACHE'})}).catch(()=>{});
+  // #endregion
+
+  for (const cluster of clusters) {
+    const clusterId = createClusterId(cluster.lat, cluster.lng);
+    
+    // Get cached properties for this cluster
+    const cachedProps = clusterPropertiesCache.get(clusterId);
+    
+    if (!cachedProps || cachedProps.length === 0) {
+      // No cached properties - cluster not yet fetched, no glow
+      result.set(clusterId, {
+        minCategory: null,
+        maxCategory: null,
+        propertyCount: 0,
+      });
+      continue;
+    }
+
+    // Find enriched versions of cached properties with valid price analysis
+    const clusterEnrichedProps = cachedProps
+      .map(p => enrichedById.get(p.id))
+      .filter((p): p is EnrichedUnifiedProperty => 
+        !!p && !!p.priceAnalysis && p.priceAnalysis.priceCategory !== 'no_data'
+      );
+
+    if (clusterEnrichedProps.length === 0) {
+      result.set(clusterId, {
+        minCategory: null,
+        maxCategory: null,
+        propertyCount: cachedProps.length, // Has properties but none with analysis
+      });
+      continue;
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'price-analysis.ts:analyzeClusterPricesFromCache:cluster',message:'Cluster has enriched props',data:{clusterId,source:cluster.source,cachedCount:cachedProps.length,enrichedCount:clusterEnrichedProps.length,categories:clusterEnrichedProps.map(p=>p.priceAnalysis?.priceCategory)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'CACHE'})}).catch(()=>{});
+    // #endregion
+
+    // Find min and max categories from actual cluster properties
+    let minCategory: PriceCategory | null = null;
+    let maxCategory: PriceCategory | null = null;
+    let minOrder = Infinity;
+    let maxOrder = -Infinity;
+
+    for (const prop of clusterEnrichedProps) {
+      const category = prop.priceAnalysis!.priceCategory;
+      const order = PRICE_CATEGORY_ORDER[category];
+
+      if (order < minOrder) {
+        minOrder = order;
+        minCategory = category;
+      }
+      if (order > maxOrder) {
+        maxOrder = order;
+        maxCategory = category;
+      }
+    }
+
+    result.set(clusterId, {
+      minCategory,
+      maxCategory,
+      propertyCount: clusterEnrichedProps.length,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Analyze cluster prices using nearby enriched properties (legacy/simplified mode)
+ * 
+ * This uses distance-based matching to find nearby properties.
+ * For detailed mode, use analyzeClusterPricesFromCache instead.
+ * 
+ * @param clusters - Property clusters to analyze (unified format)
+ * @param enrichedProperties - Properties with price analysis data (unified format)
+ * @param defaultRadius - Default search radius in meters
  * @returns Map of cluster ID to min/max price categories
  */
 export function analyzeClusterPrices(
-  clusters: PropertyCluster[],
-  enrichedProperties: EnrichedProperty[],
+  clusters: UnifiedCluster[],
+  enrichedProperties: EnrichedUnifiedProperty[],
   defaultRadius: number = 1000
 ): ClusterAnalysisMap {
   const result: ClusterAnalysisMap = new Map();
@@ -427,13 +574,13 @@ export function analyzeClusterPrices(
     const clusterId = createClusterId(cluster.lat, cluster.lng);
     const searchRadius = cluster.radiusInMeters || defaultRadius;
 
-    // Find nearby properties with price analysis
+    // Find nearby properties with price analysis using distance
     const nearbyProperties = enrichedProperties.filter(p => {
       if (!p.priceAnalysis || p.priceAnalysis.priceCategory === 'no_data') {
         return false;
       }
       const distance = distanceInMeters(cluster.lat, cluster.lng, p.lat, p.lng);
-      return distance <= searchRadius * 2; // Double radius for better coverage
+      return distance <= searchRadius * 2;
     });
 
     if (nearbyProperties.length === 0) {
@@ -478,12 +625,14 @@ export function analyzeClusterPrices(
 /**
  * Enrich properties with price analysis using extended search radius
  * This version works with partial/sparse heatmap data
+ * 
+ * Now works with unified property format
  */
 export function enrichPropertiesSimplified(
-  properties: OtodomProperty[],
+  properties: UnifiedProperty[],
   heatmapPoints: HeatmapPoint[],
   gridCellSize: number
-): EnrichedProperty[] {
+): EnrichedUnifiedProperty[] {
   // Use extended search radius for sparse heatmap data
   const maxSearchRadius = Math.max(gridCellSize * PRICE_ANALYSIS_GRID_MULTIPLIER, PRICE_ANALYSIS_MIN_SEARCH_RADIUS);
   return enrichPropertiesWithPriceScore(properties, heatmapPoints, gridCellSize, maxSearchRadius);

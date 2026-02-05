@@ -4,6 +4,8 @@
  * Centralized configuration for UI dimensions, limits, and thresholds
  */
 
+import type { PropertyDataSource } from './filters';
+
 // =============================================================================
 // Property Marker Dimensions
 // =============================================================================
@@ -105,6 +107,28 @@ export const OTODOM_DEFAULT_AREA_MAX = 500;
 export const OTODOM_DEFAULT_CLUSTER_PAGE_LIMIT = 36;
 
 // =============================================================================
+// Gratka API Configuration
+// =============================================================================
+
+/** Gratka GraphQL API URL */
+export const GRATKA_API_URL = 'https://gratka.pl/api-gratka';
+
+/** Cache TTL for Gratka property responses (ms) - 3 minutes */
+export const GRATKA_CACHE_TTL_MS = 3 * 60 * 1000;
+
+/** Maximum entries in Gratka property cache */
+export const GRATKA_MAX_CACHE_ENTRIES = 50;
+
+/** Default page size for Gratka API requests */
+export const GRATKA_DEFAULT_PAGE_SIZE = 35;
+
+/** Default maximum markers for Gratka map search */
+export const GRATKA_DEFAULT_MAX_MARKERS = 200;
+
+/** Cluster search radius for Gratka API requests (meters) */
+export const GRATKA_CLUSTER_RADIUS_METERS = 500;
+
+// =============================================================================
 // Price Analysis Configuration
 // =============================================================================
 
@@ -140,6 +164,19 @@ export const SPATIAL_INDEX_CELL_SIZE_METERS = 100;
 export const SPATIAL_INDEX_LINEAR_THRESHOLD = 100;
 
 // =============================================================================
+// Filter Default Values (for cache key generation)
+// =============================================================================
+
+/** Default maximum price when not specified (effectively unlimited) */
+export const FILTER_DEFAULT_PRICE_MAX = 999999999;
+
+/** Default maximum area when not specified (m²) */
+export const FILTER_DEFAULT_AREA_MAX = 999;
+
+/** Default maximum terrain area when not specified (m²) */
+export const FILTER_DEFAULT_TERRAIN_AREA_MAX = 999999;
+
+// =============================================================================
 // Default UI Values
 // =============================================================================
 
@@ -150,7 +187,19 @@ export const DEFAULT_SCORE_RANGE: [number, number] = [50, 100];
 export const DEFAULT_PRICE_VALUE_RANGE: [number, number] = [0, 100];
 
 /** Default data sources for property fetching */
-export const DEFAULT_DATA_SOURCES: PropertyDataSource[] = ['otodom'];
+export const DEFAULT_DATA_SOURCES: PropertyDataSource[] = ['otodom', 'gratka'];
 
-// Re-export type for convenience
-export type { PropertyDataSource } from './filters';
+// =============================================================================
+// Transaction Type Price Defaults
+// =============================================================================
+
+/** Default price range for rental properties */
+export const DEFAULT_RENT_PRICE = { min: 1000, max: 10000 };
+
+/** Default price range for sale properties */
+export const DEFAULT_SELL_PRICE = { min: 100000, max: 2000000 };
+
+/** Get default price range for a transaction type */
+export function getDefaultPriceRange(transaction: 'RENT' | 'SELL') {
+  return transaction === 'RENT' ? DEFAULT_RENT_PRICE : DEFAULT_SELL_PRICE;
+}

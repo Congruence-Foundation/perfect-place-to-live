@@ -1,4 +1,10 @@
-import type { PriceCategory, EnrichedProperty, ClusterPriceDisplay } from '../types';
+import type { 
+  PriceCategory, 
+  EnrichedUnifiedProperty,
+  PropertyPriceAnalysis,
+  UnifiedProperty,
+} from '../lib/shared';
+import type { ClusterPriceDisplay } from '@/types/heatmap';
 import { PRICE_BADGE_COLORS, PRICE_BADGE_LABELS_EN, PRICE_CATEGORY_COLORS } from '../config/price-colors';
 import { CLUSTER_ICON_SIZE, CLUSTER_ICON_WITH_LABEL_HEIGHT } from '../config/constants';
 import { formatCompactPrice } from '@/lib/format';
@@ -45,9 +51,10 @@ export function generateClusterPriceLabel(
 
 /**
  * Get min/max price categories from enriched properties
+ * Now accepts unified property format
  */
 export function getClusterPriceCategories(
-  properties: EnrichedProperty[]
+  properties: EnrichedUnifiedProperty[]
 ): { minCategory: PriceCategory | null; maxCategory: PriceCategory | null } {
   const withAnalysis = properties.filter(p => p.priceAnalysis && p.priceAnalysis.priceCategory !== 'no_data');
   
@@ -68,8 +75,9 @@ export function getClusterPriceCategories(
 
 /**
  * Create cluster icon HTML with optional price label and glow
+ * Internal helper used by createClusterDivIcon
  */
-export function createClusterIconHtml(
+function createClusterIconHtml(
   count: number,
   priceLabel: string,
   minCategory: PriceCategory | null,
@@ -160,8 +168,9 @@ export function createClusterDivIcon(
 
 /**
  * Generate price analysis badge HTML for property popups
+ * Now accepts unified PropertyPriceAnalysis type
  */
-export function generatePriceAnalysisBadgeHtml(priceAnalysis: EnrichedProperty['priceAnalysis']): string {
+export function generatePriceAnalysisBadgeHtml(priceAnalysis: PropertyPriceAnalysis | undefined): string {
   if (!priceAnalysis || priceAnalysis.priceCategory === 'no_data') {
     return '';
   }
@@ -182,9 +191,10 @@ export function generatePriceAnalysisBadgeHtml(priceAnalysis: EnrichedProperty['
 
 /**
  * Extract valid prices from properties (excluding hidden/zero prices)
+ * Now accepts unified property format
  */
-export function getValidPrices(properties: Array<{ hidePrice: boolean; totalPrice: { value: number } }>): number[] {
+export function getValidPrices(properties: UnifiedProperty[]): number[] {
   return properties
-    .filter(p => !p.hidePrice && p.totalPrice.value > 0)
-    .map(p => p.totalPrice.value);
+    .filter(p => p.price !== null && p.price > 0)
+    .map(p => p.price as number);
 }

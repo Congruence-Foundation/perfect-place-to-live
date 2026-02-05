@@ -6,7 +6,7 @@ import type { TileCoord } from '@/lib/geo/tiles';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS } from '@/config/factors';
 import type { POI, PrecomputedTile, Factor } from '@/types';
-import { errorResponse } from '@/lib/api-utils';
+import { errorResponse, handleApiError } from '@/lib/api-utils';
 import { TILE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
@@ -177,7 +177,12 @@ export async function POST(request: NextRequest) {
       zoom,
     });
   } catch (error) {
-    console.error('Tile generation error:', error);
-    return errorResponse(error);
+    return handleApiError(error, {
+      context: 'Tile generation API',
+      errorMappings: [
+        { pattern: 'Unauthorized', status: 401 },
+        { pattern: 'Zoom level must be', status: 400 },
+      ],
+    });
   }
 }

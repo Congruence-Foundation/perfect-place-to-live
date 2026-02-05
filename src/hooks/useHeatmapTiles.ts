@@ -14,12 +14,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { decode } from '@msgpack/msgpack';
 import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource } from '@/types';
 import {
-  getExpandedTilesForRadius,
   hashHeatmapConfig,
+  calculateTilesWithRadius,
   type TileCoord,
   HEATMAP_TILE_ZOOM,
 } from '@/lib/geo/tiles';
-import { getTilesForBounds, tileToBounds, createCoordinateKey } from '@/lib/geo';
+import { tileToBounds, createCoordinateKey } from '@/lib/geo';
 import { HEATMAP_TILE_CONFIG, FETCH_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
 import { useMapStore } from '@/stores/mapStore';
@@ -221,28 +221,13 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
 
   // Calculate tiles needed (fixed zoom 13)
   const { viewportTiles, allTiles, isTooLarge } = useMemo(() => {
-    if (!bounds) {
-      return { viewportTiles: [], allTiles: [], isTooLarge: false };
-    }
-
-    const viewport = getTilesForBounds(bounds, HEATMAP_TILE_ZOOM);
-
-    if (viewport.length > HEATMAP_TILE_CONFIG.MAX_VIEWPORT_TILES) {
-      return { viewportTiles: [], allTiles: [], isTooLarge: true };
-    }
-
-    let expanded = getExpandedTilesForRadius(viewport, tileRadius);
-
-    // Reduce radius if too many tiles
-    if (expanded.length > HEATMAP_TILE_CONFIG.MAX_TOTAL_TILES) {
-      let reducedRadius = tileRadius;
-      while (expanded.length > HEATMAP_TILE_CONFIG.MAX_TOTAL_TILES && reducedRadius > 0) {
-        reducedRadius--;
-        expanded = getExpandedTilesForRadius(viewport, reducedRadius);
-      }
-    }
-
-    return { viewportTiles: viewport, allTiles: expanded, isTooLarge: false };
+    return calculateTilesWithRadius({
+      bounds,
+      tileZoom: HEATMAP_TILE_ZOOM,
+      radius: tileRadius,
+      maxViewportTiles: HEATMAP_TILE_CONFIG.MAX_VIEWPORT_TILES,
+      maxTotalTiles: HEATMAP_TILE_CONFIG.MAX_TOTAL_TILES,
+    });
   }, [bounds, tileRadius]);
 
   // Sync heatmap tiles to store for debug rendering

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { Database, ChevronDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -13,7 +13,7 @@ interface DataSourcesPanelProps {
 
 const DATA_SOURCES: { id: PropertyDataSource; name: string; available: boolean }[] = [
   { id: 'otodom', name: 'Otodom', available: true },
-  { id: 'gratka', name: 'Gratka', available: false },
+  { id: 'gratka', name: 'Gratka', available: true },
 ];
 
 export function DataSourcesPanel({
@@ -22,6 +22,7 @@ export function DataSourcesPanel({
 }: DataSourcesPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const t = useTranslations('realEstate');
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const handleSourceToggle = (source: PropertyDataSource, checked: boolean) => {
     if (checked) {
@@ -34,10 +35,21 @@ export function DataSourcesPanel({
     }
   };
 
-  const handleToggleExpanded = () => setIsExpanded(prev => !prev);
+  const handleToggleExpanded = useCallback(() => {
+    setIsExpanded(prev => {
+      const willExpand = !prev;
+      if (willExpand) {
+        // Scroll the panel into view after expansion animation starts
+        setTimeout(() => {
+          panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }, 50);
+      }
+      return willExpand;
+    });
+  }, []);
 
   return (
-    <div className="rounded-xl bg-muted/50 transition-colors">
+    <div ref={panelRef} className="rounded-xl bg-muted/50 transition-colors">
       {/* Header - always visible */}
       <div className="flex items-center justify-between p-3">
         <button

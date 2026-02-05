@@ -317,21 +317,33 @@ async function computeUncachedTiles(
 
     const tileKey = `${tile.z}:${tile.x}:${tile.y}`;
 
-    // Cache the result (fire-and-forget)
-    const cacheKey = getHeatmapTileKey(tile.z, tile.x, tile.y, configHash);
-    setCachedHeatmapTile(cacheKey, {
-      points: heatmapPoints,
-      pois: {},
-      metadata: {
-        gridSize,
-        pointCount: heatmapPoints.length,
-        computeTimeMs: 0,
-        factorCount: enabledFactors.length,
-        dataSource,
-        poiCounts: {},
-      },
-      fetchedAt: new Date().toISOString(),
-    }).catch(err => console.error('Failed to cache heatmap tile:', err));
+    // Check if heatmap data is valid (has variation in K values)
+    // If all K values are the same, POI data is likely empty - don't cache
+    const shouldCache = heatmapPoints.length > 0 && (() => {
+      if (heatmapPoints.length < 2) return true;
+      const firstK = heatmapPoints[0].value;
+      return heatmapPoints.some(p => Math.abs(p.value - firstK) > 0.001);
+    })();
+
+    // Only cache if data is valid (has variation)
+    if (shouldCache) {
+      const cacheKey = getHeatmapTileKey(tile.z, tile.x, tile.y, configHash);
+      setCachedHeatmapTile(cacheKey, {
+        points: heatmapPoints,
+        pois: {},
+        metadata: {
+          gridSize,
+          pointCount: heatmapPoints.length,
+          computeTimeMs: 0,
+          factorCount: enabledFactors.length,
+          dataSource,
+          poiCounts: {},
+        },
+        fetchedAt: new Date().toISOString(),
+      }).catch(err => console.error('Failed to cache heatmap tile:', err));
+    } else {
+      console.log(`[Heatmap] Skipping cache for tile ${tileKey} - no K value variation (likely empty POI data)`);
+    }
 
     return { tileKey, points: heatmapPoints };
   });

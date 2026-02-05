@@ -7,6 +7,7 @@
 export {
   EARTH_RADIUS_METERS,
   METERS_PER_DEGREE_LAT,
+  DEG_TO_RAD,
   POLAND_BOUNDS,
   POLAND_CENTER,
   OVERPASS_API_URL,
@@ -16,7 +17,7 @@ export {
 export { metersPerDegreeLng, distanceInMeters, createCoordinateKey, createClusterId } from './distance';
 
 // Haversine distance and spatial indexing
-export { haversineDistance, SpatialIndex } from './haversine';
+export { haversineDistance, SpatialIndex, GenericSpatialIndex, type GeoLocated, type DistanceFunction } from './haversine';
 
 // Bounds manipulation
 export {
@@ -40,10 +41,13 @@ export {
 // Property tile utilities
 export {
   type TileCoord,
+  type TileCalculationResult,
+  type TileCalculationOptions,
   getTileKeyString,
   latLngToTile,
   PROPERTY_TILE_ZOOM,
   getExpandedTilesForRadius,
+  calculateTilesWithRadius,
   hashFilters,
   // Heatmap tile utilities
   type HeatmapConfig,

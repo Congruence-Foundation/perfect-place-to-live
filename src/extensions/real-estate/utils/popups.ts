@@ -1,8 +1,44 @@
-import type { OtodomProperty, EnrichedProperty } from '../types';
-import { isEnrichedProperty } from '../types';
-import { formatPrice, roomCountToNumber } from '@/lib/format';
+import type { 
+  UnifiedProperty, 
+  EnrichedUnifiedProperty,
+  PropertyPriceAnalysis,
+} from '../lib/shared';
+import { isEnrichedUnifiedProperty } from '../lib/shared';
+import { formatPrice } from '@/lib/format';
 import { generatePriceAnalysisBadgeHtml } from './markers';
-import { PROPERTY_MARKER_COLORS, getPricePerMeter } from '../lib';
+import { PROPERTY_MARKER_COLORS } from '../lib';
+
+// ============================================================================
+// Popup Style Constants
+// ============================================================================
+
+/** Default locale for number formatting in popups */
+const POPUP_LOCALE = 'pl-PL';
+
+/** Popup color palette - Tailwind-based colors */
+const POPUP_COLORS = {
+  // Text colors
+  TEXT_PRIMARY: '#1f2937',    // Gray-800
+  TEXT_SECONDARY: '#4b5563',  // Gray-600
+  TEXT_MUTED: '#6b7280',      // Gray-500
+  TEXT_LIGHT: '#9ca3af',      // Gray-400
+  
+  // Background colors
+  BG_LIGHT: '#f3f4f6',        // Gray-100
+  BG_OVERLAY: 'rgba(0,0,0,0.5)',
+  
+  // Accent colors
+  PRICE_GREEN: '#16a34a',     // Green-600
+  LINK_BLUE: '#3b82f6',       // Blue-500
+  ERROR_RED: '#ef4444',       // Red-500
+  
+  // Border colors
+  BORDER_LIGHT: '#f3f4f6',    // Gray-100
+  BORDER_SPINNER: '#e5e7eb',  // Gray-200
+  
+  // Button states
+  BUTTON_DISABLED: '#d1d5db', // Gray-300
+} as const;
 
 /**
  * Translations for property popups
@@ -32,30 +68,155 @@ export const DEFAULT_POPUP_TRANSLATIONS: PropertyPopupTranslations = {
   noOffersFound: 'No offers found in this area',
 };
 
+// ============================================================================
+// Shared Popup HTML Helpers
+// ============================================================================
+
 /**
- * Generate popup HTML for a single property
+ * Generate the external link SVG icon
+ */
+function getExternalLinkIcon(): string {
+  return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${POPUP_COLORS.TEXT_MUTED}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+    <polyline points="15 3 21 3 21 9"></polyline>
+    <line x1="10" y1="14" x2="21" y2="3"></line>
+  </svg>`;
+}
+
+/**
+ * Generate title link HTML with external link icon
+ */
+function generateTitleLinkHtml(
+  url: string,
+  title: string,
+  fontSize: string = '13px'
+): string {
+  return `
+    <a 
+      href="${url}" 
+      target="_blank" 
+      rel="noopener noreferrer"
+      style="display: flex; align-items: flex-start; gap: 4px; font-weight: 600; font-size: ${fontSize}; margin-bottom: 6px; line-height: 1.3; color: ${POPUP_COLORS.TEXT_PRIMARY}; text-decoration: none;"
+    >
+      <span style="flex: 1; max-height: 2.6em; overflow: hidden;">${title}</span>
+      ${getExternalLinkIcon()}
+    </a>
+  `;
+}
+
+/**
+ * Generate property type badge HTML
+ */
+function generateTypeBadgeHtml(
+  estateType: string,
+  translations: PropertyPopupTranslations
+): { color: string; text: string; html: string } {
+  const isHouse = estateType === 'HOUSE';
+  const color = (estateType in PROPERTY_MARKER_COLORS) 
+    ? PROPERTY_MARKER_COLORS[estateType as keyof typeof PROPERTY_MARKER_COLORS] 
+    : PROPERTY_MARKER_COLORS.FLAT;
+  const text = isHouse ? translations.house : translations.flat;
+  const html = `<div style="position: absolute; top: 8px; left: 8px; background: ${color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">${text}</div>`;
+  return { color, text, html };
+}
+
+/**
+ * Generate data source badge HTML
+ * Shows which source (Otodom, Gratka) the property came from
+ */
+function generateSourceBadgeHtml(source: string): string {
+  const sourceColors: Record<string, string> = {
+    otodom: '#2563eb',  // Blue-600
+    gratka: '#7c3aed',  // Violet-600
+  };
+  const sourceNames: Record<string, string> = {
+    otodom: 'Otodom',
+    gratka: 'Gratka',
+  };
+  const color = sourceColors[source] ?? '#6b7280';
+  const name = sourceNames[source] ?? source;
+  return `<span style="background: ${color}; color: white; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px;">${name}</span>`;
+}
+
+/**
+ * Generate property details HTML (area, rooms, price per meter)
+ * 
+ * Now accepts unified property fields:
+ * - area: number (was areaInSquareMeters)
+ * - rooms: number | null (was roomsNumber string)
+ * - pricePerMeter: number | null
+ */
+function generatePropertyDetailsHtml(
+  area: number,
+  rooms: number | null,
+  pricePerMeter: number | null,
+  translations: PropertyPopupTranslations,
+  fontSize: string = '12px'
+): string {
+  const pricePerMeterRounded = pricePerMeter !== null ? Math.round(pricePerMeter) : null;
+  
+  return `
+    <div style="display: flex; align-items: center; gap: 4px; color: ${POPUP_COLORS.TEXT_SECONDARY}; font-size: ${fontSize};">
+      <span style="font-weight: 500;">${area} m²</span>
+      ${rooms !== null ? `<span style="color: ${POPUP_COLORS.TEXT_LIGHT};">•</span><span style="font-weight: 500;">${rooms} ${translations.rooms}</span>` : ''}
+      ${pricePerMeterRounded ? `<span style="color: ${POPUP_COLORS.TEXT_LIGHT};">•</span><span style="color: ${POPUP_COLORS.TEXT_MUTED};">${pricePerMeterRounded.toLocaleString(POPUP_LOCALE)} PLN/m²</span>` : ''}
+    </div>
+  `;
+}
+
+/**
+ * Generate gallery navigation button HTML
+ */
+function generateGalleryNavButtonHtml(
+  direction: 'prev' | 'next',
+  buttonId: string | null,
+  disabled: boolean = false
+): string {
+  const isLeft = direction === 'prev';
+  const position = isLeft ? 'left: 8px;' : 'right: 8px;';
+  const symbol = isLeft ? '‹' : '›';
+  const idAttr = buttonId ? `id="${buttonId}"` : '';
+  const opacity = disabled ? 'opacity: 0.3;' : '';
+  
+  return `
+    <button 
+      ${idAttr}
+      style="position: absolute; ${position} top: calc(50% + 12px); transform: translateY(-50%); background: ${POPUP_COLORS.BG_OVERLAY}; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; ${opacity}"
+    >${symbol}</button>
+  `;
+}
+
+/**
+ * Generate image counter badge HTML
+ */
+function generateImageCounterHtml(
+  counterId: string | null,
+  currentIndex: number,
+  totalCount: number
+): string {
+  const idAttr = counterId ? `id="${counterId}"` : '';
+  return `<span ${idAttr} style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: ${POPUP_COLORS.BG_OVERLAY}; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px;">${currentIndex + 1}/${totalCount}</span>`;
+}
+
+/**
+ * Generate popup HTML for a single property (unified format)
  */
 export function generatePropertyPopupHtml(
-  property: EnrichedProperty,
+  property: EnrichedUnifiedProperty,
   galleryId: string,
   translations: PropertyPopupTranslations = DEFAULT_POPUP_TRANSLATIONS
 ): string {
-  const pricePerMeter = getPricePerMeter(property);
-  const pricePerMeterRounded = pricePerMeter !== null ? Math.round(pricePerMeter) : null;
-
   // Create image gallery HTML if multiple images
   const imageCount = property.images.length;
   let imageHtml = '';
 
   // Property type badge
-  const isHouse = property.estate === 'HOUSE';
-  const typeBadgeColor = PROPERTY_MARKER_COLORS[property.estate] || PROPERTY_MARKER_COLORS.FLAT;
-  const typeBadgeText = isHouse ? translations.house : translations.flat;
+  const typeBadge = generateTypeBadgeHtml(property.estateType, translations);
   
   if (imageCount > 0) {
     const imagesJson = JSON.stringify(property.images.map(img => img.medium)).replace(/"/g, '&quot;');
     imageHtml = `
-      <div style="position: relative; background: #f3f4f6; border-radius: 8px 8px 0 0; overflow: hidden;">
+      <div style="position: relative; background: ${POPUP_COLORS.BG_LIGHT}; border-radius: 8px 8px 0 0; overflow: hidden;">
         <img 
           id="${galleryId}-img" 
           src="${property.images[0].medium}" 
@@ -63,12 +224,8 @@ export function generatePropertyPopupHtml(
           style="width: 100%; height: auto; max-height: 180px; object-fit: contain; display: block;" 
           onerror="this.style.display='none'" 
         />
-        <!-- Property type badge -->
-        <div style="position: absolute; top: 8px; left: 8px; background: ${typeBadgeColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
-          ${typeBadgeText}
-        </div>
+        ${typeBadge.html}
         ${imageCount > 1 ? `
-          <!-- Left button - centered between close button area and bottom -->
           <button 
             onclick="(function(){
               var imgs = ${imagesJson};
@@ -79,11 +236,9 @@ export function generatePropertyPopupHtml(
               img.src = imgs[idx];
               counter.textContent = idx + 1;
             })()"
-            style="position: absolute; left: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
+            style="position: absolute; left: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: ${POPUP_COLORS.BG_OVERLAY}; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
           >‹</button>
-          <!-- Counter at bottom center -->
-          <span id="${galleryId}-counter" style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px;">1/${imageCount}</span>
-          <!-- Right button - centered between close button area and bottom -->
+          ${generateImageCounterHtml(`${galleryId}-counter`, 0, imageCount)}
           <button 
             onclick="(function(){
               var imgs = ${imagesJson};
@@ -94,51 +249,39 @@ export function generatePropertyPopupHtml(
               img.src = imgs[idx];
               counter.textContent = (idx + 1) + '/${imageCount}';
             })()"
-            style="position: absolute; right: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
+            style="position: absolute; right: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: ${POPUP_COLORS.BG_OVERLAY}; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
           >›</button>
         ` : ''}
       </div>
     `;
   }
 
-  // Format rooms display
-  const roomsDisplay = property.roomsNumber ? roomCountToNumber(property.roomsNumber) : null;
-
   // Generate price analysis badge HTML using shared utility
   const priceAnalysisBadgeHtml = property.priceAnalysis 
     ? generatePriceAnalysisBadgeHtml(property.priceAnalysis)
     : '';
 
+  // Price display - null means price is hidden/negotiable
+  const priceDisplay = property.price === null 
+    ? translations.priceNegotiable 
+    : formatPrice(property.price, property.currency);
+
+  // Source badge
+  const sourceBadgeHtml = generateSourceBadgeHtml(property.source);
+
   return `
     <div style="min-width: 220px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
       ${imageHtml}
       <div style="padding: 12px;">
-        <!-- Title as link -->
-        <a 
-          href="${property.url}" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          style="display: flex; align-items: flex-start; gap: 4px; font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; color: #1f2937; text-decoration: none;"
-        >
-          <span style="flex: 1; max-height: 2.6em; overflow: hidden;">${property.title}</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <line x1="10" y1="14" x2="21" y2="3"></line>
-          </svg>
-        </a>
-        <!-- Price -->
-        <div style="font-size: 16px; font-weight: 700; color: #16a34a; margin-bottom: 8px;">
-          ${property.hidePrice ? translations.priceNegotiable : formatPrice(property.totalPrice.value, property.totalPrice.currency)}
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+          ${generateTitleLinkHtml(property.url, property.title, '13px')}
+          ${sourceBadgeHtml}
         </div>
-        <!-- Price Analysis Badge -->
+        <div style="font-size: 16px; font-weight: 700; color: ${POPUP_COLORS.PRICE_GREEN}; margin-bottom: 8px;">
+          ${priceDisplay}
+        </div>
         ${priceAnalysisBadgeHtml}
-        <!-- Property details -->
-        <div style="display: flex; align-items: center; gap: 4px; color: #4b5563; font-size: 12px;">
-          <span style="font-weight: 500;">${property.areaInSquareMeters} m²</span>
-          ${roomsDisplay ? `<span style="color: #9ca3af;">•</span><span style="font-weight: 500;">${roomsDisplay} ${translations.rooms}</span>` : ''}
-          ${pricePerMeterRounded ? `<span style="color: #9ca3af;">•</span><span style="color: #6b7280;">${pricePerMeterRounded.toLocaleString('pl-PL')} PLN/m²</span>` : ''}
-        </div>
+        ${generatePropertyDetailsHtml(property.area, property.rooms, property.pricePerMeter, translations, '12px')}
       </div>
     </div>
   `;
@@ -146,9 +289,10 @@ export function generatePropertyPopupHtml(
 
 /**
  * Generate popup HTML for a property in a cluster (with pagination)
+ * Accepts unified property format
  */
 export function generateClusterPropertyPopupHtml(
-  property: OtodomProperty | EnrichedProperty,
+  property: UnifiedProperty | EnrichedUnifiedProperty,
   clusterId: string,
   currentIndex: number,
   totalCount: number,
@@ -156,12 +300,7 @@ export function generateClusterPropertyPopupHtml(
   imageIndex: number = 0,
   translations: PopupTranslations = DEFAULT_POPUP_TRANSLATIONS
 ): string {
-  const isHouse = property.estate === 'HOUSE';
-  const typeBadgeColor = PROPERTY_MARKER_COLORS[property.estate] || PROPERTY_MARKER_COLORS.FLAT;
-  const typeBadgeText = isHouse ? translations.house : translations.flat;
-  const roomsDisplay = property.roomsNumber ? roomCountToNumber(property.roomsNumber) : null;
-  const pricePerMeter = getPricePerMeter(property);
-  const pricePerMeterRounded = pricePerMeter !== null ? Math.round(pricePerMeter) : null;
+  const typeBadge = generateTypeBadgeHtml(property.estateType, translations);
   
   const hasMultipleImages = property.images.length > 1;
   const currentImage = property.images[imageIndex] || property.images[0];
@@ -172,13 +311,29 @@ export function generateClusterPropertyPopupHtml(
   // Disable next button when we've reached the end of fetched properties
   const isAtEnd = currentIndex >= fetchedCount - 1;
 
+  // #region agent log
+  const isEnriched = isEnrichedUnifiedProperty(property);
+  const hasPriceAnalysis = isEnriched && !!(property as EnrichedUnifiedProperty).priceAnalysis;
+  const priceCategory = hasPriceAnalysis ? (property as EnrichedUnifiedProperty).priceAnalysis?.priceCategory : null;
+  fetch('http://127.0.0.1:7243/ingest/87870a9f-2e18-4c88-a39f-243879bf5747',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'popups.ts:generateClusterPropertyPopupHtml',message:'Badge check',data:{propertyId:property.id,isEnriched,hasPriceAnalysis,priceCategory,willShowBadge:isEnriched&&hasPriceAnalysis&&priceCategory!=='no_data'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4,H5'})}).catch(()=>{});
+  // #endregion
+
   // Generate price analysis badge HTML for cluster popup (only if enriched)
-  const clusterPriceAnalysisBadgeHtml = isEnrichedProperty(property) 
-    ? generatePriceAnalysisBadgeHtml(property.priceAnalysis)
-    : '';
+  let clusterPriceAnalysisBadgeHtml = '';
+  if (isEnrichedUnifiedProperty(property) && property.priceAnalysis) {
+    clusterPriceAnalysisBadgeHtml = generatePriceAnalysisBadgeHtml(property.priceAnalysis);
+  }
+
+  // Price display - null means price is hidden/negotiable
+  const priceDisplay = property.price === null 
+    ? translations.priceNegotiable 
+    : `${property.price.toLocaleString(POPUP_LOCALE)} ${property.currency}`;
+
+  // Source badge
+  const sourceBadgeHtml = generateSourceBadgeHtml(property.source);
 
   const imageHtml = property.images.length > 0 ? `
-    <div style="position: relative; background: #f3f4f6; border-radius: 8px 8px 0 0; overflow: hidden;">
+    <div style="position: relative; background: ${POPUP_COLORS.BG_LIGHT}; border-radius: 8px 8px 0 0; overflow: hidden;">
       <img 
         id="${clusterId}-img"
         src="${currentImage.medium}" 
@@ -186,28 +341,17 @@ export function generateClusterPropertyPopupHtml(
         style="width: 100%; height: 160px; object-fit: cover; display: block;" 
         onerror="this.style.display='none'" 
       />
-      <div style="position: absolute; top: 8px; left: 8px; background: ${typeBadgeColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
-        ${typeBadgeText}
-      </div>
+      ${typeBadge.html}
       ${hasMultipleImages ? `
-        <!-- Left button - centered between close button area and bottom -->
-        <button 
-          id="${clusterId}-img-prev"
-          style="position: absolute; left: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; color: white; font-size: 16px; display: flex; align-items: center; justify-content: center; ${imageIndex === 0 ? 'opacity: 0.3;' : ''}"
-        >‹</button>
-        <!-- Counter at bottom center -->
-        <span style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px;">${imageIndex + 1}/${property.images.length}</span>
-        <!-- Right button - centered between close button area and bottom -->
-        <button 
-          id="${clusterId}-img-next"
-          style="position: absolute; right: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: rgba(0,0,0,0.5); border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; color: white; font-size: 16px; display: flex; align-items: center; justify-content: center; ${imageIndex >= property.images.length - 1 ? 'opacity: 0.3;' : ''}"
-        >›</button>
+        ${generateGalleryNavButtonHtml('prev', `${clusterId}-img-prev`, imageIndex === 0)}
+        ${generateImageCounterHtml(null, imageIndex, property.images.length)}
+        ${generateGalleryNavButtonHtml('next', `${clusterId}-img-next`, imageIndex >= property.images.length - 1)}
       ` : ''}
     </div>
   ` : `
-    <div style="background: #f3f4f6; border-radius: 8px 8px 0 0; padding: 20px; text-align: center;">
-      <div style="display: inline-block; background: ${typeBadgeColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
-        ${typeBadgeText}
+    <div style="background: ${POPUP_COLORS.BG_LIGHT}; border-radius: 8px 8px 0 0; padding: 20px; text-align: center;">
+      <div style="display: inline-block; background: ${typeBadge.color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+        ${typeBadge.text}
       </div>
     </div>
   `;
@@ -216,40 +360,26 @@ export function generateClusterPropertyPopupHtml(
     <div style="min-width: 240px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
       ${imageHtml}
       <div style="padding: 12px;">
-        <!-- Title as link -->
-        <a 
-          href="${property.url}" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          style="display: flex; align-items: flex-start; gap: 4px; font-weight: 600; font-size: 12px; margin-bottom: 6px; line-height: 1.3; color: #1f2937; text-decoration: none;"
-        >
-          <span style="flex: 1; max-height: 2.6em; overflow: hidden;">${property.title}</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <line x1="10" y1="14" x2="21" y2="3"></line>
-          </svg>
-        </a>
-        <div style="font-size: 15px; font-weight: 700; color: #16a34a; margin-bottom: 6px;">
-          ${property.hidePrice ? translations.priceNegotiable : `${property.totalPrice.value.toLocaleString('pl-PL')} ${property.totalPrice.currency}`}
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+          ${generateTitleLinkHtml(property.url, property.title, '12px')}
+          ${sourceBadgeHtml}
+        </div>
+        <div style="font-size: 15px; font-weight: 700; color: ${POPUP_COLORS.PRICE_GREEN}; margin-bottom: 6px;">
+          ${priceDisplay}
         </div>
         ${clusterPriceAnalysisBadgeHtml}
-        <div style="display: flex; align-items: center; gap: 4px; color: #4b5563; margin-bottom: 8px; font-size: 11px;">
-          <span style="font-weight: 500;">${property.areaInSquareMeters} m²</span>
-          ${roomsDisplay ? `<span style="color: #9ca3af;">•</span><span style="font-weight: 500;">${roomsDisplay} ${translations.rooms}</span>` : ''}
-          ${pricePerMeterRounded ? `<span style="color: #9ca3af;">•</span><span style="color: #6b7280;">${pricePerMeterRounded.toLocaleString('pl-PL')} PLN/m²</span>` : ''}
-        </div>
+        ${generatePropertyDetailsHtml(property.area, property.rooms, property.pricePerMeter, translations, '11px')}
         
         <!-- Subtle pagination at bottom -->
-        <div style="display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 8px; border-top: 1px solid #f3f4f6;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 8px; margin-top: 8px; border-top: 1px solid ${POPUP_COLORS.BORDER_LIGHT};">
           <button 
             id="${clusterId}-prev"
-            style="background: none; border: none; padding: 4px 8px; cursor: pointer; font-size: 18px; color: ${currentIndex === 0 ? '#d1d5db' : '#6b7280'}; ${currentIndex === 0 ? 'cursor: default;' : ''}"
+            style="background: none; border: none; padding: 4px 8px; cursor: pointer; font-size: 18px; color: ${currentIndex === 0 ? POPUP_COLORS.BUTTON_DISABLED : POPUP_COLORS.TEXT_MUTED}; ${currentIndex === 0 ? 'cursor: default;' : ''}"
           >‹</button>
-          <span style="font-size: 11px; color: #9ca3af;">${paginationText}</span>
+          <span style="font-size: 11px; color: ${POPUP_COLORS.TEXT_LIGHT};">${paginationText}</span>
           <button 
             id="${clusterId}-next"
-            style="background: none; border: none; padding: 4px 8px; cursor: pointer; font-size: 18px; color: ${isAtEnd ? '#d1d5db' : '#6b7280'}; ${isAtEnd ? 'cursor: default;' : ''}"
+            style="background: none; border: none; padding: 4px 8px; cursor: pointer; font-size: 18px; color: ${isAtEnd ? POPUP_COLORS.BUTTON_DISABLED : POPUP_COLORS.TEXT_MUTED}; ${isAtEnd ? 'cursor: default;' : ''}"
           >›</button>
         </div>
       </div>
@@ -267,8 +397,8 @@ export function generateLoadingPopupHtml(
   const loadingText = translations.loadingOffers.replace('{count}', String(count));
   return `
     <div style="min-width: 200px; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="display: inline-block; width: 24px; height: 24px; border: 2px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-      <div style="margin-top: 12px; color: #6b7280; font-size: 12px;">${loadingText}</div>
+      <div style="display: inline-block; width: 24px; height: 24px; border: 2px solid ${POPUP_COLORS.BORDER_SPINNER}; border-top-color: ${POPUP_COLORS.LINK_BLUE}; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+      <div style="margin-top: 12px; color: ${POPUP_COLORS.TEXT_MUTED}; font-size: 12px;">${loadingText}</div>
       <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
     </div>
   `;
@@ -280,15 +410,7 @@ export function generateLoadingPopupHtml(
 export function generateErrorPopupHtml(message: string): string {
   return `
     <div style="min-width: 200px; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="color: #ef4444; font-size: 12px; margin-bottom: 12px;">${message}</div>
-      <a 
-        href="https://www.otodom.pl/pl/wyniki/sprzedaz/mieszkanie/poznan?viewType=listing" 
-        target="_blank" 
-        rel="noopener noreferrer"
-        style="display: inline-block; background: #3b82f6; color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: 500;"
-      >
-        Zobacz na Otodom
-      </a>
+      <div style="color: ${POPUP_COLORS.ERROR_RED}; font-size: 12px;">${message}</div>
     </div>
   `;
 }

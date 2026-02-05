@@ -2,14 +2,14 @@
  * Geographic distance utility functions
  */
 
-import { METERS_PER_DEGREE_LAT } from './constants';
+import { METERS_PER_DEGREE_LAT, DEG_TO_RAD } from './constants';
 
 /**
  * Calculate meters per degree of longitude at a given latitude
  * Longitude degrees get smaller as you move away from the equator
  */
 export function metersPerDegreeLng(lat: number): number {
-  return METERS_PER_DEGREE_LAT * Math.cos(lat * (Math.PI / 180));
+  return METERS_PER_DEGREE_LAT * Math.cos(lat * DEG_TO_RAD);
 }
 
 /**

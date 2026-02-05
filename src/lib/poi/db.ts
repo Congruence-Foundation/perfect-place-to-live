@@ -20,7 +20,7 @@ const sql = neon(process.env.DATABASE_URL!);
  * Database row type for POI queries
  */
 interface POIRow {
-  id: number;
+  id: number | string;  // Can be string for bigint IDs from PostgreSQL
   factor_id: string;
   lat: number;
   lng: number;
@@ -29,11 +29,54 @@ interface POIRow {
 }
 
 /**
+ * Validate that a row has the required POI fields
+ * Returns true if the row is a valid POIRow
+ */
+function isValidPOIRow(row: unknown): row is POIRow {
+  if (!row || typeof row !== 'object') return false;
+  const r = row as Record<string, unknown>;
+  // id can be number or string (bigint from PostgreSQL)
+  const hasValidId = typeof r.id === 'number' || typeof r.id === 'string';
+  return (
+    hasValidId &&
+    typeof r.factor_id === 'string' &&
+    typeof r.lat === 'number' &&
+    typeof r.lng === 'number' &&
+    !isNaN(r.lat) &&
+    !isNaN(r.lng)
+  );
+}
+
+/**
+ * Filter and validate POI rows from database result
+ * Logs warnings for invalid rows but doesn't throw
+ */
+function validatePOIRows(result: unknown[]): POIRow[] {
+  const validRows: POIRow[] = [];
+  let invalidCount = 0;
+  
+  for (const row of result) {
+    if (isValidPOIRow(row)) {
+      validRows.push(row);
+    } else {
+      invalidCount++;
+    }
+  }
+  
+  if (invalidCount > 0) {
+    console.warn(`POI query returned ${invalidCount} invalid rows out of ${result.length}`);
+  }
+  
+  return validRows;
+}
+
+/**
  * Convert a database row to a POI object
  */
 function rowToPOI(row: POIRow): POI {
   return {
-    id: row.id,
+    // Convert string ID to number if needed (safe for display purposes)
+    id: typeof row.id === 'string' ? parseInt(row.id, 10) : row.id,
     lat: row.lat,
     lng: row.lng,
     name: row.name ?? undefined,
@@ -86,7 +129,7 @@ export async function getPOIsFromDB(
   `;
   stopQueryTimer({ factors: factorIds.length, rows: result.length });
 
-  return groupByFactor(result as POIRow[], factorIds);
+  return groupByFactor(validatePOIRows(result), factorIds);
 }
 
 /**
@@ -113,6 +156,7 @@ export async function getPOIsForTilesBatched(
   const combinedBounds = getCombinedBounds(tiles);
   
   const stopQueryTimer = createTimer('poi-db:batch-query');
+  
   const result = await sql`
     SELECT factor_id, id, lat, lng, name, tags
     FROM osm_pois
@@ -125,6 +169,7 @@ export async function getPOIsForTilesBatched(
         4326
       )
   `;
+  
   stopQueryTimer({ 
     tiles: tiles.length, 
     factors: factorIds.length, 
@@ -133,7 +178,7 @@ export async function getPOIsForTilesBatched(
   });
 
   // Distribute POIs to their respective tiles
-  return distributePOIsToTiles(result as POIRow[], tiles, factorIds);
+  return distributePOIsToTiles(validatePOIRows(result), tiles, factorIds);
 }
 
 /**

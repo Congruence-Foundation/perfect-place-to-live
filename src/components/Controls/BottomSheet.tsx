@@ -204,7 +204,7 @@ export default function BottomSheet({
         aria-label="Drag to resize panel"
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={Math.round((sheetHeight / window.innerHeight) * 100)}
+        aria-valuenow={Math.round((sheetHeight / snapHeights.expanded) * 100)}
         tabIndex={0}
       >
         <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />

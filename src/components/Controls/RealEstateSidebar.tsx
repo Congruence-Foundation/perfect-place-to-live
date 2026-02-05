@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { Label } from '@/components/ui/label';
@@ -64,6 +64,20 @@ export default function RealEstateSidebar({
   const [isExpanded, setIsExpanded] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const t = useTranslations('realEstate');
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const handleToggleExpanded = useCallback(() => {
+    setIsExpanded(prev => {
+      const willExpand = !prev;
+      if (willExpand) {
+        // Scroll the panel into view after expansion animation starts
+        setTimeout(() => {
+          panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }, 50);
+      }
+      return willExpand;
+    });
+  }, []);
 
   // Translated options
   const floorOptions = useTranslatedOptions(FLOOR_OPTIONS, t);
@@ -108,10 +122,10 @@ export default function RealEstateSidebar({
   };
 
   return (
-    <div className="rounded-xl bg-muted/50 transition-colors">
+    <div ref={panelRef} className="rounded-xl bg-muted/50 transition-colors">
       {/* Header - always visible */}
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={handleToggleExpanded}
         className="flex items-center justify-between p-3 w-full"
       >
         <div className="flex items-center gap-3">

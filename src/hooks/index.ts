@@ -5,5 +5,4 @@ export { useSnapPoints } from './useSnapPoints';
 export { useNotification } from './useNotification';
 export type { Notification } from './useNotification';
 export { useClickOutside } from './useClickOutside';
-export { useLeaflet } from './useLeaflet';
 export { useLatestRef } from './useLatestRef';

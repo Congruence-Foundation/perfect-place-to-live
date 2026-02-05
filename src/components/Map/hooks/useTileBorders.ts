@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Hook for rendering debug tile borders on the map
  * Extracts tile border rendering logic from MapView for better separation of concerns

@@ -2,16 +2,11 @@
 
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
-import type { PropertyFilters, TransactionType } from '../types';
+import type { PropertyFilters } from '../types';
+import { DEFAULT_RENT_PRICE, DEFAULT_SELL_PRICE } from '../config/constants';
 
-/** Default price ranges for transaction types */
-export const DEFAULT_RENT_PRICE = { min: 1000, max: 10000 };
-export const DEFAULT_SELL_PRICE = { min: 100000, max: 2000000 };
-
-/** Get default price range for a transaction type */
-export function getDefaultPriceRange(transaction: TransactionType) {
-  return transaction === 'RENT' ? DEFAULT_RENT_PRICE : DEFAULT_SELL_PRICE;
-}
+// Re-export for backwards compatibility
+export { DEFAULT_RENT_PRICE, DEFAULT_SELL_PRICE, getDefaultPriceRange } from '../config/constants';
 
 const BASE_BUTTON_CLASSES = 'flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors';
 const ACTIVE_BUTTON_CLASSES = 'bg-primary text-primary-foreground';

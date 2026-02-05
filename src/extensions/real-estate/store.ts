@@ -3,15 +3,17 @@
 import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import type {
-  OtodomProperty,
   PropertyFilters,
-  PropertyCluster,
-  EnrichedProperty,
-  PriceValueRange,
 } from './types';
 import { DEFAULT_PROPERTY_FILTERS } from './types';
 import type { PropertyDataSource } from './config';
 import type { ClusterAnalysisMap } from './lib';
+import type {
+  UnifiedProperty,
+  UnifiedCluster,
+  EnrichedUnifiedProperty,
+  PriceValueRange,
+} from './lib/shared';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
 import {
   DEFAULT_SCORE_RANGE,
@@ -34,13 +36,13 @@ export interface RealEstateState {
   priceAnalysisRadius: number; // 0, 1, or 2 tile layers around viewport
   
   // Raw API data (now populated by useTileQueries)
-  rawProperties: OtodomProperty[];
-  rawClusters: PropertyCluster[];
+  rawProperties: UnifiedProperty[];
+  rawClusters: UnifiedCluster[];
   totalCount: number;
   
   // Computed/filtered data (set by controller)
-  properties: EnrichedProperty[];
-  clusters: PropertyCluster[];
+  properties: EnrichedUnifiedProperty[];
+  clusters: UnifiedCluster[];
   /** 
    * Cluster analysis data - stored for potential future use and devtools debugging.
    * Currently computed in RealEstateController but not read from store by any component.
@@ -54,7 +56,7 @@ export interface RealEstateState {
   error: string | null;
   
   // Cache
-  clusterPropertiesCache: Map<string, OtodomProperty[]>;
+  clusterPropertiesCache: Map<string, UnifiedProperty[]>;
   cacheVersion: number;
 }
 
@@ -71,8 +73,8 @@ export interface RealEstateActions {
   setPriceAnalysisRadius: (radius: number) => void;
   
   // Data actions
-  setRawData: (properties: OtodomProperty[], clusters: PropertyCluster[], totalCount: number) => void;
-  setComputedData: (properties: EnrichedProperty[], clusters: PropertyCluster[], analysisData: ClusterAnalysisMap) => void;
+  setRawData: (properties: UnifiedProperty[], clusters: UnifiedCluster[], totalCount: number) => void;
+  setComputedData: (properties: EnrichedUnifiedProperty[], clusters: UnifiedCluster[], analysisData: ClusterAnalysisMap) => void;
   
   // API state actions
   setIsLoading: (loading: boolean) => void;
@@ -81,7 +83,7 @@ export interface RealEstateActions {
   setError: (error: string | null) => void;
   
   // Cache actions
-  cacheClusterProperties: (clusterId: string, properties: OtodomProperty[]) => void;
+  cacheClusterProperties: (clusterId: string, properties: UnifiedProperty[]) => void;
   
   // Clear all
   clearProperties: () => void;
@@ -145,7 +147,19 @@ export const useRealEstateStore = create<RealEstateStore>()(
       
       setPriceValueRange: (priceValueRange) => set({ priceValueRange }, false, 'setPriceValueRange'),
       
-      setDataSources: (dataSources) => set({ dataSources }, false, 'setDataSources'),
+      setDataSources: (dataSources) => set({
+        dataSources,
+        // Set loading state immediately to show loading indicator
+        isLoading: true,
+        // Clear all data to prevent stale data from previous sources
+        rawProperties: [],
+        rawClusters: [],
+        properties: [],
+        clusters: [],
+        clusterPropertiesCache: new Map(),
+        clusterAnalysisData: new Map(),
+        cacheVersion: get().cacheVersion + 1,
+      }, false, 'setDataSources'),
       
       setPriceAnalysisRadius: (priceAnalysisRadius) => set(
         { priceAnalysisRadius: Math.min(Math.max(priceAnalysisRadius, 0), PROPERTY_TILE_CONFIG.MAX_PRICE_RADIUS) },

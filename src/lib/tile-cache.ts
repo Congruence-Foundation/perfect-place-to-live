@@ -6,14 +6,15 @@
 
 import { createTwoLevelCache, type CacheStats } from './two-level-cache';
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
-import type { OtodomProperty, PropertyCluster } from '@/extensions/real-estate/types';
+import type { UnifiedProperty, UnifiedCluster } from '@/extensions/real-estate/lib/shared';
 
 /**
  * Cached tile data structure
+ * Now uses unified property and cluster types for multi-source support.
  */
 export interface TileCacheEntry {
-  properties: OtodomProperty[];
-  clusters: PropertyCluster[];
+  properties: UnifiedProperty[];
+  clusters: UnifiedCluster[];
   totalCount: number;
   fetchedAt: string;
 }

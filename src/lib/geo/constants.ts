@@ -8,6 +8,9 @@ export const EARTH_RADIUS_METERS = 6371000;
 /** Meters per degree of latitude (approximately constant) */
 export const METERS_PER_DEGREE_LAT = 111320;
 
+/** Conversion factor from degrees to radians */
+export const DEG_TO_RAD = Math.PI / 180;
+
 /**
  * Poland geographic bounds
  */
