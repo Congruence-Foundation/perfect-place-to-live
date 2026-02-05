@@ -49,6 +49,8 @@ interface MapViewProps {
   pois?: Record<string, POI[]>;
   showPOIs?: boolean;
   factors?: Factor[];
+  /** Lambda parameter for power mean calculation */
+  lambda?: number;
   popupTranslations?: PopupTranslations;
   factorTranslations?: FactorTranslations;
   /** Callback when map is ready with Leaflet instance */
@@ -68,6 +70,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   pois = {},
   showPOIs = false,
   factors = [],
+  lambda,
   popupTranslations = defaultPopupTranslations,
   factorTranslations = {},
   onMapReady,
@@ -121,6 +124,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   // Use useLatestRef for values accessed in callbacks
   const poisRef = useLatestRef(pois);
   const factorsRef = useLatestRef(factors);
+  const lambdaRef = useLatestRef(lambda);
   const popupTranslationsRef = useLatestRef(popupTranslations);
   const factorTranslationsRef = useLatestRef(factorTranslations);
   const onBoundsChangeRef = useLatestRef(onBoundsChange);
@@ -134,7 +138,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     const { lat, lng } = e.latlng;
     
     const { k, breakdown } = calculateFactorBreakdown(
-      lat, lng, factorsRef.current, poisRef.current
+      lat, lng, factorsRef.current, poisRef.current, lambdaRef.current
     );
     
     const popupContent = generatePopupContent(

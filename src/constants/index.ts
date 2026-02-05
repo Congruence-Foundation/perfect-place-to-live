@@ -19,5 +19,6 @@ export {
   PARALLEL_CONFIG,
   WEIGHT_THRESHOLDS,
   SPATIAL_INDEX_CONFIG,
+  POWER_MEAN_CONFIG,
 } from './performance';
 export { Z_INDEX } from './z-index';

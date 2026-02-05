@@ -42,6 +42,8 @@ interface MapContainerProps {
   pois?: Record<string, POI[]>;
   showPOIs?: boolean;
   factors?: Factor[];
+  /** Lambda parameter for power mean calculation */
+  lambda?: number;
   /** Callback when map is ready with Leaflet instance and extension layer */
   onMapReady?: (map: L.Map, L: typeof import('leaflet'), extensionLayer: L.LayerGroup) => void;
   /** Tile coordinates for canvas bounds (synchronous with heatmapPoints) */
@@ -57,6 +59,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
   pois = {},
   showPOIs = false,
   factors = [],
+  lambda,
   onMapReady,
   heatmapTileCoords = [],
   isHeatmapDataReady = true,
@@ -150,6 +153,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
       pois={pois}
       showPOIs={showPOIs}
       factors={factors}
+      lambda={lambda}
       popupTranslations={popupTranslations}
       factorTranslations={factorTranslations}
       onMapReady={onMapReady}

@@ -6,7 +6,7 @@
 import type { Bounds, TileCoordinates } from '@/types';
 import type { PropertyFilters } from '@/extensions/real-estate/types';
 import type { Factor } from '@/types/factors';
-import { PROPERTY_TILE_CONFIG, HEATMAP_TILE_CONFIG, POI_TILE_CONFIG } from '@/constants/performance';
+import { PROPERTY_TILE_CONFIG, HEATMAP_TILE_CONFIG, POI_TILE_CONFIG, POWER_MEAN_CONFIG } from '@/constants/performance';
 import { getTilesForBounds } from './grid';
 import { djb2Hash } from '@/lib/utils';
 import { DEG_TO_RAD } from './constants';
@@ -242,6 +242,7 @@ export interface HeatmapConfig {
   factors: Factor[];
   distanceCurve: string;
   sensitivity: number;
+  lambda?: number;
 }
 
 /**
@@ -263,10 +264,12 @@ export function hashHeatmapConfig(config: HeatmapConfig): string {
     .sort((a, b) => a.id.localeCompare(b.id));
 
   // Create a stable, sorted representation
+  // Include lambda with default for backward compatibility
   const key = JSON.stringify({
     factors: enabledFactors,
     distanceCurve: config.distanceCurve,
     sensitivity: config.sensitivity,
+    lambda: config.lambda ?? POWER_MEAN_CONFIG.DEFAULT_LAMBDA,
   });
 
   return djb2Hash(key);

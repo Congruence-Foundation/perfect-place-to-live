@@ -28,6 +28,7 @@ interface HeatmapTileRequest {
   factors?: Factor[];
   distanceCurve?: string;
   sensitivity?: number;
+  lambda?: number;
   normalizeToViewport?: boolean;
   dataSource?: POIDataSource;
 }
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
       factors: requestFactors, 
       distanceCurve = 'log',
       sensitivity = 1,
+      lambda,
       normalizeToViewport = false,
       dataSource: requestedDataSource,
     } = body;
@@ -67,6 +69,7 @@ export async function POST(request: NextRequest) {
       factors,
       distanceCurve,
       sensitivity,
+      lambda,
     });
 
     // Generate cache key
@@ -119,6 +122,7 @@ export async function POST(request: NextRequest) {
       gridSize,
       distanceCurve as 'linear' | 'log' | 'exp' | 'power',
       sensitivity,
+      lambda,
       normalizeToViewport
     );
 

@@ -29,6 +29,7 @@ export interface HeatmapSettings {
   gridCellSize: number; // in meters (25-300)
   distanceCurve: DistanceCurve; // distance scoring function
   sensitivity: number; // curve steepness (0.5-3, default 1)
+  lambda: number; // power mean asymmetry strength (-0.5 to 5, default 1)
   normalizeToViewport: boolean; // normalize K values to viewport range
   clusterPriceDisplay: ClusterPriceDisplay; // how to show prices on cluster pins
   clusterPriceAnalysis: ClusterPriceAnalysisMode; // how to analyze prices for clusters
@@ -41,6 +42,7 @@ export interface HeatmapRequest {
   gridSize: number;
   distanceCurve?: DistanceCurve;
   sensitivity?: number;
+  lambda?: number;
   normalizeToViewport?: boolean;
   dataSource?: POIDataSource;
 }

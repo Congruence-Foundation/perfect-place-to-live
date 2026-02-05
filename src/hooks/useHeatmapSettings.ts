@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useLayoutEffect } from 'react';
-import { UI_CONFIG } from '@/constants/performance';
+import { UI_CONFIG, POWER_MEAN_CONFIG } from '@/constants/performance';
 import type { HeatmapSettings, DistanceCurve } from '@/types';
 
 interface UseHeatmapSettingsOptions {
@@ -7,12 +7,15 @@ interface UseHeatmapSettingsOptions {
   initialDistanceCurve: DistanceCurve;
   /** Initial sensitivity from parent */
   initialSensitivity: number;
+  /** Initial lambda (power mean asymmetry) from parent */
+  initialLambda?: number;
   /** Initial normalize to viewport setting from parent */
   initialNormalizeToViewport: boolean;
   /** Callback to notify parent of heatmap-related settings changes */
   onSettingsChange: (settings: {
     distanceCurve?: DistanceCurve;
     sensitivity?: number;
+    lambda?: number;
     normalizeToViewport?: boolean;
   }) => void;
 }
@@ -32,6 +35,7 @@ interface UseHeatmapSettingsReturn {
 export function useHeatmapSettings({
   initialDistanceCurve,
   initialSensitivity,
+  initialLambda = POWER_MEAN_CONFIG.DEFAULT_LAMBDA,
   initialNormalizeToViewport,
   onSettingsChange,
 }: UseHeatmapSettingsOptions): UseHeatmapSettingsReturn {
@@ -39,6 +43,7 @@ export function useHeatmapSettings({
     gridCellSize: UI_CONFIG.DEFAULT_GRID_CELL_SIZE,
     distanceCurve: initialDistanceCurve,
     sensitivity: initialSensitivity,
+    lambda: initialLambda,
     normalizeToViewport: initialNormalizeToViewport,
     clusterPriceDisplay: 'median',
     clusterPriceAnalysis: 'simplified',
@@ -60,11 +65,13 @@ export function useHeatmapSettings({
     if (
       updates.distanceCurve !== undefined ||
       updates.sensitivity !== undefined ||
+      updates.lambda !== undefined ||
       updates.normalizeToViewport !== undefined
     ) {
       onSettingsChangeRef.current({
         distanceCurve: updates.distanceCurve,
         sensitivity: updates.sensitivity,
+        lambda: updates.lambda,
         normalizeToViewport: updates.normalizeToViewport,
       });
     }

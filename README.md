@@ -2,9 +2,20 @@
 
 An interactive map application that helps identify the best locations to live based on proximity to various amenities. Built with Next.js, Leaflet, and OpenStreetMap data.
 
+**[Live Demo](https://perfect-place-to-live.vercel.app/)**
+
+## Screenshots
+
+![Heatmap Demo](docs/images/heatmap-demo.png)
+*Location quality heatmap with factor-based scoring*
+
+![Price Analysis Demo](docs/images/price-analysis-demo.png)
+*Real estate price analysis with deal detection*
+
 ## Features
 
 - **Interactive Heatmap**: Visualize location quality across the map with canvas-based rendering
+- **Power Mean Scoring**: Weight-dependent formula where critical factors have outsized influence
 - **9 User Profiles**: Pre-configured factor weights for different lifestyles (Family, Urban Pro, Student, etc.)
 - **27 POI Categories**: Comprehensive amenity coverage organized into Essential, Lifestyle, and Environment
 - **Real Estate Extension**: Browse property listings from Otodom and Gratka with price analysis
@@ -39,8 +50,8 @@ An interactive map application that helps identify the best locations to live ba
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd map
+git clone https://github.com/Congruence-Foundation/perfect-place-to-live.git
+cd perfect-place-to-live
 ```
 
 2. Install dependencies:
@@ -64,7 +75,7 @@ npm run dev
 
 1. **Navigate the Map**: Pan and zoom to your area of interest in Poland
 2. **Select a Profile**: Choose from 9 pre-configured profiles or customize factors
-3. **Calculate Heatmap**: Click Refresh to generate the heatmap for the current view
+3. **View Heatmap**: The heatmap updates automatically as you navigate
 4. **Analyze Locations**: Right-click (or long-press on mobile) for detailed factor breakdown
 5. **Browse Properties**: Enable Real Estate to see property listings with price analysis
 6. **Interpret Colors**:
@@ -112,8 +123,8 @@ npm run dev
 - **Markets & Bazaars**: Marketplaces, shopping malls, retail areas
 - **City/Town Access**: Proximity to city and town centers
 
-### Environment (7 categories - negative factors)
-- **Water Bodies**: Lakes, rivers, coastlines (positive)
+### Environment (7 categories)
+- **Water Bodies**: Lakes, rivers, coastlines (positive by default)
 - **Industrial Areas**: Industrial zones, quarries (negative)
 - **Major Roads**: Motorways, trunk roads, primary roads (negative)
 - **Airports**: Airports, helipads, runways (negative)
@@ -121,9 +132,91 @@ npm run dev
 - **Cemeteries**: Cemeteries and graveyards (negative)
 - **Construction Sites**: Active construction (negative)
 
-## Real Estate Extension
+## Algorithm
 
-The Real Estate extension integrates property listings from Polish real estate portals:
+### K-Value Calculation (Location Quality Score)
+
+The K-value represents location quality where **lower K = better location**. It uses a **weight-dependent power mean** formula that allows high-priority factors to have outsized influence on the final score.
+
+#### Power Mean Formula
+
+```
+K = (Σ |wᵢ| × vᵢ^pᵢ / Σ |wᵢ|)^(1/p̄)
+```
+
+Where:
+- `wᵢ` = factor weight (-100 to +100)
+- `vᵢ` = normalized distance value (0-1) for factor i
+- `pᵢ` = weight-dependent exponent: `p = 1 + λ × (|w|/100)²`
+- `p̄` = weighted average exponent
+- `λ` = asymmetry strength parameter (configurable via "Weight Impact" slider)
+
+#### Weight Impact (Lambda Parameter)
+
+The lambda parameter controls how much high-weight factors dominate the score:
+
+| Setting | Lambda | Behavior |
+|---------|--------|----------|
+| Equalizer | -0.5 | Low-weight factors gain importance |
+| Balanced | 0 | Standard arithmetic mean |
+| Mild | 0.5 | Slight preference for high-weight factors |
+| Moderate | 1.0 | Moderate preference |
+| **Strong** | **2.0** | High-weight factors dominate (default) |
+| Very Strong | 3.0 | Single critical factor can significantly impact score |
+| Extreme | 5.0 | Near deal-breaker behavior for critical factors |
+
+#### Factor Value Calculation
+
+For each factor:
+- **Positive weights** (prefer nearby): `value = normalizedDistance` (closer = lower K = better)
+- **Negative weights** (avoid nearby): `value = 1 - normalizedDistance` (farther = lower K = better)
+- **No POIs found**: Positive factors get worst score (1), negative factors get best score (0)
+
+#### Distance Curves
+
+The `normalizedDistance` is transformed using configurable curves:
+
+| Curve | Formula | Use Case |
+|-------|---------|----------|
+| **Logarithmic** | `log(1 + ratio×(base-1)) / log(base)` | Street-level precision |
+| **Linear** | `ratio` | General use |
+| **Exponential** | `(e^(ratio×s) - 1) / (e^s - 1)` | Sharp drop-off near POIs |
+| **Power** | `ratio^(1/s)` | Balanced option |
+
+Where `ratio = distance / maxDistance` and `s` = sensitivity parameter.
+
+#### Sensitivity Parameter
+
+Controls the steepness of distance curves (range: 0.5 to 3.0, default: 1.0):
+- **Lower values (0.5)**: Gentler curves, more gradual score changes
+- **Higher values (3.0)**: Steeper curves, sharper distinction between close and far
+
+#### Density Bonus
+
+Areas with multiple nearby POIs receive a bonus for positive factors:
+
+```
+bonus = 0.15 × (1 - 1/(count/3 + 1))
+```
+
+This provides diminishing returns: 1 extra POI ≈ 3.75% bonus, 3 extra ≈ 7.5%, approaches 15% max asymptotically.
+
+#### Relative Mode (Normalize to Viewport)
+
+When enabled, K-values are normalized relative to the current viewport:
+- Scores are scaled so the best location in view = 0 (green) and worst = 1 (red)
+- Useful for comparing locations within a specific area
+- Disabled by default for consistent absolute scoring
+
+### Factor Breakdown
+
+Right-click (desktop) or long-press (mobile) on any location to see a detailed breakdown:
+- Individual factor contributions to the K-value
+- Distance to nearest POI for each factor
+- Effective exponent based on weight and lambda
+- Count of nearby POIs within range
+
+## Real Estate Extension
 
 ### Data Sources
 - **Otodom** (otodom.pl) - Major Polish real estate portal
@@ -136,9 +229,99 @@ The Real Estate extension integrates property listings from Polish real estate p
 - **Deal Detection**: Identify great deals, good deals, fair prices, and overpriced listings
 - **Location Score**: Filter properties by heatmap score (location quality)
 
-## Scripts
+### Price Analysis Algorithm
 
-The project includes scripts for managing POI data:
+Properties are enriched with price analysis by comparing against similar properties:
+
+#### Grouping Strategy
+
+Properties are grouped by:
+1. **Estate Type**: Flat, House, etc.
+2. **Room Count**: Overlapping ranges (1-2, 2-3, 3-4, 4-5, 5+)
+3. **Area Range**: <40m², 40-55m², 55-75m², 75-100m², 100+m²
+4. **Location Quality Tier**: 0-20%, 20-40%, 40-60%, 60-80%, 80-100%
+
+#### Price Score Calculation
+
+```
+priceScore = 50 + (pricePerMeter - medianPrice) / stdDev × 15
+```
+
+Clamped to 0-100 range. Lower score = better deal.
+
+#### Price Categories
+
+| Category | Score Range | Description |
+|----------|-------------|-------------|
+| Great Deal | 0-25 | Significantly below market |
+| Good Deal | 25-40 | Below market average |
+| Fair | 40-60 | Around market average |
+| Above Average | 60-75 | Above market average |
+| Overpriced | 75-100 | Significantly above market |
+
+### Analysis Modes
+
+#### Simplified Mode (Default)
+- Uses nearby loaded properties for price comparison
+- Fast, works with already-fetched data
+- May have limited comparison data in sparse areas
+
+#### Detailed Mode
+- Fetches actual property data from API for each cluster
+- More accurate price analysis with larger comparison groups
+- Slower due to additional API calls
+- Configurable threshold: clusters larger than threshold fall back to simplified mode
+
+## Settings Reference
+
+### Heatmap Settings
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **Distance Curve** | How distance affects score | Exponential |
+| **Sensitivity** | Curve steepness (0.5-3.0) | 1.0 |
+| **Weight Impact** | Lambda parameter for power mean | Strong (2.0) |
+| **Relative Mode** | Normalize scores to viewport | Off |
+| **Heatmap Area** | Tile radius for calculation | Viewport |
+| **POI Buffer** | Extra POI fetch distance | 2x |
+
+### Debug Options
+
+| Setting | Description |
+|---------|-------------|
+| **Heatmap Tiles** | Show tile boundaries (zoom 13) |
+| **Property Tiles** | Show property tile boundaries (zoom 14+) |
+
+## Performance Tips
+
+- **Optimal Zoom**: Zoom levels 12-15 provide the best balance of detail and performance
+- **Factor Count**: Disable unused factors to speed up calculations
+- **POI Buffer**: Use 1x for faster loading, 2x for more accurate edge scoring
+- **Tile Radius**: Viewport-only is fastest; +1/+2 tiles provide smoother panning
+
+## Known Limitations
+
+- **Geographic Coverage**: POI data is currently focused on Poland
+- **Real Estate Data**: Property listings are from Polish portals (Otodom, Gratka)
+- **API Rate Limits**: Overpass API fallback may be slow during high traffic
+- **Mobile Performance**: Complex heatmaps may be slower on older mobile devices
+- **Data Freshness**: 
+  - Neon DB: Updated periodically via sync scripts
+  - Overpass API: Real-time but slower
+  - Property listings: Fetched live from portals
+
+## Browser Compatibility
+
+| Browser | Support |
+|---------|---------|
+| Chrome 90+ | Full |
+| Firefox 90+ | Full |
+| Safari 14+ | Full |
+| Edge 90+ | Full |
+| Mobile Chrome | Full |
+| Mobile Safari | Full |
+
+## Scripts
 
 ### POI Sync Pipeline
 
@@ -213,32 +396,6 @@ Major cities: `poznan`, `warsaw`, `krakow`, `wroclaw`, `gdansk`, `lodz`, `katowi
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis token | No |
 | `ADMIN_SECRET` | Secret for tile generation | For tile generation |
 
-## Algorithm
-
-The K-value (location quality score) is calculated as:
-
-```
-K = Σ (value × |weight|) / Σ |weight|
-```
-
-Where:
-- For **positive weights** (prefer nearby): `value = normalizedDistance` (closer = lower K = better)
-- For **negative weights** (avoid nearby): `value = 1 - normalizedDistance` (farther = lower K = better)
-- `normalizedDistance` is transformed using configurable distance curves (log, linear, exp, power)
-
-### Distance Curves
-
-| Curve | Description | Use Case |
-|-------|-------------|----------|
-| **Logarithmic** | Very sensitive to nearby distances | Street-level precision |
-| **Linear** | Uniform sensitivity | General use |
-| **Exponential** | Sharp drop-off near POIs | When being very close matters most |
-| **Power** | Moderate sensitivity (square root) | Balanced option |
-
-### Density Bonus
-
-Areas with multiple nearby POIs receive a bonus (up to 15% improvement) for positive factors.
-
 ## Deployment
 
 ### Vercel (Recommended)
@@ -256,8 +413,6 @@ npm start
 ```
 
 ## Architecture
-
-The application uses a modular extension system:
 
 ```
 src/

@@ -14,7 +14,7 @@ import type { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/
 import { generateGrid, calculateAdaptiveGridSize } from '@/lib/geo/grid';
 import { SpatialIndex } from '@/lib/geo/haversine';
 import { normalizeKValues, logKStats } from './calculator';
-import { PERFORMANCE_CONFIG, PARALLEL_CONFIG } from '@/constants';
+import { PERFORMANCE_CONFIG, PARALLEL_CONFIG, POWER_MEAN_CONFIG } from '@/constants';
 import { createTimer } from '@/lib/profiling';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
@@ -188,9 +188,10 @@ function applyDistanceCurve(distance, maxDistance, curve, sensitivity) {
   }
 }
 
-function calculateK(point, poiData, factors, spatialIndexes, distanceCurve, sensitivity) {
-  let weightedSum = 0;
+function calculateK(point, poiData, factors, spatialIndexes, distanceCurve, sensitivity, lambda) {
+  let powerSum = 0;
   let totalWeight = 0;
+  let weightedExponentSum = 0;
 
   for (const factor of factors) {
     if (!factor.enabled || factor.weight === 0) continue;
@@ -199,39 +200,49 @@ function calculateK(point, poiData, factors, spatialIndexes, distanceCurve, sens
     const isNegative = factor.weight < 0;
     const absWeight = Math.abs(factor.weight);
     const spatialIndex = spatialIndexes.get(factor.id);
+    
+    // Calculate weight-dependent exponent: p = 1 + λ × (|w|/100)²
+    const wNorm = absWeight / 100;
+    const p = 1 + lambda * wNorm * wNorm;
 
+    let value;
     if (pois.length === 0) {
-      weightedSum += (isNegative ? 0 : 1) * absWeight;
-      totalWeight += absWeight;
-      continue;
-    }
+      value = isNegative ? 0 : 1;
+    } else {
+      const nearestDistance = spatialIndex 
+        ? spatialIndex.findNearestDistance(point, factor.maxDistance)
+        : Infinity;
 
-    const nearestDistance = spatialIndex 
-      ? spatialIndex.findNearestDistance(point, factor.maxDistance)
-      : Infinity;
+      const normalizedDistance = applyDistanceCurve(nearestDistance, factor.maxDistance, distanceCurve, sensitivity);
+      value = isNegative ? 1 - normalizedDistance : normalizedDistance;
 
-    const normalizedDistance = applyDistanceCurve(nearestDistance, factor.maxDistance, distanceCurve, sensitivity);
-    let value = isNegative ? 1 - normalizedDistance : normalizedDistance;
-
-    if (!isNegative && pois.length > 1 && spatialIndex) {
-      const searchRadius = factor.maxDistance * DENSITY_BONUS_RADIUS_RATIO;
-      const nearbyCount = spatialIndex.countWithinRadius(point, searchRadius);
-      if (nearbyCount > 1) {
-        const normalizedCount = (nearbyCount - 1) / DENSITY_BONUS_SCALE;
-        const bonus = DENSITY_BONUS_MAX * (1 - 1 / (normalizedCount + 1));
-        value = Math.max(0, value - bonus);
+      if (!isNegative && pois.length > 1 && spatialIndex) {
+        const searchRadius = factor.maxDistance * DENSITY_BONUS_RADIUS_RATIO;
+        const nearbyCount = spatialIndex.countWithinRadius(point, searchRadius);
+        if (nearbyCount > 1) {
+          const normalizedCount = (nearbyCount - 1) / DENSITY_BONUS_SCALE;
+          const bonus = DENSITY_BONUS_MAX * (1 - 1 / (normalizedCount + 1));
+          value = Math.max(0, value - bonus);
+        }
       }
     }
 
-    weightedSum += value * absWeight;
+    // Accumulate for power mean
+    const safeValue = Math.max(value, 1e-10);
+    powerSum += absWeight * Math.pow(safeValue, p);
     totalWeight += absWeight;
+    weightedExponentSum += absWeight * p;
   }
 
-  return totalWeight > 0 ? weightedSum / totalWeight : 0.5;
+  if (totalWeight === 0) return 0.5;
+  
+  const pBar = weightedExponentSum / totalWeight;
+  const K = Math.pow(powerSum / totalWeight, 1 / pBar);
+  return Math.min(1, Math.max(0, K));
 }
 
 // Main worker execution
-const { points, poiData, spatialIndexData, factors, distanceCurve, sensitivity } = workerData;
+const { points, poiData, spatialIndexData, factors, distanceCurve, sensitivity, lambda } = workerData;
 
 // Convert POI data to Map
 const poiDataMap = new Map(Object.entries(poiData));
@@ -246,7 +257,7 @@ for (const [factorId, indexData] of Object.entries(spatialIndexData)) {
 const results = points.map(point => ({
   lat: point.lat,
   lng: point.lng,
-  value: calculateK(point, poiDataMap, factors, spatialIndexes, distanceCurve, sensitivity)
+  value: calculateK(point, poiDataMap, factors, spatialIndexes, distanceCurve, sensitivity, lambda)
 }));
 
 parentPort.postMessage(results);
@@ -282,7 +293,8 @@ function runWorker(
   spatialIndexData: Record<string, { cells: [string, POI[]][]; cellSize: number }>,
   factors: Factor[],
   distanceCurve: DistanceCurve,
-  sensitivity: number
+  sensitivity: number,
+  lambda: number
 ): Promise<HeatmapPoint[]> {
   return new Promise((resolve, reject) => {
     let resolved = false;
@@ -296,6 +308,7 @@ function runWorker(
         factors,
         distanceCurve,
         sensitivity,
+        lambda,
       },
     });
 
@@ -335,6 +348,7 @@ export async function calculateHeatmapParallel(
   gridSize?: number,
   distanceCurve: DistanceCurve = 'log',
   sensitivity: number = 1,
+  lambda: number = POWER_MEAN_CONFIG.DEFAULT_LAMBDA,
   normalizeToViewport: boolean = false,
   prebuiltSpatialIndexes?: Map<string, SpatialIndex>
 ): Promise<HeatmapPoint[]> {
@@ -377,6 +391,7 @@ export async function calculateHeatmapParallel(
       gridSize,
       distanceCurve,
       sensitivity,
+      lambda,
       normalizeToViewport,
       prebuiltSpatialIndexes
     );
@@ -408,7 +423,7 @@ export async function calculateHeatmapParallel(
     // Run workers in parallel
     const stopWorkersTimer = createTimer('calculator:workers');
     const workerPromises = pointChunks.map((chunk) =>
-      runWorker(chunk, poiDataObj, spatialIndexData, enabledFactors, distanceCurve, sensitivity)
+      runWorker(chunk, poiDataObj, spatialIndexData, enabledFactors, distanceCurve, sensitivity, lambda)
     );
 
     const results = await Promise.all(workerPromises);
@@ -430,6 +445,7 @@ export async function calculateHeatmapParallel(
       gridSize,
       distanceCurve,
       sensitivity,
+      lambda,
       normalizeToViewport
     );
 

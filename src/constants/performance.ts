@@ -425,3 +425,29 @@ export const SPATIAL_INDEX_CONFIG = {
   /** Default cell size in degrees for spatial indexing (~1.1km at equator) */
   DEFAULT_CELL_SIZE_DEGREES: 0.01,
 } as const;
+
+/**
+ * Power mean configuration for heatmap K index calculation
+ * Controls how high-weight factors influence the final score
+ */
+export const POWER_MEAN_CONFIG = {
+  /** Default lambda (asymmetry strength) - 2.0 = strong (high-weight factors dominate) */
+  DEFAULT_LAMBDA: 2.0,
+  /** Minimum lambda value (-0.5 = equalizer mode, low-weight factors gain importance) */
+  MIN_LAMBDA: -0.5,
+  /** Maximum lambda value (5.0 = extreme, single bad factor can tank score) */
+  MAX_LAMBDA: 5.0,
+  /** 
+   * Discrete lambda steps for UI slider
+   * Each step maps to a specific lambda value with a label
+   */
+  LAMBDA_STEPS: [
+    { value: -0.5, label: 'equalizer' },
+    { value: 0, label: 'balanced' },
+    { value: 0.5, label: 'mild' },
+    { value: 1.0, label: 'moderate' },
+    { value: 2.0, label: 'strong' },
+    { value: 3.0, label: 'veryStrong' },
+    { value: 5.0, label: 'extreme' },
+  ] as const,
+} as const;

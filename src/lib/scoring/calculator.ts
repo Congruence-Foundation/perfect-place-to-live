@@ -1,7 +1,7 @@
 import type { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/types';
 import { haversineDistance, SpatialIndex } from '@/lib/geo/haversine';
 import { generateGrid, calculateAdaptiveGridSize } from '@/lib/geo/grid';
-import { PERFORMANCE_CONFIG, DENSITY_BONUS } from '@/constants';
+import { PERFORMANCE_CONFIG, DENSITY_BONUS, POWER_MEAN_CONFIG } from '@/constants';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
 
@@ -193,9 +193,17 @@ function calculateDensityBonus(
 }
 
 /**
- * Calculate the K value for a single point
+ * Calculate the K value for a single point using weight-dependent power mean
  * Lower K = better location (closer to positive amenities, farther from negative ones)
  * Weight sign determines polarity: positive = prefer nearby, negative = avoid nearby
+ * 
+ * The power mean formula: K = (Σ|w|×v^p / Σ|w|)^(1/p̄)
+ * Where p = 1 + λ×(|w|/100)² varies per factor based on weight magnitude
+ * 
+ * @param lambda - Asymmetry strength parameter:
+ *   - λ < 0: Low-weight factors gain importance (equalizer mode)
+ *   - λ = 0: Standard arithmetic mean (current behavior)
+ *   - λ > 0: High-weight factors dominate (critical factors mode)
  */
 function calculateK(
   point: Point,
@@ -203,10 +211,12 @@ function calculateK(
   factors: Factor[],
   spatialIndexes?: Map<string, SpatialIndex>,
   distanceCurve: DistanceCurve = 'log',
-  sensitivity: number = 1
+  sensitivity: number = 1,
+  lambda: number = POWER_MEAN_CONFIG.DEFAULT_LAMBDA
 ): number {
-  let weightedSum = 0;
+  let powerSum = 0;
   let totalWeight = 0;
+  let weightedExponentSum = 0;
 
   for (const factor of factors) {
     if (!factor.enabled || factor.weight === 0) continue;
@@ -216,55 +226,62 @@ function calculateK(
     const absWeight = Math.abs(factor.weight);
     const spatialIndex = spatialIndexes?.get(factor.id);
     
+    // Calculate weight-dependent exponent: p = 1 + λ × (|w|/100)²
+    const wNorm = absWeight / 100;
+    const p = 1 + lambda * wNorm * wNorm;
+    
     // If no POIs for this factor, treat as "worst case" (max distance)
+    let value: number;
     if (pois.length === 0) {
       // For positive factors: no POIs = bad (high K contribution = 1)
       // For negative factors: no POIs = good (low K contribution = 0)
-      const value = isNegative ? 0 : 1;
-      weightedSum += value * absWeight;
-      totalWeight += absWeight;
-      continue;
-    }
-
-    // Find nearest distance using spatial index if available
-    let nearestDistance: number;
-    if (spatialIndex) {
-      nearestDistance = spatialIndex.findNearestDistance(point, factor.maxDistance);
+      value = isNegative ? 0 : 1;
     } else {
-      nearestDistance = findNearestDistanceSimple(point, pois);
+      // Find nearest distance using spatial index if available
+      let nearestDistance: number;
+      if (spatialIndex) {
+        nearestDistance = spatialIndex.findNearestDistance(point, factor.maxDistance);
+      } else {
+        nearestDistance = findNearestDistanceSimple(point, pois);
+      }
+
+      // Apply distance curve transformation
+      const normalizedDistance = applyDistanceCurve(nearestDistance, factor.maxDistance, distanceCurve, sensitivity);
+
+      // Calculate base K contribution for this factor
+      // For positive factors (weight > 0): closer is better, so K contribution = normalizedDistance
+      // For negative factors (weight < 0): farther is better, so K contribution = 1 - normalizedDistance
+      value = isNegative
+        ? 1 - normalizedDistance
+        : normalizedDistance;
+
+      // Apply density bonus for positive factors only
+      if (!isNegative && pois.length > 1) {
+        const densityBonus = calculateDensityBonus(point, pois, factor.maxDistance, spatialIndex);
+        value = Math.max(0, value - densityBonus);
+      }
     }
 
-    // Apply distance curve transformation
-    // This converts raw distance to a 0-1 score with configurable sensitivity
-    const normalizedDistance = applyDistanceCurve(nearestDistance, factor.maxDistance, distanceCurve, sensitivity);
-
-    // Calculate base K contribution for this factor
-    // For positive factors (weight > 0): closer is better, so K contribution = normalizedDistance
-    //   - Close (0m) → K contribution = 0 (good)
-    //   - Far (maxDistance) → K contribution = 1 (bad)
-    // For negative factors (weight < 0): farther is better, so K contribution = 1 - normalizedDistance
-    //   - Close (0m) → K contribution = 1 (bad)
-    //   - Far (maxDistance) → K contribution = 0 (good)
-    let value = isNegative
-      ? 1 - normalizedDistance
-      : normalizedDistance;
-
-    // Apply density bonus for positive factors only
-    // Having multiple grocery stores nearby is better than just one
-    // But having multiple industrial areas nearby is NOT better
-    if (!isNegative && pois.length > 1) {
-      const densityBonus = calculateDensityBonus(point, pois, factor.maxDistance, spatialIndex);
-      // Reduce the K value (lower = better) by the density bonus
-      value = Math.max(0, value - densityBonus);
-    }
-
-    weightedSum += value * absWeight;
+    // Accumulate for power mean
+    // Use small epsilon to avoid 0^p issues when p < 1
+    const safeValue = Math.max(value, 1e-10);
+    powerSum += absWeight * Math.pow(safeValue, p);
     totalWeight += absWeight;
+    weightedExponentSum += absWeight * p;
   }
 
   // Return normalized K value (0-1 range)
-  // 0 = excellent location, 1 = poor location
-  return totalWeight > 0 ? weightedSum / totalWeight : 0.5;
+  if (totalWeight === 0) return 0.5;
+  
+  // Weighted average exponent
+  const pBar = weightedExponentSum / totalWeight;
+  
+  // Power mean formula: K = (powerSum / totalWeight)^(1/pBar)
+  // When lambda=0, pBar=1 for all factors, reducing to arithmetic mean
+  const K = Math.pow(powerSum / totalWeight, 1 / pBar);
+  
+  // Clamp to [0, 1] to handle edge cases
+  return Math.min(1, Math.max(0, K));
 }
 
 /**
@@ -312,6 +329,7 @@ export function buildSpatialIndexes(
  * @param gridSize - Optional grid cell size in meters (auto-calculated if not provided)
  * @param distanceCurve - Distance curve type for score calculation (default: 'log')
  * @param sensitivity - Curve sensitivity parameter (default: 1)
+ * @param lambda - Power mean asymmetry strength (default: 1.0)
  * @param normalizeToViewport - Whether to normalize K values to viewport range
  * @param prebuiltSpatialIndexes - Optional pre-built spatial indexes to avoid rebuilding
  * @returns Array of heatmap points with lat, lng, and value (K score)
@@ -323,6 +341,7 @@ export function calculateHeatmap(
   gridSize?: number,
   distanceCurve: DistanceCurve = 'log',
   sensitivity: number = 1,
+  lambda: number = POWER_MEAN_CONFIG.DEFAULT_LAMBDA,
   normalizeToViewport: boolean = false,
   prebuiltSpatialIndexes?: Map<string, SpatialIndex>
 ): HeatmapPoint[] {
@@ -342,7 +361,7 @@ export function calculateHeatmap(
   let heatmapPoints: HeatmapPoint[] = gridPoints.map((point) => ({
     lat: point.lat,
     lng: point.lng,
-    value: calculateK(point, poiData, factors, spatialIndexes, distanceCurve, sensitivity),
+    value: calculateK(point, poiData, factors, spatialIndexes, distanceCurve, sensitivity, lambda),
   }));
 
   // Apply viewport normalization if enabled
@@ -351,7 +370,7 @@ export function calculateHeatmap(
   }
 
   // Log K value distribution for debugging
-  logKStats(heatmapPoints, `curve: ${distanceCurve}, sensitivity: ${sensitivity}, normalized: ${normalizeToViewport}`);
+  logKStats(heatmapPoints, `curve: ${distanceCurve}, sensitivity: ${sensitivity}, lambda: ${lambda}, normalized: ${normalizeToViewport}`);
 
   const endTime = performance.now();
   console.log(
@@ -374,6 +393,7 @@ export interface FactorBreakdown {
   isNegative: boolean; // derived from weight sign
   weight: number;
   contribution: number; // weighted contribution to final K
+  effectiveExponent: number; // p = 1 + λ×(|w|/100)² for this factor
   noPOIs: boolean;
   nearbyCount: number; // count of POIs within maxDistance
 }
@@ -394,23 +414,26 @@ export interface FactorBreakdownResult {
  * to provide intuitive, easy-to-understand values in the UI. The actual K value
  * calculation uses the configurable distance curve (log/exp/power) which may
  * produce different results. The K value returned here is calculated using
- * linear normalization for consistency with the breakdown scores.
+ * the power mean formula with the specified lambda.
  * 
  * @param lat - Latitude of the location
  * @param lng - Longitude of the location
  * @param factors - Array of factors to analyze
  * @param pois - POI data keyed by factor ID
+ * @param lambda - Power mean asymmetry strength (default: 1.0)
  * @returns K value and detailed breakdown by factor
  */
 export function calculateFactorBreakdown(
   lat: number,
   lng: number,
   factors: Factor[],
-  pois: Record<string, POI[]>
+  pois: Record<string, POI[]>,
+  lambda: number = POWER_MEAN_CONFIG.DEFAULT_LAMBDA
 ): FactorBreakdownResult {
   const breakdown: FactorBreakdown[] = [];
-  let weightedSum = 0;
+  let powerSum = 0;
   let totalWeight = 0;
+  let weightedExponentSum = 0;
   const point = { lat, lng };
 
   for (const factor of factors) {
@@ -419,6 +442,10 @@ export function calculateFactorBreakdown(
     const factorPOIs = pois[factor.id] || [];
     const isNegative = factor.weight < 0;
     const absWeight = Math.abs(factor.weight);
+    
+    // Calculate weight-dependent exponent
+    const wNorm = absWeight / 100;
+    const p = 1 + lambda * wNorm * wNorm;
     
     let nearestDistance = Infinity;
     let noPOIs = false;
@@ -452,9 +479,12 @@ export function calculateFactorBreakdown(
       score = isNegative ? (1 - normalizedDistance) : normalizedDistance;
     }
 
-    const contribution = score * absWeight;
-    weightedSum += contribution;
+    // Power mean contribution
+    const safeScore = Math.max(score, 1e-10);
+    const powerContribution = absWeight * Math.pow(safeScore, p);
+    powerSum += powerContribution;
     totalWeight += absWeight;
+    weightedExponentSum += absWeight * p;
 
     breakdown.push({
       factorId: factor.id,
@@ -464,13 +494,20 @@ export function calculateFactorBreakdown(
       score,
       isNegative,
       weight: factor.weight,
-      contribution,
+      contribution: powerContribution,
+      effectiveExponent: p,
       noPOIs,
       nearbyCount,
     });
   }
 
-  const k = totalWeight > 0 ? weightedSum / totalWeight : 0.5;
+  // Calculate K using power mean
+  let k = 0.5;
+  if (totalWeight > 0) {
+    const pBar = weightedExponentSum / totalWeight;
+    k = Math.pow(powerSum / totalWeight, 1 / pBar);
+    k = Math.min(1, Math.max(0, k));
+  }
   
   // Sort by contribution (highest impact first)
   breakdown.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));

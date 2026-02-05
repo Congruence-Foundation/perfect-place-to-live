@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
       factors: requestFactors, 
       gridSize, 
       distanceCurve, 
-      sensitivity, 
+      sensitivity,
+      lambda,
       normalizeToViewport,
       dataSource: requestedDataSource,
     } = body;
@@ -95,6 +96,7 @@ export async function POST(request: NextRequest) {
       effectiveGridSize,
       distanceCurve || 'log',
       sensitivity || 1,
+      lambda,
       normalizeToViewport || false
     );
 

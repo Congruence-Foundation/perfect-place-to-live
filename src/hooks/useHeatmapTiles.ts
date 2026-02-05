@@ -188,6 +188,7 @@ interface UseHeatmapTilesOptions {
   factors: Factor[];
   distanceCurve: DistanceCurve;
   sensitivity: number;
+  lambda: number;
   normalizeToViewport: boolean;
   dataSource: POIDataSource;
   tileRadius: number;
@@ -248,6 +249,7 @@ async function fetchHeatmapBatch(
   factors: Factor[],
   distanceCurve: DistanceCurve,
   sensitivity: number,
+  lambda: number,
   normalizeToViewport: boolean,
   dataSource: POIDataSource,
   poiBufferScale: number,
@@ -278,6 +280,7 @@ async function fetchHeatmapBatch(
         factors,
         distanceCurve,
         sensitivity,
+        lambda,
         normalizeToViewport,
         dataSource,
         poiBufferScale,
@@ -329,6 +332,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     factors,
     distanceCurve,
     sensitivity,
+    lambda,
     normalizeToViewport,
     dataSource,
     tileRadius,
@@ -379,7 +383,8 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     factors,
     distanceCurve,
     sensitivity,
-  }), [factors, distanceCurve, sensitivity]);
+    lambda,
+  }), [factors, distanceCurve, sensitivity, lambda]);
 
   // Clear accumulated data when config changes (scores would be different)
   const prevConfigHashRef = useRef(configHash);
@@ -469,6 +474,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
           factors,
           distanceCurve,
           sensitivity,
+          lambda,
           normalizeToViewport,
           dataSource,
           poiBufferScale,
@@ -516,6 +522,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     factors,
     distanceCurve,
     sensitivity,
+    lambda,
     normalizeToViewport,
     dataSource,
     poiBufferScale,

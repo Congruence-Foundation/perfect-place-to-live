@@ -48,6 +48,7 @@ interface BatchHeatmapRequest {
   factors?: Factor[];
   distanceCurve?: string;
   sensitivity?: number;
+  lambda?: number;
   normalizeToViewport?: boolean;
   dataSource?: POIDataSource;
   poiBufferScale?: number;
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
       factors: requestFactors, 
       distanceCurve = 'log',
       sensitivity = 1,
+      lambda,
       normalizeToViewport = false,
       dataSource: requestedDataSource,
       poiBufferScale = POI_TILE_CONFIG.DEFAULT_POI_BUFFER_SCALE,
@@ -114,7 +116,7 @@ export async function POST(request: NextRequest) {
     }
     const { factors, enabledFactors } = factorResult;
 
-    const configHash = hashHeatmapConfig({ factors, distanceCurve, sensitivity });
+    const configHash = hashHeatmapConfig({ factors, distanceCurve, sensitivity, lambda });
     const tileCoords: TileCoord[] = tiles.map(t => ({ z: t.z, x: t.x, y: t.y }));
 
     // Step 1: Parallel cache check for all tiles
@@ -154,6 +156,7 @@ export async function POST(request: NextRequest) {
         configHash,
         distanceCurve as 'linear' | 'log' | 'exp' | 'power',
         sensitivity,
+        lambda,
         normalizeToViewport,
         dataSource
       );
@@ -296,6 +299,7 @@ async function computeUncachedTiles(
   configHash: string,
   distanceCurve: 'linear' | 'log' | 'exp' | 'power',
   sensitivity: number,
+  lambda: number | undefined,
   normalizeToViewport: boolean,
   dataSource: POIDataSource
 ): Promise<Record<string, { points: HeatmapPoint[]; cached: boolean }>> {
@@ -322,6 +326,7 @@ async function computeUncachedTiles(
       gridSize,
       distanceCurve,
       sensitivity,
+      lambda,
       normalizeToViewport,
       sharedSpatialIndexes  // Pass pre-built indexes
     );

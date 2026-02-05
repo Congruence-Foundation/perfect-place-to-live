@@ -95,6 +95,22 @@
       "useCase": "Balanced option. More forgiving than logarithmic."
     }
   },
+  "lambda": {
+    "title": "Weight Impact",
+    "tooltip": "Controls how much high-weight factors dominate the final score.",
+    "tooltipDetail": "At 'Balanced', all factors contribute equally. Higher values make critical factors (high weight) have outsized impact - a missing must-have or nearby deal-breaker will significantly hurt the score. 'Equalizer' mode gives more importance to low-weight factors.",
+    "scaleLeft": "Equalizer",
+    "scaleRight": "Critical",
+    "steps": {
+      "equalizer": "Equalizer",
+      "balanced": "Balanced",
+      "mild": "Mild",
+      "moderate": "Moderate",
+      "strong": "Strong",
+      "veryStrong": "Very Strong",
+      "extreme": "Extreme"
+    }
+  },
   "debug": {
     "title": "Debug",
     "zoomLevel": "Zoom level",

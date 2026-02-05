@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Settings, Eye, EyeOff, Grid3X3 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
@@ -21,6 +21,7 @@ import { PanelToggleButton } from './PanelToggleButton';
 import { FloatingPanel } from './FloatingPanel';
 import { useMapStore } from '@/stores/mapStore';
 import { Z_INDEX } from '@/constants/z-index';
+import { POWER_MEAN_CONFIG } from '@/constants/performance';
 
 const CURVE_VALUES: DistanceCurve[] = ['log', 'linear', 'exp', 'power'];
 const HEATMAP_RADIUS_VALUES = [0, 1, 2] as const;
@@ -48,6 +49,7 @@ export default function MapSettings({
   const [isOpen, setIsOpen] = useState(false);
   const t = useTranslations('settings');
   const tCurves = useTranslations('curves');
+  const tLambda = useTranslations('lambda');
   
   // Get heatmap tile radius from store
   const heatmapTileRadius = useMapStore((s) => s.heatmapTileRadius);
@@ -62,6 +64,25 @@ export default function MapSettings({
   const setShowHeatmapTileBorders = useMapStore((s) => s.setShowHeatmapTileBorders);
   const showPropertyTileBorders = useMapStore((s) => s.showPropertyTileBorders);
   const setShowPropertyTileBorders = useMapStore((s) => s.setShowPropertyTileBorders);
+
+  // Lambda slider: find current step index and label
+  const lambdaSteps = POWER_MEAN_CONFIG.LAMBDA_STEPS;
+  const currentLambdaIndex = useMemo(() => {
+    const lambda = settings.lambda ?? POWER_MEAN_CONFIG.DEFAULT_LAMBDA;
+    // Find the closest step
+    let closestIndex = 0;
+    let closestDiff = Math.abs(lambdaSteps[0].value - lambda);
+    for (let i = 1; i < lambdaSteps.length; i++) {
+      const diff = Math.abs(lambdaSteps[i].value - lambda);
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        closestIndex = i;
+      }
+    }
+    return closestIndex;
+  }, [settings.lambda, lambdaSteps]);
+
+  const currentLambdaLabel = tLambda(`steps.${lambdaSteps[currentLambdaIndex].label}`);
 
   return (
     <div 
@@ -153,6 +174,36 @@ export default function MapSettings({
               </div>
             </div>
           )}
+
+          {/* Lambda (Weight Impact) Slider */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <Label className="text-xs">{tLambda('title')}</Label>
+                <InfoTooltip>
+                  <div className="space-y-2 max-w-xs">
+                    <p className="text-xs">{tLambda('tooltip')}</p>
+                    <p className="text-xs text-muted-foreground">{tLambda('tooltipDetail')}</p>
+                  </div>
+                </InfoTooltip>
+              </div>
+              <span className="text-xs text-muted-foreground font-medium">{currentLambdaLabel}</span>
+            </div>
+            <Slider
+              value={[currentLambdaIndex]}
+              onValueChange={([index]) => {
+                const newLambda = lambdaSteps[index].value;
+                onSettingsChange({ lambda: newLambda });
+              }}
+              min={0}
+              max={lambdaSteps.length - 1}
+              step={1}
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>{tLambda('scaleLeft')}</span>
+              <span>{tLambda('scaleRight')}</span>
+            </div>
+          </div>
 
           {/* Normalize to Viewport */}
           <div className="space-y-2">

@@ -95,6 +95,22 @@
       "useCase": "Zbalansowana opcja. Bardziej wyrozumiała niż logarytmiczna."
     }
   },
+  "lambda": {
+    "title": "Wpływ wag",
+    "tooltip": "Kontroluje jak bardzo czynniki o wysokiej wadze dominują w końcowym wyniku.",
+    "tooltipDetail": "Przy 'Balans' wszystkie czynniki mają równy wpływ. Wyższe wartości sprawiają, że krytyczne czynniki (wysoka waga) mają nieproporcjonalnie duży wpływ - brak czegoś niezbędnego lub bliskość czegoś niepożądanego znacząco pogorszy wynik. Tryb 'Wyrównanie' daje większe znaczenie czynnikom o niskiej wadze.",
+    "scaleLeft": "Wyrównanie",
+    "scaleRight": "Krytyczne",
+    "steps": {
+      "equalizer": "Wyrównanie",
+      "balanced": "Balans",
+      "mild": "Łagodny",
+      "moderate": "Umiarkowany",
+      "strong": "Silny",
+      "veryStrong": "Bardzo silny",
+      "extreme": "Ekstremalny"
+    }
+  },
   "debug": {
     "title": "Debugowanie",
     "zoomLevel": "Poziom zoom",

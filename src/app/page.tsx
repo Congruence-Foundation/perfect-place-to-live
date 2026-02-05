@@ -7,7 +7,7 @@ import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource, HeatmapSettings } from '@/types';
 import { DEFAULT_FACTORS } from '@/config/factors';
-import { UI_CONFIG } from '@/constants/performance';
+import { UI_CONFIG, POWER_MEAN_CONFIG } from '@/constants/performance';
 import { Z_INDEX } from '@/constants/z-index';
 import {
   useHeatmapTiles,
@@ -58,11 +58,13 @@ interface HomeContentProps {
   onBoundsChange: (bounds: Bounds, zoom: number) => void;
   distanceCurve: DistanceCurve;
   sensitivity: number;
+  lambda: number;
   normalizeToViewport: boolean;
   useOverpassAPI: boolean;
   onSettingsChange: (settings: {
     distanceCurve?: DistanceCurve;
     sensitivity?: number;
+    lambda?: number;
     normalizeToViewport?: boolean;
   }) => void;
   onUseOverpassAPIChange: (use: boolean) => void;
@@ -89,6 +91,7 @@ function HomeContent({
   onBoundsChange,
   distanceCurve,
   sensitivity,
+  lambda,
   normalizeToViewport,
   useOverpassAPI,
   onSettingsChange,
@@ -124,6 +127,7 @@ function HomeContent({
   const { heatmapSettings, handleSettingsChange } = useHeatmapSettings({
     initialDistanceCurve: distanceCurve,
     initialSensitivity: sensitivity,
+    initialLambda: lambda,
     initialNormalizeToViewport: normalizeToViewport,
     onSettingsChange,
   });
@@ -315,6 +319,7 @@ function HomeContent({
           pois={pois}
           showPOIs={showPOIs}
           factors={factors}
+          lambda={heatmapSettings.lambda}
           onMapReady={handleMapReady}
           heatmapTileCoords={heatmapTileCoords}
           isHeatmapDataReady={isHeatmapDataReady}
@@ -458,6 +463,7 @@ export default function Home() {
   // Local state for settings
   const [distanceCurve, setDistanceCurve] = useState<DistanceCurve>('exp');
   const [sensitivity, setSensitivity] = useState<number>(UI_CONFIG.DEFAULT_SENSITIVITY);
+  const [lambda, setLambda] = useState<number>(POWER_MEAN_CONFIG.DEFAULT_LAMBDA);
   const [normalizeToViewport, setNormalizeToViewport] = useState(false);
   const [useOverpassAPI, setUseOverpassAPI] = useState(false);
 
@@ -487,6 +493,7 @@ export default function Home() {
     factors: effectiveFactors,
     distanceCurve,
     sensitivity,
+    lambda,
     normalizeToViewport,
     dataSource: useOverpassAPI ? 'overpass' : 'neon',
     tileRadius: heatmapTileRadius,
@@ -500,10 +507,12 @@ export default function Home() {
     (settings: {
       distanceCurve?: DistanceCurve;
       sensitivity?: number;
+      lambda?: number;
       normalizeToViewport?: boolean;
     }) => {
       if (settings.distanceCurve !== undefined) setDistanceCurve(settings.distanceCurve);
       if (settings.sensitivity !== undefined) setSensitivity(settings.sensitivity);
+      if (settings.lambda !== undefined) setLambda(settings.lambda);
       if (settings.normalizeToViewport !== undefined)
         setNormalizeToViewport(settings.normalizeToViewport);
     },
@@ -529,6 +538,7 @@ export default function Home() {
         onBoundsChange={handleBoundsChange}
         distanceCurve={distanceCurve}
         sensitivity={sensitivity}
+        lambda={lambda}
         normalizeToViewport={normalizeToViewport}
         useOverpassAPI={useOverpassAPI}
         onSettingsChange={handleSettingsFromContent}
