@@ -84,6 +84,7 @@ export interface RealEstateActions {
   
   // Cache actions
   cacheClusterProperties: (clusterId: string, properties: UnifiedProperty[]) => void;
+  cacheClusterPropertiesBatch: (entries: Array<{ clusterId: string; properties: UnifiedProperty[] }>) => void;
   
   // Clear all
   clearProperties: () => void;
@@ -204,6 +205,21 @@ export const useRealEstateStore = create<RealEstateStore>()(
         },
         false,
         'cacheClusterProperties'
+      ),
+      
+      cacheClusterPropertiesBatch: (entries) => set(
+        (state) => {
+          const newCache = new Map(state.clusterPropertiesCache);
+          for (const { clusterId, properties } of entries) {
+            newCache.set(clusterId, properties);
+          }
+          return {
+            clusterPropertiesCache: newCache,
+            cacheVersion: state.cacheVersion + 1, // Single increment for entire batch
+          };
+        },
+        false,
+        'cacheClusterPropertiesBatch'
       ),
       
       // Clear all properties

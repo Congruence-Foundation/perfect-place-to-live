@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { PriceValueRange, PropertyFilters } from '../types';
 import { useRealEstateStore } from '../store';
@@ -25,6 +25,8 @@ export interface UseRealEstateExtensionReturn {
   // Computed values for debug/settings
   propertyCount: number;
   clusterCount: number;
+  propertyCountBySource: Record<PropertyDataSource, number>;
+  clusterCountBySource: Record<PropertyDataSource, number>;
   
   // Actions
   setEnabled: (enabled: boolean) => void;
@@ -97,6 +99,17 @@ export function useRealEstateExtension(): UseRealEstateExtensionReturn {
     });
   }, [setEnabled, setFilters]);
 
+  // Compute per-source counts
+  const propertyCountBySource = useMemo(() => ({
+    otodom: properties.filter(p => p.source === 'otodom').length,
+    gratka: properties.filter(p => p.source === 'gratka').length,
+  }), [properties]);
+
+  const clusterCountBySource = useMemo(() => ({
+    otodom: clusters.filter(c => c.source === 'otodom').length,
+    gratka: clusters.filter(c => c.source === 'gratka').length,
+  }), [clusters]);
+
   return {
     enabled,
     filters,
@@ -109,6 +122,8 @@ export function useRealEstateExtension(): UseRealEstateExtensionReturn {
     error,
     propertyCount: properties.length,
     clusterCount: clusters.length,
+    propertyCountBySource,
+    clusterCountBySource,
     setEnabled,
     setFilters,
     setScoreRange,

@@ -39,7 +39,19 @@ interface ClusterRequest {
  */
 export async function POST(request: NextRequest) {
   try {
-    const body: ClusterRequest = await request.json();
+    // Parse request body with error handling for empty/malformed JSON
+    let body: ClusterRequest;
+    try {
+      const text = await request.text();
+      if (!text || text.trim() === '') {
+        return errorResponse(new Error('Request body is empty'), 400);
+      }
+      body = JSON.parse(text);
+    } catch (parseError) {
+      // This can happen when the request is aborted mid-flight
+      return errorResponse(new Error('Invalid JSON in request body'), 400);
+    }
+    
     const { 
       lat, 
       lng, 

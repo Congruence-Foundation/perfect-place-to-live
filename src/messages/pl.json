@@ -109,7 +109,9 @@
     "failed": "Wyszukiwanie nie powiodło się. Spróbuj ponownie.",
     "locateMe": "Przejdź do mojej lokalizacji",
     "locationFailed": "Nie udało się pobrać lokalizacji",
-    "noGeolocation": "Geolokalizacja nie jest obsługiwana"
+    "noGeolocation": "Geolokalizacja nie jest obsługiwana",
+    "clear": "Wyczyść wyszukiwanie",
+    "loading": "Ładowanie..."
   },
   "categories": {
     "essential": "Podstawowe",

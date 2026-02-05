@@ -109,7 +109,9 @@
     "failed": "Search failed. Please try again.",
     "locateMe": "Go to my location",
     "locationFailed": "Could not get location",
-    "noGeolocation": "Geolocation not supported"
+    "noGeolocation": "Geolocation not supported",
+    "clear": "Clear search",
+    "loading": "Loading..."
   },
   "categories": {
     "essential": "Essential",

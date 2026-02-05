@@ -86,6 +86,7 @@ function HomeContent({
   // Get store actions for updating map state
   const setMapContext = useMapStore((s) => s.setMapContext);
   const setMapReady = useMapStore((s) => s.setMapReady);
+  const analyticsProgress = useMapStore((s) => s.analyticsProgress);
 
   // bounds and zoomLevel now come from props
   const [factors, setFactors] = useState<Factor[]>(DEFAULT_FACTORS);
@@ -379,6 +380,7 @@ function HomeContent({
                 disabledReason={isTooLarge ? 'tooLarge' : null}
                 onRefresh={onRefresh}
                 onAbort={onAbort}
+                analyticsProgress={analyticsProgress}
               />
             </div>
 
@@ -454,6 +456,7 @@ function HomeContent({
                 disabledReason={isTooLarge ? 'tooLarge' : null}
                 onRefresh={onRefresh}
                 onAbort={onAbort}
+                analyticsProgress={analyticsProgress}
               />
 
               {/* Map Settings - Right */}

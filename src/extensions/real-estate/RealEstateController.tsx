@@ -31,6 +31,9 @@ const CLUSTER_FETCH_BATCH_SIZE = 5;
 /** Delay between batch fetches in milliseconds */
 const CLUSTER_FETCH_BATCH_DELAY_MS = 100;
 
+/** Number of API batches before flushing to cache (5 batches = 25 clusters) */
+const CACHE_FLUSH_INTERVAL = 5;
+
 /** Threshold for significant cluster count change (triggers cache clear) */
 const CLUSTER_CHANGE_THRESHOLD = 50;
 
@@ -52,7 +55,7 @@ export function RealEstateController() {
   const t = useTranslations('realEstate.popup');
   
   // Get map state
-  const { bounds, zoom, heatmapPoints, gridCellSize, clusterPriceDisplay, clusterPriceAnalysis, detailedModeThreshold, map, leaflet, layerGroup, isMapReady, setExtensionDebugTiles } = useMapStore(
+  const { bounds, zoom, heatmapPoints, gridCellSize, clusterPriceDisplay, clusterPriceAnalysis, detailedModeThreshold, map, leaflet, layerGroup, isMapReady, setExtensionDebugTiles, setAnalyticsProgress } = useMapStore(
     useShallow((s) => ({
       bounds: s.bounds,
       zoom: s.zoom,
@@ -66,6 +69,7 @@ export function RealEstateController() {
       layerGroup: s.extensionLayerGroup,
       isMapReady: s.isMapReady,
       setExtensionDebugTiles: s.setExtensionDebugTiles,
+      setAnalyticsProgress: s.setAnalyticsProgress,
     }))
   );
   
@@ -86,6 +90,7 @@ export function RealEstateController() {
     setIsBelowMinZoom,
     setError,
     cacheClusterProperties,
+    cacheClusterPropertiesBatch,
     clearProperties,
   } = useRealEstateStore(
     useShallow((s) => ({
@@ -104,6 +109,7 @@ export function RealEstateController() {
       setIsBelowMinZoom: s.setIsBelowMinZoom,
       setError: s.setError,
       cacheClusterProperties: s.cacheClusterProperties,
+      cacheClusterPropertiesBatch: s.cacheClusterPropertiesBatch,
       clearProperties: s.clearProperties,
     }))
   );
@@ -201,8 +207,8 @@ export function RealEstateController() {
     const abortController = new AbortController();
     batchFetchAbortRef.current = abortController;
 
-    // Batch fetch with concurrency limit
-    const fetchCluster = async (cluster: UnifiedCluster) => {
+    // Batch fetch with concurrency limit - returns result or null
+    const fetchCluster = async (cluster: UnifiedCluster): Promise<{ clusterId: string; properties: UnifiedProperty[] } | null> => {
       const clusterId = createClusterId(cluster.lat, cluster.lng);
       
       // Mark as in progress
@@ -229,46 +235,82 @@ export function RealEstateController() {
           signal: abortController.signal,
         });
 
-        if (!response.ok) return;
+        if (!response.ok) return null;
 
         const data = await response.json() as { properties: UnifiedProperty[] };
-        if (data.properties.length > 0) {
-          cacheClusterProperties(clusterId, data.properties);
-        }
+        if (data.properties.length === 0) return null;
+        
+        return { clusterId, properties: data.properties };
       } catch (error) {
         // Ignore abort errors
         if (error instanceof Error && error.name === 'AbortError') {
           // Remove from fetched so it can be retried
           fetchedClusterIdsRef.current.delete(clusterId);
-          return;
         }
         // On other errors, keep in fetched to avoid infinite retries
+        return null;
       } finally {
         batchFetchInProgressRef.current.delete(clusterId);
       }
     };
 
-    // Process in batches
+    // Process in batches with periodic flush for progressive UI updates
     const processBatches = async () => {
+      let pendingResults: Array<{ clusterId: string; properties: UnifiedProperty[] }> = [];
+      let batchCount = 0;
+      let processedClusters = 0;
+      const totalClusters = clustersToFetch.length;
+      
+      // Show progress indicator
+      setAnalyticsProgress(0);
+      
       for (let i = 0; i < clustersToFetch.length; i += CLUSTER_FETCH_BATCH_SIZE) {
         if (abortController.signal.aborted) break;
         
         const batch = clustersToFetch.slice(i, i + CLUSTER_FETCH_BATCH_SIZE);
-        await Promise.all(batch.map(fetchCluster));
+        const results = await Promise.all(batch.map(fetchCluster));
+        
+        // Collect valid results
+        const validResults = results.filter((r): r is { clusterId: string; properties: UnifiedProperty[] } => 
+          r !== null && r.properties.length > 0
+        );
+        pendingResults.push(...validResults);
+        batchCount++;
+        processedClusters += batch.length;
+        
+        // Update progress
+        const progress = Math.round((processedClusters / totalClusters) * 100);
+        setAnalyticsProgress(progress);
+        
+        // Flush every N batches for progressive UI updates
+        if (batchCount >= CACHE_FLUSH_INTERVAL && pendingResults.length > 0) {
+          cacheClusterPropertiesBatch(pendingResults);
+          pendingResults = [];
+          batchCount = 0;
+        }
         
         // Small delay between batches to avoid overwhelming the server
         if (i + CLUSTER_FETCH_BATCH_SIZE < clustersToFetch.length && !abortController.signal.aborted) {
           await new Promise(resolve => setTimeout(resolve, CLUSTER_FETCH_BATCH_DELAY_MS));
         }
       }
+      
+      // Final flush for remaining results
+      if (pendingResults.length > 0) {
+        cacheClusterPropertiesBatch(pendingResults);
+      }
+      
+      // Clear progress indicator
+      setAnalyticsProgress(null);
     };
 
     processBatches();
 
     return () => {
       abortController.abort();
+      setAnalyticsProgress(null); // Clear progress on abort
     };
-  }, [clusterPriceAnalysis, enabled, rawClusters, heatmapPoints.length, detailedModeThreshold, filters, cacheClusterProperties]);
+  }, [clusterPriceAnalysis, enabled, rawClusters, heatmapPoints.length, detailedModeThreshold, filters, cacheClusterPropertiesBatch, setAnalyticsProgress]);
 
   // Clear fetched cluster IDs when clusters change significantly (e.g., viewport change)
   const prevRawClustersLengthRef = useRef(0);

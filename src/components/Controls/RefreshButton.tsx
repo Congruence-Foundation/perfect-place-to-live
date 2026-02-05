@@ -11,6 +11,8 @@ interface RefreshButtonProps {
   onAbort: () => void;
   /** Reason for being disabled - shows different text */
   disabledReason?: 'tooLarge' | null;
+  /** Analytics progress (0-100), null when not calculating */
+  analyticsProgress?: number | null;
 }
 
 /**
@@ -23,6 +25,7 @@ export function RefreshButton({
   onRefresh,
   onAbort,
   disabledReason,
+  analyticsProgress,
 }: RefreshButtonProps) {
   const tControls = useTranslations('controls');
 
@@ -34,8 +37,21 @@ export function RefreshButton({
     return tControls('refresh');
   };
 
+  const showProgress = analyticsProgress !== null && analyticsProgress !== undefined;
+
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center">
+      {/* Analytics progress bar - above button, fixed height to prevent layout shift */}
+      <div className="h-2 flex items-end mb-1 w-[calc(100%-1.5rem)]">
+        {showProgress && (
+          <div className="w-full h-1 bg-muted/80 rounded-full overflow-hidden shadow-sm">
+            <div 
+              className="h-full bg-primary transition-all duration-200"
+              style={{ width: `${analyticsProgress}%` }}
+            />
+          </div>
+        )}
+      </div>
       {isLoading ? (
         <Button
           variant="destructive"

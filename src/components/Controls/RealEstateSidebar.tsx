@@ -129,7 +129,7 @@ export default function RealEstateSidebar({
         className="flex items-center justify-between p-3 w-full"
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm bg-primary text-primary-foreground">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm bg-background text-foreground border">
             <Search className="h-4 w-4" />
           </div>
           <div className="text-left">

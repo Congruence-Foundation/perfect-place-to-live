@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,9 +25,22 @@ export function CollapsibleFactorsSection({
   children,
 }: CollapsibleFactorsSectionProps) {
   const tControls = useTranslations('controls');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const wasExpandedRef = useRef(isExpanded);
+
+  // Scroll to top of factors section when expanded
+  useEffect(() => {
+    if (isExpanded && !wasExpandedRef.current) {
+      // Use setTimeout to allow the UI to update before scrolling
+      setTimeout(() => {
+        containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    }
+    wasExpandedRef.current = isExpanded;
+  }, [isExpanded]);
 
   return (
-    <div className={`rounded-xl bg-muted/50 transition-colors ${isExpanded ? '' : 'hover:bg-muted'}`}>
+    <div ref={containerRef} className={`rounded-xl bg-muted/50 transition-colors ${isExpanded ? '' : 'hover:bg-muted'}`}>
       {/* Header - always visible */}
       <div className="flex items-center justify-between p-3">
         <button

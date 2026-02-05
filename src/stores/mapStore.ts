@@ -32,6 +32,9 @@ export interface MapState {
   leafletInstance: typeof import('leaflet') | null;
   extensionLayerGroup: L.LayerGroup | null;
   isMapReady: boolean;
+  
+  // Extension analytics progress (0-100, null when not calculating)
+  analyticsProgress: number | null;
 }
 
 /**
@@ -51,6 +54,7 @@ export interface MapActions {
   setShowPropertyTileBorders: (show: boolean) => void;
   setHeatmapDebugTiles: (tiles: TileCoordinates[]) => void;
   setExtensionDebugTiles: (tiles: TileCoordinates[]) => void;
+  setAnalyticsProgress: (progress: number | null) => void;
 }
 
 /**
@@ -80,6 +84,7 @@ const initialState: MapState = {
   leafletInstance: null,
   extensionLayerGroup: null,
   isMapReady: false,
+  analyticsProgress: null,
 };
 
 /**
@@ -124,6 +129,7 @@ export const useMapStore = create<MapStore>()(
       setShowPropertyTileBorders: (showPropertyTileBorders) => set({ showPropertyTileBorders }, false, 'setShowPropertyTileBorders'),
       setHeatmapDebugTiles: (heatmapDebugTiles) => set({ heatmapDebugTiles }, false, 'setHeatmapDebugTiles'),
       setExtensionDebugTiles: (extensionDebugTiles) => set({ extensionDebugTiles }, false, 'setExtensionDebugTiles'),
+      setAnalyticsProgress: (analyticsProgress) => set({ analyticsProgress }, false, 'setAnalyticsProgress'),
     })),
     { name: 'map-store' }
   )
