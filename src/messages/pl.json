@@ -19,11 +19,14 @@
   },
   "help": {
     "title": "Jak używać",
-    "step1": "Wyszukaj miasto lub przejdź do wybranego obszaru",
-    "step2": "Wybierz profil lub dostosuj czynniki w lewym panelu",
+    "description": "Znajdź najlepsze miejsca do życia na podstawie pobliskich udogodnień, przeglądaj oferty nieruchomości i porównuj ceny, aby znaleźć okazje.",
+    "step1": "Wyszukaj miasto lub użyj przycisku lokalizacji, aby znaleźć swój obszar",
+    "step2": "Wybierz profil (Rodzina, Urban Pro itp.) lub dostosuj czynniki",
     "step3": "Kliknij <strong>Odśwież</strong>, aby obliczyć mapę cieplną",
-    "step4": "<strong>Kliknij prawym</strong> w dowolnym miejscu mapy, aby zobaczyć szczegóły",
-    "tip": "Zielony = lepsze dopasowanie do Twoich preferencji"
+    "step4": "<strong>Kliknij prawym</strong> (lub przytrzymaj na telefonie), aby zobaczyć szczegóły",
+    "step5": "Włącz <strong>Nieruchomości</strong>, aby przeglądać oferty",
+    "tip": "Zielony = lepsze dopasowanie do Twoich preferencji",
+    "tipNegative": "Czerwone obszary oznaczają bliskość czynników, których chcesz unikać"
   },
   "settings": {
     "title": "Ustawienia",

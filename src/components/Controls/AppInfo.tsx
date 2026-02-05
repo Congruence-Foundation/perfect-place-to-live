@@ -6,6 +6,7 @@ import { Info } from 'lucide-react';
 import { PanelHeader } from '@/components/ui/panel-header';
 import { PanelToggleButton } from './PanelToggleButton';
 import { FloatingPanel } from './FloatingPanel';
+import { APP_CONFIG } from '@/config/app';
 
 const STORAGE_KEY = 'location-finder-info-seen';
 
@@ -62,6 +63,8 @@ export default function AppInfo({ isMobile = false }: AppInfoProps) {
       >
         <PanelHeader title={t('title')} onClose={handleClose} />
 
+        <p className="text-xs text-muted-foreground mb-3">{t('description')}</p>
+
         <ol className="space-y-2 text-xs text-muted-foreground list-none">
           <li className="flex gap-2">
             <span className="text-foreground font-semibold w-4 shrink-0">1.</span>
@@ -79,10 +82,31 @@ export default function AppInfo({ isMobile = false }: AppInfoProps) {
             <span className="text-foreground font-semibold w-4 shrink-0">4.</span>
             <span dangerouslySetInnerHTML={{ __html: t.raw('step4') }} />
           </li>
+          <li className="flex gap-2">
+            <span className="text-foreground font-semibold w-4 shrink-0">5.</span>
+            <span dangerouslySetInnerHTML={{ __html: t.raw('step5') }} />
+          </li>
         </ol>
-        <div className="mt-3 pt-3 border-t text-xs text-muted-foreground flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-green-500 shrink-0"></span>
-          <span>{t('tip')}</span>
+        <div className="mt-3 pt-3 border-t text-xs text-muted-foreground space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-green-500 shrink-0"></span>
+            <span>{t('tip')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-red-500 shrink-0"></span>
+            <span>{t('tipNegative')}</span>
+          </div>
+        </div>
+        <div className="mt-3 pt-2 border-t text-[9px] text-muted-foreground/40 text-center">
+          <a href="mailto:andrei@congruence.ngo" className="hover:text-muted-foreground/60 transition-colors">
+            Andrei Belashou
+          </a>
+          {' · '}
+          <a href="https://congruence.ngo/" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground/60 transition-colors">
+            congruence.ngo
+          </a>
+          {' · '}
+          <span>v{APP_CONFIG.VERSION}</span>
         </div>
       </FloatingPanel>
 

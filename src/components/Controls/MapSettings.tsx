@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Settings, Eye, EyeOff, Database, Grid3X3 } from 'lucide-react';
+import { Settings, Eye, EyeOff, Grid3X3 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -225,8 +225,7 @@ export default function MapSettings({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1">
-                  <Label className="text-xs flex items-center gap-2">
-                    <Database className="h-3.5 w-3.5" />
+                  <Label className="text-xs">
                     {t('useOverpass')}
                   </Label>
                   <InfoTooltip>

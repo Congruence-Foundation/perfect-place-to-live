@@ -19,11 +19,14 @@
   },
   "help": {
     "title": "How to Use",
-    "step1": "Search for a city or navigate to an area",
-    "step2": "Choose a profile or customize factors in the left panel",
+    "description": "Find the best places to live based on nearby amenities, browse property listings, and compare prices to spot great deals.",
+    "step1": "Search for a city or use the locate button to find your area",
+    "step2": "Select a profile (Family, Urban Pro, etc.) or customize factors",
     "step3": "Click <strong>Refresh</strong> to calculate the heatmap",
-    "step4": "<strong>Right-click</strong> anywhere on the map for detailed analysis",
-    "tip": "Green = better match for your preferences"
+    "step4": "<strong>Right-click</strong> (or long-press on mobile) for detailed analysis",
+    "step5": "Enable <strong>Real Estate</strong> to browse property listings",
+    "tip": "Green = better match for your preferences",
+    "tipNegative": "Red areas indicate proximity to factors you want to avoid"
   },
   "settings": {
     "title": "Settings",

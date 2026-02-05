@@ -233,3 +233,8 @@
     opacity: 0;
   }
 }
+
+/* Ensure tooltips always appear on top of all other elements */
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}
