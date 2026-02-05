@@ -1,6 +1,6 @@
 'use client';
 
-import { useExtensionComponents } from '@/extensions/utils';
+import { renderExtensionComponents } from '@/extensions/utils';
 
 /**
  * ExtensionControllers - Renders all extension controller components
@@ -15,5 +15,5 @@ import { useExtensionComponents } from '@/extensions/utils';
  * This keeps extensions fully self-contained and decoupled from the core.
  */
 export function ExtensionControllers() {
-  return useExtensionComponents('Controller');
+  return renderExtensionComponents('Controller');
 }

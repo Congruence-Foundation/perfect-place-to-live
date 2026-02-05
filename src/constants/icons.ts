@@ -33,13 +33,14 @@ import {
   Gem,
   Building2,
   Volume2,
+  type LucideIcon,
 } from 'lucide-react';
 
 /**
  * Icon mapping for factor types
  * Used in WeightSliders and other components that display factor icons
  */
-export const FACTOR_ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+export const FACTOR_ICON_MAP: Record<string, LucideIcon> = {
   'shopping-cart': ShoppingCart,
   train: Train,
   'train-front': TrainFront,
@@ -74,7 +75,7 @@ export const FACTOR_ICON_MAP: Record<string, React.ComponentType<{ className?: s
  * Icon mapping for profile types
  * Used in ProfileSelector component
  */
-export const PROFILE_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+export const PROFILE_ICON_MAP: Record<string, LucideIcon> = {
   scale: Scale,
   users: Users,
   briefcase: Briefcase,

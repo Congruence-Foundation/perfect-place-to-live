@@ -52,10 +52,23 @@ function calculateSnapHeights(config: SnapPointConfig, windowHeight: number): Sn
   };
 }
 
+interface UseSnapPointsReturn {
+  height: number;
+  setHeight: React.Dispatch<React.SetStateAction<number>>;
+  isMounted: boolean;
+  snapHeights: SnapHeights;
+  getCurrentSnapPoint: () => SnapPointName;
+  snapToNearest: (currentHeight: number) => SnapPointName;
+  clampHeight: (newHeight: number) => number;
+}
+
 /**
  * Hook for managing snap point behavior in bottom sheets
+ * 
+ * @param config - Optional snap point configuration with percentage values
+ * @returns Object containing height state, snap heights, and utility functions
  */
-export function useSnapPoints(config: SnapPointConfig = DEFAULT_SNAP_CONFIG) {
+export function useSnapPoints(config: SnapPointConfig = DEFAULT_SNAP_CONFIG): UseSnapPointsReturn {
   // Destructure config to use primitive values in dependency arrays
   // This prevents unnecessary recalculations when caller passes a new object reference
   const { collapsedPercent, halfPercent, expandedPercent } = config;
@@ -76,7 +89,9 @@ export function useSnapPoints(config: SnapPointConfig = DEFAULT_SNAP_CONFIG) {
   );
 
   // Track mount state for SSR safety and handle window resize
+  // This is a legitimate SSR hydration pattern - we need to set initial state after mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
     setHeight(snapHeights.collapsed);
     

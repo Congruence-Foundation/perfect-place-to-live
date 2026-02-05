@@ -37,6 +37,9 @@ const PRICE_VALUE_OPTIONS: PriceValueFilterOption[] = [
   { value: 'overpriced', label: 'Over', color: PRICE_CATEGORY_COLORS.overpriced, position: 100 },
 ];
 
+/** Map of position to option for O(1) lookup */
+const OPTION_BY_POSITION = new Map(PRICE_VALUE_OPTIONS.map(o => [o.position, o]));
+
 function isFullRange(range: [number, number]): boolean {
   return range[0] === SLIDER_MIN && range[1] === SLIDER_MAX;
 }
@@ -45,21 +48,17 @@ function isSingleStep(range: [number, number]): boolean {
   return range[1] - range[0] === SLIDER_STEP;
 }
 
-function getOptionByPosition(position: number): PriceValueFilterOption | undefined {
-  return PRICE_VALUE_OPTIONS.find(o => o.position === position);
-}
-
 function getRangeLabel(range: [number, number]): string {
   if (isFullRange(range)) return 'All';
   
-  const endOption = getOptionByPosition(range[1]);
+  const endOption = OPTION_BY_POSITION.get(range[1]);
   if (isSingleStep(range)) {
-    return endOption?.label || 'Custom';
+    return endOption?.label ?? 'Custom';
   }
   
-  const startOption = getOptionByPosition(range[0]);
-  const startLabel = startOption?.label || `${range[0]}%`;
-  const endLabel = endOption?.label || `${range[1]}%`;
+  const startOption = OPTION_BY_POSITION.get(range[0]);
+  const startLabel = startOption?.label ?? `${range[0]}%`;
+  const endLabel = endOption?.label ?? `${range[1]}%`;
   return `${startLabel} - ${endLabel}`;
 }
 
@@ -67,7 +66,7 @@ function getRangeColor(range: [number, number]): string {
   if (isFullRange(range)) return DEFAULT_FALLBACK_COLOR;
   
   if (isSingleStep(range)) {
-    return getOptionByPosition(range[1])?.color || DEFAULT_FALLBACK_COLOR;
+    return OPTION_BY_POSITION.get(range[1])?.color ?? DEFAULT_FALLBACK_COLOR;
   }
   
   // For range, use the midpoint color
@@ -177,12 +176,14 @@ export function PriceValueFilter({
           <SliderPrimitive.Thumb 
             className={THUMB_CLASSES}
             style={THUMB_STYLE}
+            aria-label="Minimum price value"
           />
           
           {/* Right thumb */}
           <SliderPrimitive.Thumb 
             className={THUMB_CLASSES}
             style={THUMB_STYLE}
+            aria-label="Maximum price value"
           />
         </SliderPrimitive.Root>
         
@@ -200,6 +201,7 @@ export function PriceValueFilter({
                 type="button"
                 onClick={() => handlePresetClick(option)}
                 disabled={disabled}
+                aria-label={`Select ${option.label} price range`}
                 className={cn(
                   'absolute -translate-x-1/2 text-[9px] transition-colors',
                   isExactSelection ? 'font-semibold' : isInRange ? 'font-medium' : 'text-muted-foreground hover:text-foreground',

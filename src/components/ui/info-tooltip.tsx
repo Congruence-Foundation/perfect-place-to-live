@@ -9,9 +9,13 @@ import {
 } from '@/components/ui/tooltip';
 
 interface InfoTooltipProps {
+  /** Tooltip content to display */
   children: React.ReactNode;
+  /** Which side to show the tooltip */
   side?: 'top' | 'right' | 'bottom' | 'left';
+  /** Class for the tooltip content container */
   className?: string;
+  /** Size of the info icon */
   iconSize?: 'sm' | 'md';
   /** Additional class for the tooltip content (e.g., z-index) */
   contentClassName?: string;

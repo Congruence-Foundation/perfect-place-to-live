@@ -27,18 +27,16 @@ export function generateClusterPriceLabel(
     case 'range':
       return `${formatCompactPrice(minPrice)} - ${formatCompactPrice(maxPrice)}`;
     
-    case 'median': {
-      // Only sort when median is needed
-      const sortedPrices = [...prices].sort((a, b) => a - b);
-      const medianPrice = sortedPrices[Math.floor(sortedPrices.length / 2)];
-      return `~${formatCompactPrice(medianPrice)}`;
-    }
-    
+    case 'median':
     case 'median_spread': {
-      // Only sort when median is needed
+      // Sort once for both median calculations
       const sortedPrices = [...prices].sort((a, b) => a - b);
       const medianPrice = sortedPrices[Math.floor(sortedPrices.length / 2)];
-      // Calculate spread as percentage from median
+      
+      if (displayMode === 'median') {
+        return `~${formatCompactPrice(medianPrice)}`;
+      }
+      // median_spread: Calculate spread as percentage from median
       const spread = Math.round(((maxPrice - minPrice) / medianPrice) * 50); // ±spread%
       return `${formatCompactPrice(medianPrice)} ±${spread}%`;
     }
@@ -170,6 +168,6 @@ export function generatePriceAnalysisBadgeHtml(priceAnalysis: PropertyPriceAnaly
  */
 export function getValidPrices(properties: UnifiedProperty[]): number[] {
   return properties
-    .filter(p => p.price !== null && p.price > 0)
-    .map(p => p.price as number);
+    .filter((p): p is UnifiedProperty & { price: number } => p.price !== null && p.price > 0)
+    .map(p => p.price);
 }

@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
+
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslations } from 'next-intl';
+
+import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
+import { createClusterId } from '@/lib/geo';
+import { createTimer } from '@/lib/profiling';
 import { useMapStore } from '@/stores/mapStore';
-import { useRealEstateStore } from './store';
-import { useRealEstateMarkers } from './hooks/useRealEstateMarkers';
-import { useTileQueries } from './hooks/useTileQueries';
 import type { EnrichedUnifiedProperty, UnifiedCluster, UnifiedProperty } from './lib/shared';
 import {
   enrichPropertiesWithPriceScore,
@@ -18,9 +20,9 @@ import {
   filterClustersByScore,
   hasHeatmapVariation,
 } from './lib';
-import { createTimer } from '@/lib/profiling';
-import { createClusterId } from '@/lib/geo';
-import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
+import { useRealEstateMarkers } from './hooks/useRealEstateMarkers';
+import { useTileQueries } from './hooks/useTileQueries';
+import { useRealEstateStore } from './store';
 
 /** Maximum properties to fetch per cluster in detailed mode */
 const DETAILED_MODE_CLUSTER_FETCH_LIMIT = 50;
@@ -137,22 +139,13 @@ export function RealEstateController() {
   // Check if zoom is below minimum display level
   const isBelowMinZoom = zoom < PROPERTY_TILE_CONFIG.MIN_DISPLAY_ZOOM;
 
-  // Sync tile query state to store
+  // Sync tile query state to store (batched to reduce re-renders)
   useEffect(() => {
     setIsLoading(isLoading);
-  }, [isLoading, setIsLoading]);
-
-  useEffect(() => {
     setIsTooLarge(isTooLarge);
-  }, [isTooLarge, setIsTooLarge]);
-
-  useEffect(() => {
     setIsBelowMinZoom(isBelowMinZoom);
-  }, [isBelowMinZoom, setIsBelowMinZoom]);
-
-  useEffect(() => {
     setError(error);
-  }, [error, setError]);
+  }, [isLoading, isTooLarge, isBelowMinZoom, error, setIsLoading, setIsTooLarge, setIsBelowMinZoom, setError]);
 
   // Sync property tiles to store for debug rendering
   useEffect(() => {
@@ -327,8 +320,9 @@ export function RealEstateController() {
   // ============================================
   
   // Combine standalone properties with cached cluster properties for analytics
+  // Note: cacheVersion is used to trigger recalculation since Map reference doesn't change
   const allPropertiesForAnalytics = useMemo(() => {
-    void cacheVersion; // Trigger recalculation when cache changes
+    void cacheVersion;
     if (clusterPropertiesCache.size === 0) {
       return rawProperties;
     }
@@ -350,8 +344,9 @@ export function RealEstateController() {
   }, [enabled, allPropertiesForAnalytics, heatmapPoints, gridCellSize]);
 
   // Get only standalone properties for rendering as markers
+  // Note: cacheVersion is used to trigger recalculation since Map reference doesn't change
   const standaloneEnrichedProperties = useMemo((): EnrichedUnifiedProperty[] => {
-    void cacheVersion; // Trigger recalculation when cache changes
+    void cacheVersion;
     if (clusterPropertiesCache.size === 0) {
       return enrichedProperties;
     }

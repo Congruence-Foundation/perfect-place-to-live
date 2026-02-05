@@ -139,7 +139,7 @@ export function createTwoLevelCache<T extends object>(config: CacheConfig): TwoL
  * Creates an LRU-only cache (no Redis).
  * Use for fast operations (heatmap computation) where in-memory caching is sufficient.
  * 
- * @param config - Cache configuration
+ * @param config - Cache configuration (name is not used for LRU-only cache)
  * @returns Cache instance with get, set, and getStats methods
  */
 export function createLRUCache<T extends object>(config: CacheConfig): TwoLevelCache<T> {

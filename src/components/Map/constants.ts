@@ -14,6 +14,7 @@ export const CANVAS_MIN_DIMENSION = 256;
 export const POI_MARKER_RADIUS = 6;
 export const POI_MARKER_BORDER_WIDTH = 2;
 export const POI_MARKER_FILL_OPACITY = 0.8;
+export const POI_MARKER_BORDER_COLOR = '#ffffff';
 export const POI_TOOLTIP_OFFSET_Y = -8;
 
 // Animation durations

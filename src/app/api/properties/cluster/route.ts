@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchClusterProperties, fromOtodomRoomCount, toUnifiedProperty } from '@/extensions/real-estate/lib/otodom';
 import { fetchGratkaClusterProperties } from '@/extensions/real-estate/lib/gratka';
+import type { GratkaPropertyNode } from '@/extensions/real-estate/lib/gratka';
 import { PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/extensions/real-estate/types';
 import type { PropertyDataSource } from '@/extensions/real-estate/config';
 import type { UnifiedProperty } from '@/extensions/real-estate/lib/shared';
@@ -10,6 +11,9 @@ import { CLUSTER_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+/** Gratka CDN base URL for property images */
+const GRATKA_CDN_BASE = 'https://thumbs.cdngr.pl/thumb';
 
 interface ClusterRequest {
   lat: number;
@@ -34,6 +38,46 @@ interface ClusterRequest {
 }
 
 /**
+ * Convert a Gratka property to unified format
+ */
+function toUnifiedGratkaProperty(
+  p: GratkaPropertyNode,
+  clusterLat: number,
+  clusterLng: number,
+  inferredEstateType: string,
+  inferredTransaction: string
+): UnifiedProperty {
+  return {
+    id: createUnifiedId('gratka', p.id),
+    sourceId: p.id,
+    source: 'gratka' as const,
+    // Use property coordinates if available, otherwise fall back to cluster center
+    // Gratka cluster listings often don't include coordinates, but the cluster center
+    // is a reasonable approximation for price analysis (all properties are nearby)
+    lat: p.location?.coordinates?.latitude ?? p.location?.map?.center.latitude ?? clusterLat,
+    lng: p.location?.coordinates?.longitude ?? p.location?.map?.center.longitude ?? clusterLng,
+    title: p.title,
+    url: p.url.startsWith('http') ? p.url : `https://gratka.pl${p.url}`,
+    price: p.price?.amount ? parseFloat(p.price.amount) : null,
+    pricePerMeter: p.priceM2?.amount ? parseFloat(p.priceM2.amount) : null,
+    currency: p.price?.currency ?? 'PLN',
+    area: p.area ? parseFloat(p.area) : 0,
+    rooms: p.rooms ?? (p.numberOfRooms ? parseInt(p.numberOfRooms, 10) : null),
+    floor: null,
+    buildYear: null,
+    images: (p.photos ?? []).map(photo => ({
+      medium: `${GRATKA_CDN_BASE}/${photo.id}/3x2_m:fill_and_crop/${photo.name}.jpg`,
+      large: `${GRATKA_CDN_BASE}/${photo.id}/16x9_xl:fill_and_crop/${photo.name}.jpg`,
+    })),
+    isPromoted: p.isHighlighted ?? p.isPromoted ?? false,
+    createdAt: p.addedAt,
+    estateType: inferredEstateType as UnifiedProperty['estateType'],
+    transaction: inferredTransaction as UnifiedProperty['transaction'],
+    rawData: p,
+  };
+}
+
+/**
  * POST /api/properties/cluster
  * Fetch individual properties within a cluster area
  */
@@ -47,7 +91,7 @@ export async function POST(request: NextRequest) {
         return errorResponse(new Error('Request body is empty'), 400);
       }
       body = JSON.parse(text);
-    } catch (parseError) {
+    } catch {
       // This can happen when the request is aborted mid-flight
       return errorResponse(new Error('Invalid JSON in request body'), 400);
     }
@@ -106,41 +150,14 @@ export async function POST(request: NextRequest) {
         pageSize: limit,
       });
 
-      // Gratka adapter already returns unified-like format, but we need to ensure consistency
       // Infer estateType and transaction from filters since Gratka API doesn't return these fields
       const inferredEstateType = estateType ?? 'FLAT';
       const inferredTransaction = filters.transaction ?? 'SELL';
       
       result = {
-        properties: gratkaResult.properties.map(p => ({
-          id: createUnifiedId('gratka', p.id),
-          sourceId: p.id,
-          source: 'gratka' as const,
-          // Use property coordinates if available, otherwise fall back to cluster center
-          // Gratka cluster listings often don't include coordinates, but the cluster center
-          // is a reasonable approximation for price analysis (all properties are nearby)
-          lat: p.location?.coordinates?.latitude ?? p.location?.map?.center.latitude ?? lat,
-          lng: p.location?.coordinates?.longitude ?? p.location?.map?.center.longitude ?? lng,
-          title: p.title,
-          url: p.url.startsWith('http') ? p.url : `https://gratka.pl${p.url}`,
-          price: p.price?.amount ? parseFloat(p.price.amount) : null,
-          pricePerMeter: p.priceM2?.amount ? parseFloat(p.priceM2.amount) : null,
-          currency: p.price?.currency ?? 'PLN',
-          area: p.area ? parseFloat(p.area) : 0,
-          rooms: p.rooms ?? (p.numberOfRooms ? parseInt(p.numberOfRooms, 10) : null),
-          floor: null, // Would need parsing from floorFormatted
-          buildYear: null,
-          images: (p.photos ?? []).map(photo => ({
-            medium: `https://thumbs.cdngr.pl/thumb/${photo.id}/3x2_m:fill_and_crop/${photo.name}.jpg`,
-            large: `https://thumbs.cdngr.pl/thumb/${photo.id}/16x9_xl:fill_and_crop/${photo.name}.jpg`,
-          })),
-          isPromoted: p.isHighlighted ?? p.isPromoted ?? false,
-          createdAt: p.addedAt,
-          // Use inferred values from search filters since Gratka API doesn't return propertyType/transaction
-          estateType: inferredEstateType as UnifiedProperty['estateType'],
-          transaction: inferredTransaction as UnifiedProperty['transaction'],
-          rawData: p,
-        })),
+        properties: gratkaResult.properties.map(p => 
+          toUnifiedGratkaProperty(p, lat, lng, inferredEstateType, inferredTransaction)
+        ),
         totalCount: gratkaResult.totalCount,
         currentPage: gratkaResult.currentPage,
         totalPages: gratkaResult.totalPages,

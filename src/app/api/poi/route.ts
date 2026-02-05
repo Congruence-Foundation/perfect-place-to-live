@@ -31,6 +31,21 @@ interface POIResponse {
 }
 
 /**
+ * Validate bounds and factorIds, returning an error response if invalid
+ */
+function validatePOIRequest(bounds: Bounds, factorIds: string[]): Response | null {
+  if (!isValidBounds(bounds)) {
+    return errorResponse(new Error('Invalid bounds'), 400);
+  }
+
+  if (!factorIds || !Array.isArray(factorIds) || factorIds.length === 0) {
+    return errorResponse(new Error('Invalid factor IDs'), 400);
+  }
+
+  return null;
+}
+
+/**
  * Fetch POIs for given factors with caching
  */
 async function fetchPOIsWithCache(
@@ -90,15 +105,8 @@ export async function POST(request: NextRequest) {
     const body: POIRequestBody = await request.json();
     const { bounds, factorIds } = body;
 
-    // Validate bounds
-    if (!isValidBounds(bounds)) {
-      return errorResponse(new Error('Invalid bounds'), 400);
-    }
-
-    // Validate factor IDs
-    if (!factorIds || !Array.isArray(factorIds) || factorIds.length === 0) {
-      return errorResponse(new Error('Invalid factor IDs'), 400);
-    }
+    const validationError = validatePOIRequest(bounds, factorIds);
+    if (validationError) return validationError;
 
     const result = await fetchPOIsWithCache(bounds, factorIds);
     return NextResponse.json(result);
@@ -127,13 +135,8 @@ export async function GET(request: NextRequest) {
 
     const bounds: Bounds = { north, south, east, west };
     
-    if (!isValidBounds(bounds)) {
-      return errorResponse(new Error('Invalid bounds'), 400);
-    }
-
-    if (factorIds.length === 0) {
-      return errorResponse(new Error('Invalid factor IDs'), 400);
-    }
+    const validationError = validatePOIRequest(bounds, factorIds);
+    if (validationError) return validationError;
 
     const result = await fetchPOIsWithCache(bounds, factorIds);
     return NextResponse.json(result);

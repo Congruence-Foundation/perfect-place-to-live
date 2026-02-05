@@ -1,7 +1,7 @@
 'use client';
 
 import type { HeatmapSettings } from '@/types';
-import { useExtensionComponents } from '@/extensions/utils';
+import { renderExtensionComponents } from '@/extensions/utils';
 
 interface ExtensionsSettingsPanelProps {
   settings: HeatmapSettings;
@@ -16,5 +16,5 @@ interface ExtensionsSettingsPanelProps {
  * The settings panels are self-contained and manage their own state internally.
  */
 export function ExtensionsSettingsPanel({ settings, onSettingsChange }: ExtensionsSettingsPanelProps) {
-  return useExtensionComponents('SettingsPanel', { settings, onSettingsChange });
+  return renderExtensionComponents('SettingsPanel', { settings, onSettingsChange });
 }

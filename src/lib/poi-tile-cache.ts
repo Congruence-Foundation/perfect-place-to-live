@@ -286,7 +286,7 @@ function deduplicateResults(result: Map<string, POI[]>): Map<string, POI[]> {
 // Viewport Filtering
 // ============================================================================
 
-/** Default buffer for viewport filtering (~100m) */
+/** Buffer for viewport filtering in degrees (~111m at equator, ~70m at 50° latitude) */
 const DEFAULT_VIEWPORT_BUFFER = 0.001;
 
 /**

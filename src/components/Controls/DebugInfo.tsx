@@ -65,8 +65,10 @@ export default function DebugInfo({
   }, [isOpen, l2Status]);
 
   // Reset L2 status when panel closes so it refetches on next open
+  // This is a legitimate pattern - we want to clear stale data when the panel closes
   useEffect(() => {
     if (!isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setL2Status(null);
     }
   }, [isOpen]);
@@ -83,6 +85,7 @@ export default function DebugInfo({
         isOpen={isOpen}
         position="bottom-left"
         width="w-56"
+        ariaLabel={t('title')}
       >
         <PanelHeader title={t('title')} onClose={() => setIsOpen(false)} />
 

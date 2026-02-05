@@ -19,9 +19,12 @@ export default function AppInfo({ isMobile = false }: AppInfoProps) {
   const t = useTranslations('help');
 
   // Check localStorage on mount and open if first visit
+  // This is a legitimate pattern - we need to check localStorage after mount
+  // since it's not available during SSR
   useEffect(() => {
     const hasSeenInfo = localStorage.getItem(STORAGE_KEY);
     if (!hasSeenInfo) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsOpen(true);
     }
     setHasCheckedStorage(true);
@@ -43,6 +46,7 @@ export default function AppInfo({ isMobile = false }: AppInfoProps) {
           onClick={() => {}}
           size="sm"
           className="pointer-events-none"
+          aria-hidden={true}
         />
       </div>
     );
@@ -54,6 +58,7 @@ export default function AppInfo({ isMobile = false }: AppInfoProps) {
         isOpen={isOpen}
         position="top-right"
         width={isMobile ? 'w-[calc(100vw-2rem)] max-w-72' : 'w-64'}
+        ariaLabel={t('title')}
       >
         <PanelHeader title={t('title')} onClose={handleClose} />
 

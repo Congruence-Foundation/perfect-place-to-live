@@ -1,18 +1,38 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+
 import { useTranslations } from 'next-intl';
-import MapContainer, { MapContainerRef } from '@/components/Map/MapContainer';
-import { CitySearch, MapSettings, DebugInfo, AppInfo, LanguageSwitcher, BottomSheet, RefreshButton, DesktopControlPanel } from '@/components/Controls';
-import { DEFAULT_FACTORS, applyProfile } from '@/config/factors';
-import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource, HeatmapSettings } from '@/types';
-import { useHeatmapTiles, useIsMobile, useNotification, useDebounce } from '@/hooks';
 import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Toast } from '@/components/ui/toast';
-import { useMapStore } from '@/stores/mapStore';
-import { ExtensionControllers } from '@/components/ExtensionControllers';
+
+import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource, HeatmapSettings } from '@/types';
+import { DEFAULT_FACTORS } from '@/config/factors';
 import { UI_CONFIG } from '@/constants/performance';
 import { Z_INDEX } from '@/constants/z-index';
+import {
+  useHeatmapTiles,
+  useIsMobile,
+  useNotification,
+  useDebounce,
+  useFactors,
+  useGeolocation,
+  useHeatmapSettings,
+  useMapStoreSync,
+} from '@/hooks';
+import { useMapStore } from '@/stores/mapStore';
+import MapContainer, { type MapContainerRef } from '@/components/Map/MapContainer';
+import {
+  CitySearch,
+  MapSettings,
+  DebugInfo,
+  AppInfo,
+  LanguageSwitcher,
+  BottomSheet,
+  RefreshButton,
+  DesktopControlPanel,
+} from '@/components/Controls';
+import { Toast } from '@/components/ui/toast';
+import { ExtensionControllers } from '@/components/ExtensionControllers';
 
 /**
  * Props for HomeContent - data passed from wrapper
@@ -33,23 +53,22 @@ interface HomeContentProps {
   } | null;
   usedFallback: boolean;
   clearFallbackNotification: () => void;
-  // Bounds state lifted from parent
   bounds: Bounds | null;
   zoomLevel: number;
   onBoundsChange: (bounds: Bounds, zoom: number) => void;
-  // Settings from parent
   distanceCurve: DistanceCurve;
   sensitivity: number;
   normalizeToViewport: boolean;
   useOverpassAPI: boolean;
-  onSettingsChange: (settings: { distanceCurve?: DistanceCurve; sensitivity?: number; normalizeToViewport?: boolean }) => void;
+  onSettingsChange: (settings: {
+    distanceCurve?: DistanceCurve;
+    sensitivity?: number;
+    normalizeToViewport?: boolean;
+  }) => void;
   onUseOverpassAPIChange: (use: boolean) => void;
-  // Actions
   onAbort: () => void;
   onRefresh: () => void;
-  // Tiles for canvas bounds (synchronous with heatmapPoints)
   heatmapTileCoords: { z: number; x: number; y: number }[];
-  // Flag indicating if heatmap data is ready for current tiles
   isHeatmapDataReady: boolean;
 }
 
@@ -80,39 +99,47 @@ function HomeContent({
   isHeatmapDataReady,
 }: HomeContentProps) {
   const tControls = useTranslations('controls');
-
   const isMobile = useIsMobile();
-  
-  // Get store actions for updating map state
-  const setMapContext = useMapStore((s) => s.setMapContext);
+
+  // Store actions
   const setMapReady = useMapStore((s) => s.setMapReady);
   const analyticsProgress = useMapStore((s) => s.analyticsProgress);
 
-  // bounds and zoomLevel now come from props
-  const [factors, setFactors] = useState<Factor[]>(DEFAULT_FACTORS);
-  const [selectedProfile, setSelectedProfile] = useState<string | null>('balanced');
+  // Factor management
+  const {
+    factors,
+    selectedProfile,
+    enabledFactorCount,
+    handleFactorChange: onFactorChange,
+    handleProfileSelect,
+    handleResetFactors,
+  } = useFactors();
+
+  // UI state
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [isFactorsExpanded, setIsFactorsExpanded] = useState(false);
   const [showPOIs, setShowPOIs] = useState(false);
-  
-  // Local heatmap settings that sync with parent
-  const [heatmapSettings, setHeatmapSettings] = useState<HeatmapSettings>({
-    gridCellSize: UI_CONFIG.DEFAULT_GRID_CELL_SIZE,
-    distanceCurve: distanceCurve,
-    sensitivity: sensitivity,
-    normalizeToViewport: normalizeToViewport,
-    clusterPriceDisplay: 'median',
-    clusterPriceAnalysis: 'simplified',
-    detailedModeThreshold: UI_CONFIG.DEFAULT_DETAILED_MODE_THRESHOLD,
+
+  // Heatmap settings with parent sync
+  const { heatmapSettings, handleSettingsChange } = useHeatmapSettings({
+    initialDistanceCurve: distanceCurve,
+    initialSensitivity: sensitivity,
+    initialNormalizeToViewport: normalizeToViewport,
+    onSettingsChange,
   });
 
-  // Track bottom sheet height for mobile loading overlay positioning
-  // Use fallback value initially to avoid SSR hydration mismatch
-  const [bottomSheetHeight, setBottomSheetHeight] = useState<number>(UI_CONFIG.DEFAULT_BOTTOM_SHEET_HEIGHT);
-  
-  // Update to actual window height after mount
+  // Bottom sheet height for mobile loading overlay positioning
+  const [bottomSheetHeight, setBottomSheetHeight] = useState<number>(
+    UI_CONFIG.DEFAULT_BOTTOM_SHEET_HEIGHT
+  );
+
+  // Update to actual window height after mount (SSR hydration pattern)
+  // Using requestAnimationFrame to avoid synchronous setState in effect
   useEffect(() => {
-    setBottomSheetHeight(window.innerHeight * UI_CONFIG.BOTTOM_SHEET_HEIGHT_RATIO);
+    const updateHeight = () => {
+      setBottomSheetHeight(window.innerHeight * UI_CONFIG.BOTTOM_SHEET_HEIGHT_RATIO);
+    };
+    requestAnimationFrame(updateHeight);
   }, []);
 
   const mapRef = useRef<MapContainerRef>(null);
@@ -122,144 +149,84 @@ function HomeContent({
   const debouncedBounds = useDebounce(bounds, UI_CONFIG.BOUNDS_DEBOUNCE_MS);
   const debouncedFactors = useDebounce(factors, UI_CONFIG.FACTORS_DEBOUNCE_MS);
 
-  // Track if user has interacted (searched for a city)
+  // Track interaction state for zoom detection
   const hasInteracted = useRef(false);
-  
-  // Track previous bounds to detect zoom changes
   const prevBoundsRef = useRef<Bounds | null>(null);
-  // Track if geolocation has been attempted
-  const geoLocationAttempted = useRef(false);
-  // Track previous context values to avoid unnecessary updates
-  const prevContextRef = useRef<string>('');
-  // Track previous heatmap data to avoid unnecessary store updates
-  const prevHeatmapRef = useRef<{ points: HeatmapPoint[] }>({ points: [] });
-  // Track previous settings to avoid unnecessary store updates
-  const prevSettingsRef = useRef<string>('');
 
-  // Handle map ready callback - update map store
-  const handleMapReady = useCallback((map: L.Map, L: typeof import('leaflet'), extensionLayer: L.LayerGroup) => {
-    setMapReady(map, L, extensionLayer);
-  }, [setMapReady]);
+  // Sync state to map store
+  useMapStoreSync({
+    debouncedBounds,
+    zoomLevel,
+    heatmapPoints,
+    heatmapSettings,
+    debouncedFactors,
+  });
 
-  // Update map store when bounds/zoom change (use ref to avoid loop)
-  useEffect(() => {
-    const contextKey = JSON.stringify({
-      bounds: debouncedBounds,
-      zoom: zoomLevel,
-    });
-    if (contextKey !== prevContextRef.current) {
-      prevContextRef.current = contextKey;
-      setMapContext({ bounds: debouncedBounds, zoom: zoomLevel });
-    }
-  }, [debouncedBounds, zoomLevel, setMapContext]);
+  // Request geolocation on mount
+  useGeolocation({
+    onSuccess: (latitude, longitude) => {
+      mapRef.current?.flyTo(latitude, longitude, UI_CONFIG.DEFAULT_FLY_TO_ZOOM);
+      hasInteracted.current = true;
+    },
+  });
 
-  // Update map store when heatmap data changes (with reference check)
-  useEffect(() => {
-    // Only update if the actual data changed (not just reference)
-    if (heatmapPoints !== prevHeatmapRef.current.points) {
-      prevHeatmapRef.current = { points: heatmapPoints };
-      setMapContext({ heatmapPoints });
-    }
-  }, [heatmapPoints, setMapContext]);
+  // Handle map ready callback
+  const handleMapReady = useCallback(
+    (map: L.Map, L: typeof import('leaflet'), extensionLayer: L.LayerGroup) => {
+      setMapReady(map, L, extensionLayer);
+    },
+    [setMapReady]
+  );
 
-  // Update map store when settings change (with hash check)
-  useEffect(() => {
-    const settingsKey = JSON.stringify({
-      gridCellSize: heatmapSettings.gridCellSize,
-      clusterPriceDisplay: heatmapSettings.clusterPriceDisplay,
-      clusterPriceAnalysis: heatmapSettings.clusterPriceAnalysis,
-      detailedModeThreshold: heatmapSettings.detailedModeThreshold,
-    });
-    if (settingsKey !== prevSettingsRef.current) {
-      prevSettingsRef.current = settingsKey;
-      setMapContext({
-        gridCellSize: heatmapSettings.gridCellSize,
-        clusterPriceDisplay: heatmapSettings.clusterPriceDisplay,
-        clusterPriceAnalysis: heatmapSettings.clusterPriceAnalysis,
-        detailedModeThreshold: heatmapSettings.detailedModeThreshold,
-      });
-    }
-  }, [heatmapSettings.gridCellSize, heatmapSettings.clusterPriceDisplay, heatmapSettings.clusterPriceAnalysis, heatmapSettings.detailedModeThreshold, setMapContext]);
-
-  // Update map store when factors change (for tile-based fetching)
-  useEffect(() => {
-    setMapContext({ factors: debouncedFactors });
-  }, [debouncedFactors, setMapContext]);
-
-  // Request user's geolocation on mount and fly to their location
-  useEffect(() => {
-    if (geoLocationAttempted.current) return;
-    geoLocationAttempted.current = true;
-
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          mapRef.current?.flyTo(latitude, longitude, UI_CONFIG.DEFAULT_FLY_TO_ZOOM);
+  // Handle bounds change with zoom detection
+  const handleBoundsChangeInternal = useCallback(
+    (newBounds: Bounds, zoom: number) => {
+      if (prevBoundsRef.current && !hasInteracted.current) {
+        const prevArea =
+          (prevBoundsRef.current.east - prevBoundsRef.current.west) *
+          (prevBoundsRef.current.north - prevBoundsRef.current.south);
+        const newArea =
+          (newBounds.east - newBounds.west) * (newBounds.north - newBounds.south);
+        if (newArea < prevArea * UI_CONFIG.ZOOM_CHANGE_THRESHOLD) {
           hasInteracted.current = true;
-        },
-        () => {
-          // Geolocation not available or denied - silently ignore
-        },
-        {
-          enableHighAccuracy: false,
-          timeout: UI_CONFIG.GEOLOCATION_TIMEOUT_MS,
-          maximumAge: UI_CONFIG.GEOLOCATION_MAX_AGE_MS,
         }
-      );
-    }
-  }, []);
-
-  const handleBoundsChangeInternal = useCallback((newBounds: Bounds, zoom: number) => {
-    if (prevBoundsRef.current && !hasInteracted.current) {
-      const prevArea = (prevBoundsRef.current.east - prevBoundsRef.current.west) * 
-                       (prevBoundsRef.current.north - prevBoundsRef.current.south);
-      const newArea = (newBounds.east - newBounds.west) * 
-                      (newBounds.north - newBounds.south);
-      if (newArea < prevArea * UI_CONFIG.ZOOM_CHANGE_THRESHOLD) {
-        hasInteracted.current = true;
       }
-    }
-    prevBoundsRef.current = newBounds;
-    // Call parent's onBoundsChange to lift state
-    onBoundsChange(newBounds, zoom);
-  }, [onBoundsChange]);
+      prevBoundsRef.current = newBounds;
+      onBoundsChange(newBounds, zoom);
+    },
+    [onBoundsChange]
+  );
 
-  const handleFactorChange = useCallback((factorId: string, updates: Partial<Factor>) => {
-    setFactors((prev) =>
-      prev.map((f) => (f.id === factorId ? { ...f, ...updates } : f))
-    );
-    setSelectedProfile(null);
-    hasInteracted.current = true;
-  }, []);
+  // Wrap factor change to track interaction
+  const handleFactorChange = useCallback(
+    (factorId: string, updates: Partial<Factor>) => {
+      onFactorChange(factorId, updates);
+      hasInteracted.current = true;
+    },
+    [onFactorChange]
+  );
 
-  const handleProfileSelect = useCallback((profileId: string) => {
-    setSelectedProfile(profileId);
-    setFactors(applyProfile(profileId));
-    hasInteracted.current = true;
-  }, []);
+  // Wrap profile select to track interaction
+  const handleProfileSelectWithInteraction = useCallback(
+    (profileId: string) => {
+      handleProfileSelect(profileId);
+      hasInteracted.current = true;
+    },
+    [handleProfileSelect]
+  );
 
-  const handleResetFactors = useCallback(() => {
-    setFactors(DEFAULT_FACTORS);
-    setSelectedProfile('balanced');
-  }, []);
+  // Wrap settings change to track interaction
+  const handleSettingsChangeWithInteraction = useCallback(
+    (updates: Partial<HeatmapSettings>) => {
+      handleSettingsChange(updates);
+      hasInteracted.current = true;
+    },
+    [handleSettingsChange]
+  );
 
-  const handleSettingsChange = useCallback((updates: Partial<HeatmapSettings>) => {
-    setHeatmapSettings((prev) => ({ ...prev, ...updates }));
-    // Notify parent of heatmap-related settings changes
-    if (updates.distanceCurve !== undefined || updates.sensitivity !== undefined || updates.normalizeToViewport !== undefined) {
-      onSettingsChange({
-        distanceCurve: updates.distanceCurve,
-        sensitivity: updates.sensitivity,
-        normalizeToViewport: updates.normalizeToViewport,
-      });
-    }
-    hasInteracted.current = true;
-  }, [onSettingsChange]);
-
+  // Handle city selection
   const handleCitySelect = useCallback((lat: number, lng: number, cityBounds?: Bounds) => {
     hasInteracted.current = true;
-    
     if (cityBounds) {
       mapRef.current?.fitBounds(cityBounds);
     } else {
@@ -275,29 +242,30 @@ function HomeContent({
     }
   }, [usedFallback, useOverpassAPI, showNotification, clearFallbackNotification, tControls]);
 
-  const enabledFactorCount = factors.filter((f) => f.enabled && f.weight !== 0).length;
+  // Toggle panel with map resize
+  const handlePanelToggle = useCallback(() => {
+    setIsPanelOpen((prev) => !prev);
+    setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, UI_CONFIG.PANEL_ANIMATION_DURATION_MS);
+  }, []);
+
   const totalPOICount = Object.values(pois).reduce((sum, arr) => sum + arr.length, 0);
-
-  // Disable refresh button only when viewport has too many tiles
-  const isRefreshDisabled = isTooLarge;
-
   const panelWidth = isPanelOpen && !isMobile ? UI_CONFIG.PANEL_WIDTH : 0;
 
   return (
     <main className="h-screen w-screen flex overflow-hidden relative">
       {/* Search Box - Floating on top center */}
-      <div 
-        className={`absolute ${
-          isMobile 
-            ? 'top-4 left-14 right-24' 
-            : 'top-4'
-        }`}
+      <div
+        className={`absolute ${isMobile ? 'top-4 left-14 right-24' : 'top-4'}`}
         style={{
           zIndex: Z_INDEX.SEARCH_BOX,
-          ...(!isMobile ? { 
-            left: `calc(${panelWidth}px + (100% - ${panelWidth}px) / 2)`,
-            transform: 'translateX(-50%)'
-          } : {})
+          ...(!isMobile
+            ? {
+                left: `calc(${panelWidth}px + (100% - ${panelWidth}px) / 2)`,
+                transform: 'translateX(-50%)',
+              }
+            : {}),
         }}
       >
         <CitySearch onCitySelect={handleCitySelect} isMobile={isMobile} />
@@ -312,7 +280,7 @@ function HomeContent({
           isFactorsExpanded={isFactorsExpanded}
           enabledFactorCount={enabledFactorCount}
           onFactorChange={handleFactorChange}
-          onProfileSelect={handleProfileSelect}
+          onProfileSelect={handleProfileSelectWithInteraction}
           onResetFactors={handleResetFactors}
           onToggleFactorsExpanded={() => setIsFactorsExpanded(!isFactorsExpanded)}
         />
@@ -321,12 +289,7 @@ function HomeContent({
       {/* Desktop: Collapse/Expand Toggle */}
       {!isMobile && (
         <button
-          onClick={() => {
-            setIsPanelOpen(!isPanelOpen);
-            setTimeout(() => {
-              mapRef.current?.invalidateSize();
-            }, UI_CONFIG.PANEL_ANIMATION_DURATION_MS);
-          }}
+          onClick={handlePanelToggle}
           className={`absolute top-1/2 -translate-y-1/2 flex items-center justify-center
             w-6 h-12 bg-background/95 backdrop-blur-sm border border-l-0 rounded-r-lg shadow-sm
             hover:bg-muted transition-colors
@@ -358,7 +321,7 @@ function HomeContent({
         />
 
         {/* Top Right Controls - Language Switcher and App Info */}
-        <div 
+        <div
           className="absolute top-4 right-4 flex items-center gap-2"
           style={{ zIndex: Z_INDEX.FLOATING_CONTROLS }}
         >
@@ -370,13 +333,13 @@ function HomeContent({
         {!isMobile && (
           <>
             {/* Refresh/Stop Button - Bottom Center */}
-            <div 
+            <div
               className="absolute left-1/2 -translate-x-1/2 bottom-4"
               style={{ zIndex: Z_INDEX.FLOATING_CONTROLS }}
             >
               <RefreshButton
                 isLoading={isLoading}
-                disabled={isRefreshDisabled}
+                disabled={isTooLarge}
                 disabledReason={isTooLarge ? 'tooLarge' : null}
                 onRefresh={onRefresh}
                 onAbort={onAbort}
@@ -397,7 +360,7 @@ function HomeContent({
             {/* Map Settings - Bottom Right */}
             <MapSettings
               settings={heatmapSettings}
-              onSettingsChange={handleSettingsChange}
+              onSettingsChange={handleSettingsChangeWithInteraction}
               showPOIs={showPOIs}
               onShowPOIsChange={setShowPOIs}
               useOverpassAPI={useOverpassAPI}
@@ -409,7 +372,7 @@ function HomeContent({
 
         {/* Loading Overlay - centered in visible map area (above bottom sheet on mobile) */}
         {isLoading && isMobile && (
-          <div 
+          <div
             className="absolute inset-0 bg-background/30 backdrop-blur-[2px] flex items-center justify-center"
             style={{
               zIndex: Z_INDEX.FLOATING_CONTROLS - 1,
@@ -434,7 +397,7 @@ function HomeContent({
           selectedProfile={selectedProfile}
           enabledFactorCount={enabledFactorCount}
           onFactorChange={handleFactorChange}
-          onProfileSelect={handleProfileSelect}
+          onProfileSelect={handleProfileSelectWithInteraction}
           onResetFactors={handleResetFactors}
           onHeightChange={setBottomSheetHeight}
           floatingControls={
@@ -452,7 +415,7 @@ function HomeContent({
               {/* Loading Progress or Zoom Warning - Center */}
               <RefreshButton
                 isLoading={isLoading}
-                disabled={isRefreshDisabled}
+                disabled={isTooLarge}
                 disabledReason={isTooLarge ? 'tooLarge' : null}
                 onRefresh={onRefresh}
                 onAbort={onAbort}
@@ -462,7 +425,7 @@ function HomeContent({
               {/* Map Settings - Right */}
               <MapSettings
                 settings={heatmapSettings}
-                onSettingsChange={handleSettingsChange}
+                onSettingsChange={handleSettingsChangeWithInteraction}
                 showPOIs={showPOIs}
                 onShowPOIsChange={setShowPOIs}
                 useOverpassAPI={useOverpassAPI}
@@ -483,15 +446,15 @@ function HomeContent({
  * Uses tile-based heatmap fetching for efficient caching and incremental loading.
  */
 export default function Home() {
-  // Local state for bounds and zoom (lifted from HomeContent)
+  // Local state for bounds and zoom
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(UI_CONFIG.DEFAULT_INITIAL_ZOOM);
-  
-  // Get other state from store
+
+  // Get state from store
   const factors = useMapStore((s) => s.factors);
   const heatmapTileRadius = useMapStore((s) => s.heatmapTileRadius);
   const poiBufferScale = useMapStore((s) => s.poiBufferScale);
-  
+
   // Local state for settings
   const [distanceCurve, setDistanceCurve] = useState<DistanceCurve>('exp');
   const [sensitivity, setSensitivity] = useState<number>(UI_CONFIG.DEFAULT_SENSITIVITY);
@@ -528,25 +491,30 @@ export default function Home() {
     dataSource: useOverpassAPI ? 'overpass' : 'neon',
     tileRadius: heatmapTileRadius,
     poiBufferScale,
-    enabled: bounds !== null && effectiveFactors.filter(f => f.enabled && f.weight !== 0).length > 0,
+    enabled:
+      bounds !== null && effectiveFactors.filter((f) => f.enabled && f.weight !== 0).length > 0,
   });
 
   // Callbacks to update settings from HomeContent
-  const handleSettingsFromContent = useCallback((settings: {
-    distanceCurve?: DistanceCurve;
-    sensitivity?: number;
-    normalizeToViewport?: boolean;
-  }) => {
-    if (settings.distanceCurve !== undefined) setDistanceCurve(settings.distanceCurve);
-    if (settings.sensitivity !== undefined) setSensitivity(settings.sensitivity);
-    if (settings.normalizeToViewport !== undefined) setNormalizeToViewport(settings.normalizeToViewport);
-  }, []);
+  const handleSettingsFromContent = useCallback(
+    (settings: {
+      distanceCurve?: DistanceCurve;
+      sensitivity?: number;
+      normalizeToViewport?: boolean;
+    }) => {
+      if (settings.distanceCurve !== undefined) setDistanceCurve(settings.distanceCurve);
+      if (settings.sensitivity !== undefined) setSensitivity(settings.sensitivity);
+      if (settings.normalizeToViewport !== undefined)
+        setNormalizeToViewport(settings.normalizeToViewport);
+    },
+    []
+  );
 
   return (
     <>
       {/* Extension controllers handle side effects (fetching, rendering markers) */}
       <ExtensionControllers />
-      
+
       <HomeContent
         heatmapPoints={heatmapPoints}
         pois={pois}

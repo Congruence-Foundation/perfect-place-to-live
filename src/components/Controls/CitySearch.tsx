@@ -11,8 +11,18 @@ import { UI_CONFIG } from '@/constants/performance';
 const SEARCH_DEBOUNCE_MS = UI_CONFIG.FACTORS_DEBOUNCE_MS;
 const MIN_SEARCH_LENGTH = 2;
 const BLUR_FOCUS_DELAY_MS = 150;
-const GEOLOCATION_TIMEOUT_MS = 10000;
-const GEOLOCATION_MAX_AGE_MS = 60000;
+// Use centralized geolocation constants from UI_CONFIG
+const { GEOLOCATION_TIMEOUT_MS, GEOLOCATION_MAX_AGE_MS } = UI_CONFIG;
+
+/** Extract the primary city/place name from a Nominatim display_name */
+function extractCityName(displayName: string): string {
+  return displayName.split(',')[0];
+}
+
+/** Extract secondary location info (region/country) from a Nominatim display_name */
+function extractLocationContext(displayName: string): string {
+  return displayName.split(',').slice(1, 3).join(',');
+}
 
 interface SearchResult {
   place_id: number;
@@ -148,8 +158,7 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
     onCitySelect(lat, lng, bounds);
     
     // Update input with selected city name (just the city part)
-    const cityName = result.display_name.split(',')[0];
-    setQuery(cityName);
+    setQuery(extractCityName(result.display_name));
     setIsOpen(false);
   };
 
@@ -237,6 +246,11 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
           onKeyDown={handleKeyDown}
           className="pl-8 pr-16 bg-background border-0 shadow-none h-8 text-base rounded-full"
           style={{ fontSize: '16px' }} // Prevent iOS zoom on focus
+          aria-label={t('placeholder')}
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? 'city-search-results' : undefined}
+          aria-autocomplete="list"
+          role="combobox"
         />
         <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
           {query && (
@@ -260,7 +274,7 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
             className="h-6 w-6 p-0 rounded-full text-muted-foreground hover:text-foreground"
             onClick={handleLocateMe}
             disabled={isLocating}
-            title={t('locateMe')}
+            aria-label={t('locateMe')}
           >
             {isLocating ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -273,23 +287,30 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
 
       {/* Results dropdown */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+        <div 
+          id="city-search-results"
+          role="listbox"
+          aria-label={t('placeholder')}
+          className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto"
+        >
           {results.map((result) => (
             <button
               key={result.place_id}
+              role="option"
+              aria-selected={false}
               className="w-full px-3 py-2.5 text-left hover:bg-muted transition-colors text-sm first:rounded-t-lg last:rounded-b-lg"
               onClick={() => handleSelectResult(result)}
             >
               <div className="font-medium truncate">
-                {result.display_name.split(',')[0]}
+                {extractCityName(result.display_name)}
               </div>
               <div className="text-xs text-muted-foreground truncate">
-                {result.display_name.split(',').slice(1, 3).join(',')}
+                {extractLocationContext(result.display_name)}
               </div>
             </button>
           ))}
           {results.length === 0 && !isLoading && query.length >= MIN_SEARCH_LENGTH && (
-            <div className="px-3 py-2 text-sm text-muted-foreground">
+            <div className="px-3 py-2 text-sm text-muted-foreground" role="status">
               {t('noResults')}
             </div>
           )}

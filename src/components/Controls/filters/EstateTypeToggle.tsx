@@ -3,6 +3,7 @@
 import { Label } from '@/components/ui/label';
 import { Building2, Home, LucideIcon } from 'lucide-react';
 import { EstateType } from '@/extensions/real-estate/types';
+import { getToggleButtonClasses } from './ToggleButtonGroup';
 
 interface EstateTypeToggleProps {
   label: string;
@@ -14,6 +15,13 @@ interface EstateTypeToggleProps {
   flatLabel: string;
   houseLabel: string;
 }
+
+const ESTATE_BUTTON_SIZE = 'flex-1 gap-2 h-8 text-xs';
+
+const ESTATE_OPTIONS: { value: EstateType; Icon: LucideIcon }[] = [
+  { value: 'FLAT', Icon: Building2 },
+  { value: 'HOUSE', Icon: Home },
+];
 
 /**
  * Multi-select toggle for estate types (FLAT/HOUSE)
@@ -27,6 +35,12 @@ export default function EstateTypeToggle({
   flatLabel,
   houseLabel,
 }: EstateTypeToggleProps) {
+  // Only FLAT and HOUSE are supported in this toggle
+  const labelMap: Partial<Record<EstateType, string>> = {
+    FLAT: flatLabel,
+    HOUSE: houseLabel,
+  };
+
   const handleToggle = (value: EstateType) => {
     const isSelected = selected.includes(value);
     
@@ -42,32 +56,24 @@ export default function EstateTypeToggle({
     onChange(updated);
   };
 
-  const options: { value: EstateType; label: string; Icon: LucideIcon }[] = [
-    { value: 'FLAT', label: flatLabel, Icon: Building2 },
-    { value: 'HOUSE', label: houseLabel, Icon: Home },
-  ];
-
   return (
     <div className="space-y-2">
       <Label className="text-xs">{label}</Label>
       <div className="flex gap-2">
-        {options.map((option) => {
+        {ESTATE_OPTIONS.map((option) => {
           const isSelected = selected.includes(option.value);
+          const optionLabel = labelMap[option.value] ?? option.value;
           return (
             <button
               key={option.value}
               type="button"
               onClick={() => handleToggle(option.value)}
-              className={`flex-1 flex items-center justify-center gap-2 h-8 rounded border text-xs transition-colors ${
-                isSelected
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-background hover:bg-muted border-input'
-              }`}
+              className={getToggleButtonClasses(isSelected, ESTATE_BUTTON_SIZE)}
               aria-pressed={isSelected}
-              aria-label={option.label}
+              aria-label={optionLabel}
             >
               <option.Icon className="h-3.5 w-3.5" />
-              {option.label}
+              {optionLabel}
             </button>
           );
         })}

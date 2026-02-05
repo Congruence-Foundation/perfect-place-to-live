@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState, forwardRef, useImperativeHandle, useRef, useMemo } from 'react';
+
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
-import { POLAND_CENTER } from '@/lib/geo';
+
 import type { HeatmapPoint, POI, Factor, Bounds } from '@/types';
+import { POLAND_CENTER } from '@/lib/geo';
 import type { PopupTranslations, FactorTranslations, MapViewRef } from './MapView';
 
 /**
@@ -111,7 +113,10 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(({
     city_downtown: tFactors('city_downtown'),
   }), [tFactors]);
 
+  // Track mount state for SSR hydration - we need to know when we're on the client
+  // to avoid rendering map-related content during SSR
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
   }, []);
 

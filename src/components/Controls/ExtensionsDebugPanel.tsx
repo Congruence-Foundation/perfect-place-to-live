@@ -1,6 +1,6 @@
 'use client';
 
-import { useExtensionComponents } from '@/extensions/utils';
+import { renderExtensionComponents } from '@/extensions/utils';
 
 /**
  * ExtensionsDebugPanel Component
@@ -10,5 +10,5 @@ import { useExtensionComponents } from '@/extensions/utils';
  * The debug panels are self-contained and manage their own state internally.
  */
 export function ExtensionsDebugPanel() {
-  return useExtensionComponents('DebugPanel');
+  return renderExtensionComponents('DebugPanel');
 }

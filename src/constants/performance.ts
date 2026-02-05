@@ -14,11 +14,17 @@ const SHARED_TILE_ZOOM = 13;
 /** Shared batch size for parallel tile processing */
 const SHARED_BATCH_SIZE = 5;
 
-/** 24 hours in seconds - common TTL for server caches */
-const TTL_24_HOURS = 86400;
-
 /** 1 hour in seconds - common TTL for API and POI caches */
 const TTL_1_HOUR = 3600;
+
+/** 12 hours in seconds - common TTL for property caches */
+const TTL_12_HOURS = TTL_1_HOUR * 12;
+
+/** 24 hours in seconds - common TTL for server caches */
+const TTL_24_HOURS = TTL_1_HOUR * 24;
+
+/** 7 days in seconds - common TTL for tile caches */
+const TTL_7_DAYS = TTL_24_HOURS * 7;
 
 export const PERFORMANCE_CONFIG = {
   /** Default data source for POI fetching */
@@ -63,7 +69,7 @@ export const TILE_CONFIG = {
   POI_CACHE_TTL_SECONDS: TTL_24_HOURS,
   
   /** Cache TTL for generated tiles (seconds) - 7 days */
-  TILE_CACHE_TTL_SECONDS: 604800,
+  TILE_CACHE_TTL_SECONDS: TTL_7_DAYS,
   
   /** Number of tiles to process in parallel */
   BATCH_SIZE: SHARED_BATCH_SIZE,
@@ -189,7 +195,7 @@ export const PROPERTY_TILE_CONFIG = {
   SERVER_LRU_MAX: 1000,
   
   /** Server-side cache TTL in seconds - 12 hours */
-  SERVER_TTL_SECONDS: 43200,
+  SERVER_TTL_SECONDS: TTL_12_HOURS,
   
   /** Default price analysis radius (number of tile layers around viewport) - 0 means viewport tiles only */
   DEFAULT_PRICE_RADIUS: 0,
@@ -309,8 +315,8 @@ export const UI_CONFIG = {
   /** Geolocation timeout (ms) */
   GEOLOCATION_TIMEOUT_MS: 10000,
   
-  /** Geolocation max age (ms) */
-  GEOLOCATION_MAX_AGE_MS: 300000,
+  /** Geolocation max age (ms) - 1 minute for fresh location data */
+  GEOLOCATION_MAX_AGE_MS: 60000,
   
   /** Default heatmap opacity */
   DEFAULT_HEATMAP_OPACITY: 0.30,
@@ -353,11 +359,11 @@ export const TIME_CONSTANTS = {
   /** Seconds per minute */
   SECONDS_PER_MINUTE: 60,
   /** Seconds per hour */
-  SECONDS_PER_HOUR: 3600,
+  SECONDS_PER_HOUR: TTL_1_HOUR,
   /** Seconds per day */
-  SECONDS_PER_DAY: 86400,
+  SECONDS_PER_DAY: TTL_24_HOURS,
   /** Cookie max age for locale preference (1 year in seconds) */
-  LOCALE_COOKIE_MAX_AGE: 31536000,
+  LOCALE_COOKIE_MAX_AGE: TTL_24_HOURS * 365,
 } as const;
 
 /**

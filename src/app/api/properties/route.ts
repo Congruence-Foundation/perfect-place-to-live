@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         return errorResponse(new Error('Request body is empty'), 400);
       }
       body = JSON.parse(text);
-    } catch (parseError) {
+    } catch {
       // This can happen when the request is aborted mid-flight
       return errorResponse(new Error('Invalid JSON in request body'), 400);
     }
@@ -110,7 +110,6 @@ export async function POST(request: NextRequest) {
     // Determine bounds from either direct bounds or tile coordinates
     let bounds = requestBounds;
     let cacheKey: string | null = null;
-    let isTileRequest = false;
 
     if (isValidTileCoord(tile)) {
       // Tile-based request
@@ -119,7 +118,6 @@ export async function POST(request: NextRequest) {
       const baseFilterHash = hashFilters(filters);
       const filterHash = `${baseFilterHash}-${dataSources.sort().join(',')}`;
       cacheKey = generateTileCacheKey(tile.z, tile.x, tile.y, filterHash);
-      isTileRequest = true;
 
       // Check cache for tile requests
       const stopCacheTimer = createTimer('properties-api:cache-check');
@@ -156,8 +154,8 @@ export async function POST(request: NextRequest) {
       sources: dataSources.join(','),
     });
 
-    // Cache tile requests
-    if (isTileRequest && cacheKey) {
+    // Cache tile requests (cacheKey is only set for tile requests)
+    if (cacheKey) {
       const cacheEntry: TileCacheEntry = {
         properties: result.properties,
         clusters: result.clusters || [],
@@ -165,8 +163,10 @@ export async function POST(request: NextRequest) {
         fetchedAt: new Date().toISOString(),
       };
       
-      // Don't await - cache in background
-      setCachedTile(cacheKey, cacheEntry);
+      // Don't await - cache in background, but handle errors
+      setCachedTile(cacheKey, cacheEntry).catch(err => 
+        console.error('Failed to cache property tile:', err)
+      );
     }
 
     stopTotalTimer({ 

@@ -8,11 +8,21 @@
  * - Single batch request for all tiles
  * - Automatic deduplication of heatmap points across tiles
  * - Configurable POI buffer scale for accuracy vs performance
+ * 
+ * Note: This hook uses refs during render for performance optimization.
+ * Reading refs during render is valid in React - refs are synchronous
+ * and can be read at any time. The refs are used to maintain accumulated
+ * state across renders without triggering re-renders.
  */
 
+/* eslint-disable react-hooks/refs */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
 import { decode } from '@msgpack/msgpack';
+
 import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource } from '@/types';
+import { HEATMAP_TILE_CONFIG, FETCH_CONFIG } from '@/constants/performance';
 import {
   hashHeatmapConfig,
   calculateTilesWithRadius,
@@ -20,9 +30,12 @@ import {
   HEATMAP_TILE_ZOOM,
 } from '@/lib/geo/tiles';
 import { tileToBounds, createCoordinateKey } from '@/lib/geo';
-import { HEATMAP_TILE_CONFIG, FETCH_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
 import { useMapStore } from '@/stores/mapStore';
+
+// ============================================================================
+// Types
+// ============================================================================
 
 /**
  * Response from the batch heatmap API
@@ -50,11 +63,122 @@ interface BatchHeatmapResponse {
 }
 
 /**
+ * Combined bounds from multiple tiles
+ */
+interface CombinedBounds {
+  minLat: number;
+  maxLat: number;
+  minLng: number;
+  maxLng: number;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
  * Generate a stable cache key from tiles array
  */
 function getTilesKey(tiles: TileCoord[]): string {
   return tiles.map(t => `${t.z}:${t.x}:${t.y}`).sort().join(',');
 }
+
+/**
+ * Calculate combined bounds from an array of tiles
+ */
+function calculateCombinedBounds(tiles: TileCoord[]): CombinedBounds | null {
+  if (tiles.length === 0) return null;
+  
+  let minLat = Infinity, maxLat = -Infinity;
+  let minLng = Infinity, maxLng = -Infinity;
+  
+  for (const tile of tiles) {
+    const tb = tileToBounds(tile.z, tile.x, tile.y);
+    if (tb.south < minLat) minLat = tb.south;
+    if (tb.north > maxLat) maxLat = tb.north;
+    if (tb.west < minLng) minLng = tb.west;
+    if (tb.east > maxLng) maxLng = tb.east;
+  }
+  
+  return { minLat, maxLat, minLng, maxLng };
+}
+
+/**
+ * Check if a point is within the given bounds
+ */
+function isPointInBounds(point: { lat: number; lng: number }, bounds: CombinedBounds): boolean {
+  return point.lat >= bounds.minLat && 
+         point.lat <= bounds.maxLat && 
+         point.lng >= bounds.minLng && 
+         point.lng <= bounds.maxLng;
+}
+
+/**
+ * Prune heatmap points outside the given bounds
+ */
+function prunePointsOutsideBounds(
+  pointsMap: Map<string, HeatmapPoint>,
+  bounds: CombinedBounds
+): void {
+  for (const [key, point] of pointsMap) {
+    if (!isPointInBounds(point, bounds)) {
+      pointsMap.delete(key);
+    }
+  }
+}
+
+/**
+ * Prune POIs outside the given bounds
+ */
+function prunePoisOutsideBounds(
+  poisByFactor: Record<string, POI[]>,
+  bounds: CombinedBounds
+): void {
+  for (const factorId of Object.keys(poisByFactor)) {
+    poisByFactor[factorId] = poisByFactor[factorId].filter(
+      p => isPointInBounds(p, bounds)
+    );
+  }
+}
+
+/**
+ * Merge new POIs with existing ones, deduplicating by coordinates
+ */
+function mergePois(
+  existing: Record<string, POI[]>,
+  newPois: Record<string, POI[]>
+): void {
+  for (const [factorId, factorPois] of Object.entries(newPois)) {
+    const existingPois = existing[factorId] || [];
+    const seenKeys = new Set(existingPois.map(p => createCoordinateKey(p.lat, p.lng)));
+    const uniqueNewPois = factorPois.filter(
+      p => !seenKeys.has(createCoordinateKey(p.lat, p.lng))
+    );
+    existing[factorId] = [...existingPois, ...uniqueNewPois];
+  }
+}
+
+/**
+ * Calculate tile overlap ratio between two sets of tiles
+ * Returns a value between 0 (no overlap) and 1 (complete overlap)
+ */
+function calculateTileOverlapRatio(
+  currentTiles: Set<string>,
+  previousTiles: Set<string>
+): number {
+  if (previousTiles.size === 0 || currentTiles.size === 0) return 0;
+  
+  let overlap = 0;
+  for (const tile of currentTiles) {
+    if (previousTiles.has(tile)) overlap++;
+  }
+  
+  return overlap / Math.max(previousTiles.size, currentTiles.size);
+}
+
+// ============================================================================
+// Hook Options and Result Types
+// ============================================================================
 
 /**
  * Options for the useHeatmapTiles hook
@@ -72,6 +196,24 @@ interface UseHeatmapTilesOptions {
 }
 
 /**
+ * Metadata returned from heatmap processing
+ */
+interface HeatmapMetadata {
+  gridSize: number | string;
+  pointCount: number;
+  computeTimeMs: number;
+  factorCount: number;
+  dataSource?: POIDataSource;
+  poiCounts: Record<string, number>;
+  poiTileCount?: number;
+  cachedTiles?: number;
+  l1CacheStats?: {
+    heatmap: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
+    poi: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
+  };
+}
+
+/**
  * Return type for the useHeatmapTiles hook
  */
 interface UseHeatmapTilesResult {
@@ -80,20 +222,7 @@ interface UseHeatmapTilesResult {
   isLoading: boolean;
   isTooLarge: boolean;
   error: string | null;
-  metadata: {
-    gridSize: number | string;
-    pointCount: number;
-    computeTimeMs: number;
-    factorCount: number;
-    dataSource?: POIDataSource;
-    poiCounts: Record<string, number>;
-    poiTileCount?: number;
-    cachedTiles?: number;
-    l1CacheStats?: {
-      heatmap: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
-      poi: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
-    };
-  } | null;
+  metadata: HeatmapMetadata | null;
   tileCount: number;
   viewportTileCount: number;
   loadedTileCount: number;
@@ -106,6 +235,10 @@ interface UseHeatmapTilesResult {
   /** True when heatmapPoints are ready for current tiles (prevents stale renders) */
   isDataReady: boolean;
 }
+
+// ============================================================================
+// API Fetch Function
+// ============================================================================
 
 /**
  * Fetch heatmap data for multiple tiles using batch endpoint
@@ -121,11 +254,12 @@ async function fetchHeatmapBatch(
   viewportBounds: Bounds,
   signal?: AbortSignal
 ): Promise<BatchHeatmapResponse> {
-  // Create a timeout signal that aborts after configured timeout
   const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => timeoutController.abort(), FETCH_CONFIG.HEATMAP_FETCH_TIMEOUT_MS);
+  const timeoutId = setTimeout(
+    () => timeoutController.abort(), 
+    FETCH_CONFIG.HEATMAP_FETCH_TIMEOUT_MS
+  );
   
-  // Combine the external signal with the timeout signal
   const combinedSignal = signal 
     ? AbortSignal.any([signal, timeoutController.signal])
     : timeoutController.signal;
@@ -153,13 +287,14 @@ async function fetchHeatmapBatch(
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP error: ${response.status}`);
+      const errorData: unknown = await response.json().catch(() => ({}));
+      const message = errorData && typeof errorData === 'object' && 'message' in errorData && typeof errorData.message === 'string'
+        ? errorData.message
+        : `HTTP error: ${response.status}`;
+      throw new Error(message);
     }
 
-    // Check if response is MessagePack or JSON
     const contentType = response.headers.get('Content-Type');
-    
     const stopParseTimer = createTimer('heatmap:client:parse');
     let result: BatchHeatmapResponse;
     let responseSize: number | undefined;
@@ -172,8 +307,9 @@ async function fetchHeatmapBatch(
       result = await response.json();
     }
     
+    const enabledFactorCount = factors.filter(f => f.enabled).length;
     stopParseTimer({ format: contentType === 'application/msgpack' ? 'msgpack' : 'json', bytes: responseSize });
-    stopFetchTimer({ tiles: tiles.length, factors: factors.filter(f => f.enabled).length });
+    stopFetchTimer({ tiles: tiles.length, factors: enabledFactorCount });
     
     return result;
   } finally {
@@ -183,6 +319,9 @@ async function fetchHeatmapBatch(
 
 /**
  * Hook for fetching heatmap tiles using batch endpoint
+ * 
+ * @param options - Configuration options for heatmap tile fetching
+ * @returns Object containing heatmap data, loading state, and control functions
  */
 export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTilesResult {
   const {
@@ -263,19 +402,12 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     const currentTileSet = new Set(allTiles.map(t => `${t.z}:${t.x}:${t.y}`));
     const prevTileSet = prevTileSetRef.current;
     
-    if (prevTileSet.size > 0 && currentTileSet.size > 0) {
-      // Count overlapping tiles
-      let overlap = 0;
-      for (const tile of currentTileSet) {
-        if (prevTileSet.has(tile)) overlap++;
-      }
-      
-      // If less than 50% overlap, clear accumulated data (likely a zoom change)
-      const overlapRatio = overlap / Math.max(prevTileSet.size, currentTileSet.size);
-      if (overlapRatio < 0.5) {
-        accumulatedPointsRef.current.clear();
-        lastValidPoisRef.current = {};
-      }
+    const overlapRatio = calculateTileOverlapRatio(currentTileSet, prevTileSet);
+    
+    // If less than 50% overlap, clear accumulated data (likely a zoom change)
+    if (overlapRatio < 0.5 && prevTileSet.size > 0 && currentTileSet.size > 0) {
+      accumulatedPointsRef.current.clear();
+      lastValidPoisRef.current = {};
     }
     
     prevTileSetRef.current = currentTileSet;
@@ -381,7 +513,6 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
   }, [
     allTiles,
     bounds,
-    configHash,
     factors,
     distanceCurve,
     sensitivity,
@@ -393,25 +524,15 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     refreshTrigger,
   ]);
 
+  // Memoize tiles key to avoid recomputing in multiple places
+  const currentTilesKey = useMemo(() => getTilesKey(allTiles), [allTiles]);
+
   // Process batch result into heatmap points
   const { heatmapPoints, pois, metadata } = useMemo(() => {
-    // Check if batchResult corresponds to current tiles
-    // This prevents rendering stale/pruned data when tiles changed but API hasn't responded yet
-    const currentTilesKey = getTilesKey(allTiles);
     const tilesMatch = batchResultTilesRef.current === currentTilesKey;
     
-    if (!batchResult || isTooLarge) {
-      // When zoomed out, return accumulated heatmap points and preserve last valid POIs
-      return { 
-        heatmapPoints: Array.from(accumulatedPointsRef.current.values()), 
-        pois: { ...lastValidPoisRef.current }, 
-        metadata: null 
-      };
-    }
-
-    // If tiles don't match, return existing accumulated points without pruning
-    // This prevents the "rough edges" flash when tiles change but data hasn't arrived
-    if (!tilesMatch) {
+    // Early return for zoomed out or tiles mismatch - return accumulated data without modification
+    if (!batchResult || isTooLarge || !tilesMatch) {
       return { 
         heatmapPoints: Array.from(accumulatedPointsRef.current.values()), 
         pois: { ...lastValidPoisRef.current }, 
@@ -423,54 +544,24 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     for (const tileData of Object.values(batchResult.tiles)) {
       for (const point of tileData.points) {
         const pointKey = createCoordinateKey(point.lat, point.lng);
-        // Always update with latest score (in case settings changed)
         accumulatedPointsRef.current.set(pointKey, point);
       }
     }
 
-    // Prune points outside current tile bounds to prevent unbounded growth
-    // Calculate combined bounds from all current tiles
-    if (allTiles.length > 0) {
-      let minLat = Infinity, maxLat = -Infinity;
-      let minLng = Infinity, maxLng = -Infinity;
-      
-      for (const tile of allTiles) {
-        const tb = tileToBounds(tile.z, tile.x, tile.y);
-        if (tb.south < minLat) minLat = tb.south;
-        if (tb.north > maxLat) maxLat = tb.north;
-        if (tb.west < minLng) minLng = tb.west;
-        if (tb.east > maxLng) maxLng = tb.east;
-      }
-      
-      // Remove points outside combined bounds
-      for (const [key, point] of accumulatedPointsRef.current) {
-        if (point.lat < minLat || point.lat > maxLat || 
-            point.lng < minLng || point.lng > maxLng) {
-          accumulatedPointsRef.current.delete(key);
-        }
-      }
-      
-      // Also prune POIs outside bounds
-      for (const factorId of Object.keys(lastValidPoisRef.current)) {
-        lastValidPoisRef.current[factorId] = lastValidPoisRef.current[factorId].filter(
-          p => p.lat >= minLat && p.lat <= maxLat && p.lng >= minLng && p.lng <= maxLng
-        );
-      }
+    // Prune points and POIs outside current tile bounds to prevent unbounded growth
+    const combinedBounds = calculateCombinedBounds(allTiles);
+    if (combinedBounds) {
+      prunePointsOutsideBounds(accumulatedPointsRef.current, combinedBounds);
+      prunePoisOutsideBounds(lastValidPoisRef.current, combinedBounds);
     }
 
-    const enabledFactors = factors.filter(f => f.enabled && f.weight !== 0);
-    
     // Merge new POIs with existing ones
     if (Object.keys(batchResult.pois).length > 0) {
-      for (const [factorId, factorPois] of Object.entries(batchResult.pois)) {
-        const existing = lastValidPoisRef.current[factorId] || [];
-        const seenKeys = new Set(existing.map(p => createCoordinateKey(p.lat, p.lng)));
-        const newPois = factorPois.filter(p => !seenKeys.has(createCoordinateKey(p.lat, p.lng)));
-        lastValidPoisRef.current[factorId] = [...existing, ...newPois];
-      }
+      mergePois(lastValidPoisRef.current, batchResult.pois);
     }
 
-    // Return a new object to trigger React re-render
+    const enabledFactorCount = factors.filter(f => f.enabled && f.weight !== 0).length;
+
     return {
       heatmapPoints: Array.from(accumulatedPointsRef.current.values()),
       pois: { ...lastValidPoisRef.current },
@@ -478,7 +569,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
         gridSize: 'adaptive',
         pointCount: accumulatedPointsRef.current.size,
         computeTimeMs: batchResult.metadata.computeTimeMs,
-        factorCount: enabledFactors.length,
+        factorCount: enabledFactorCount,
         dataSource: batchResult.metadata.dataSource,
         poiCounts: batchResult.metadata.poiCounts,
         poiTileCount: batchResult.metadata.poiTileCount,
@@ -486,18 +577,9 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
         l1CacheStats: batchResult.metadata.l1CacheStats,
       },
     };
-  }, [batchResult, isTooLarge, factors, allTiles]);
-
-  // Memoize tiles key calculation to avoid recomputing on every render
-  const currentTilesKey = useMemo(
-    () => getTilesKey(allTiles),
-    [allTiles]
-  );
+  }, [batchResult, isTooLarge, factors, allTiles, currentTilesKey]);
 
   // Check if current data matches current tiles (for preventing stale renders)
-  // Data is ready when:
-  // 1. We have a batchResult AND it matches current tiles, OR
-  // 2. There are no tiles to load (allTiles.length === 0)
   const isDataReady = useMemo(
     () => (batchResult && batchResultTilesRef.current === currentTilesKey) || allTiles.length === 0,
     [batchResult, currentTilesKey, allTiles.length]

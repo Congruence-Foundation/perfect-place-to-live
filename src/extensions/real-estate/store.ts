@@ -2,11 +2,16 @@
 
 import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
-import type {
-  PropertyFilters,
-} from './types';
+
+import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
+import type { PropertyFilters } from './types';
 import { DEFAULT_PROPERTY_FILTERS } from './types';
 import type { PropertyDataSource } from './config';
+import {
+  DEFAULT_SCORE_RANGE,
+  DEFAULT_PRICE_VALUE_RANGE,
+  DEFAULT_DATA_SOURCES,
+} from './config';
 import type { ClusterAnalysisMap } from './lib';
 import type {
   UnifiedProperty,
@@ -14,12 +19,6 @@ import type {
   EnrichedUnifiedProperty,
   PriceValueRange,
 } from './lib/shared';
-import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
-import {
-  DEFAULT_SCORE_RANGE,
-  DEFAULT_PRICE_VALUE_RANGE,
-  DEFAULT_DATA_SOURCES,
-} from './config';
 
 /**
  * Real estate store state interface
@@ -223,25 +222,23 @@ export const useRealEstateStore = create<RealEstateStore>()(
       ),
       
       // Clear all properties
-      clearProperties: () => {
-        set(
-          {
-            rawProperties: [],
-            rawClusters: [],
-            properties: [],
-            clusters: [],
-            totalCount: 0,
-            error: null,
-            isLoading: false,
-            isTooLarge: false,
-            clusterPropertiesCache: new Map(),
-            clusterAnalysisData: new Map(),
-            cacheVersion: get().cacheVersion + 1,
-          },
-          false,
-          'clearProperties'
-        );
-      },
+      clearProperties: () => set(
+        {
+          rawProperties: [],
+          rawClusters: [],
+          properties: [],
+          clusters: [],
+          totalCount: 0,
+          error: null,
+          isLoading: false,
+          isTooLarge: false,
+          clusterPropertiesCache: new Map(),
+          clusterAnalysisData: new Map(),
+          cacheVersion: get().cacheVersion + 1,
+        },
+        false,
+        'clearProperties'
+      ),
     })),
     { name: 'real-estate-store' }
   )

@@ -231,10 +231,12 @@ export function enrichPropertiesWithPriceScore(
     // Add to each applicable room range group
     for (const roomRange of pm.roomRanges) {
       const key = generateGroupKey(pm.property.estateType, roomRange, pm.areaRange, pm.qualityTier);
-      if (!groups.has(key)) {
-        groups.set(key, []);
+      const existing = groups.get(key);
+      if (existing) {
+        existing.push(pm);
+      } else {
+        groups.set(key, [pm]);
       }
-      groups.get(key)!.push(pm);
     }
   }
   stopGroupsTimer({ groups: groups.size });
@@ -380,7 +382,7 @@ export function filterPropertiesByPriceValue(
     if (!p.priceAnalysis) return false;
     if (p.priceAnalysis.priceCategory === 'no_data') return false;
     
-    const position = PRICE_CATEGORY_POSITION[p.priceAnalysis.priceCategory];
+    const position = PRICE_CATEGORY_CONFIG[p.priceAnalysis.priceCategory].position;
     // Check if the category's position falls within the selected range
     // A category at position X is selected if range includes (X-20, X]
     return position > range[0] && position <= range[1];
@@ -402,27 +404,17 @@ export interface ClusterPriceAnalysis {
 export type ClusterAnalysisMap = Map<string, ClusterPriceAnalysis>;
 
 /**
- * Price category position for UI filtering (0-100 scale, each category spans 20 points)
+ * Price category configuration with position and order
+ * Position: 0-100 scale for UI filtering (each category spans 20 points)
+ * Order: Ordinal value for comparison (lower = better deal)
  */
-const PRICE_CATEGORY_POSITION: Record<PriceCategory, number> = {
-  'great_deal': 20,
-  'good_deal': 40,
-  'fair': 60,
-  'above_avg': 80,
-  'overpriced': 100,
-  'no_data': 0,
-};
-
-/**
- * Price category order for comparison (lower = better deal)
- */
-const PRICE_CATEGORY_ORDER: Record<PriceCategory, number> = {
-  'great_deal': 1,
-  'good_deal': 2,
-  'fair': 3,
-  'above_avg': 4,
-  'overpriced': 5,
-  'no_data': 99,
+const PRICE_CATEGORY_CONFIG: Record<PriceCategory, { position: number; order: number }> = {
+  'great_deal': { position: 20, order: 1 },
+  'good_deal': { position: 40, order: 2 },
+  'fair': { position: 60, order: 3 },
+  'above_avg': { position: 80, order: 4 },
+  'overpriced': { position: 100, order: 5 },
+  'no_data': { position: 0, order: 99 },
 };
 
 /**
@@ -444,7 +436,7 @@ export function findMinMaxCategories(
       continue;
     }
     const category = prop.priceAnalysis.priceCategory;
-    const order = PRICE_CATEGORY_ORDER[category];
+    const order = PRICE_CATEGORY_CONFIG[category].order;
 
     if (order < minOrder) {
       minOrder = order;

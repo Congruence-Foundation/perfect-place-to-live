@@ -2,6 +2,7 @@
 
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { ChangeEvent } from 'react';
 
 interface RangeInputProps {
   label: string;
@@ -12,6 +13,11 @@ interface RangeInputProps {
   maxPlaceholder?: string;
   onMinChange: (value?: number) => void;
   onMaxChange: (value?: number) => void;
+}
+
+/** Parse input value to number or undefined if empty */
+function parseInputValue(e: ChangeEvent<HTMLInputElement>): number | undefined {
+  return e.target.value ? Number(e.target.value) : undefined;
 }
 
 export default function RangeInput({
@@ -25,6 +31,8 @@ export default function RangeInput({
   onMaxChange,
 }: RangeInputProps) {
   const displayLabel = unit ? `${label} (${unit})` : label;
+  const minAriaLabel = `${minPlaceholder} ${label}${unit ? ` in ${unit}` : ''}`;
+  const maxAriaLabel = `${maxPlaceholder} ${label}${unit ? ` in ${unit}` : ''}`;
 
   return (
     <div className="space-y-2">
@@ -34,16 +42,18 @@ export default function RangeInput({
           type="number"
           placeholder={minPlaceholder}
           value={minValue ?? ''}
-          onChange={(e) => onMinChange(e.target.value ? Number(e.target.value) : undefined)}
+          onChange={(e) => onMinChange(parseInputValue(e))}
           className="h-7 text-xs"
+          aria-label={minAriaLabel}
         />
-        <span className="text-xs text-muted-foreground">-</span>
+        <span className="text-xs text-muted-foreground" aria-hidden="true">-</span>
         <Input
           type="number"
           placeholder={maxPlaceholder}
           value={maxValue ?? ''}
-          onChange={(e) => onMaxChange(e.target.value ? Number(e.target.value) : undefined)}
+          onChange={(e) => onMaxChange(parseInputValue(e))}
           className="h-7 text-xs"
+          aria-label={maxAriaLabel}
         />
       </div>
     </div>

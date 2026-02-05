@@ -31,6 +31,8 @@ async function getRedisAsync(): Promise<Redis | null> {
   }
   
   // Start initialization and store the promise
+  // Note: We intentionally don't clear redisInitPromise on success since
+  // the redis client is cached. We only clear on error to allow retry.
   redisInitPromise = (async () => {
     try {
       // Double-check after acquiring the "lock"
@@ -43,10 +45,9 @@ async function getRedisAsync(): Promise<Redis | null> {
       return redis;
     } catch (error) {
       console.error('Redis initialization error:', error);
-      return null;
-    } finally {
-      // Clear the promise after initialization completes
+      // Clear promise only on error to allow retry
       redisInitPromise = null;
+      return null;
     }
   })();
   

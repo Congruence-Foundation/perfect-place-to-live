@@ -2,6 +2,15 @@
 
 import { Label } from '@/components/ui/label';
 
+// Shared toggle button styles used across toggle components
+const TOGGLE_BUTTON_BASE = 'flex items-center justify-center rounded border transition-colors';
+const TOGGLE_BUTTON_SELECTED = 'bg-primary text-primary-foreground border-primary';
+const TOGGLE_BUTTON_UNSELECTED = 'bg-background hover:bg-muted border-input';
+
+export function getToggleButtonClasses(isSelected: boolean, sizeClasses: string): string {
+  return `${TOGGLE_BUTTON_BASE} ${sizeClasses} ${isSelected ? TOGGLE_BUTTON_SELECTED : TOGGLE_BUTTON_UNSELECTED}`;
+}
+
 interface ToggleOption<T extends string> {
   value: T;
   label: string;
@@ -14,6 +23,11 @@ interface ToggleButtonGroupProps<T extends string> {
   onChange: (selected: T[]) => void;
   size?: 'sm' | 'md';
 }
+
+const SIZE_CLASSES = {
+  sm: 'px-2 h-6 text-[10px]',
+  md: 'w-8 h-7 text-xs',
+} as const;
 
 export default function ToggleButtonGroup<T extends string>({
   label,
@@ -30,9 +44,7 @@ export default function ToggleButtonGroup<T extends string>({
     onChange(updated);
   };
 
-  const sizeClasses = size === 'sm' 
-    ? 'px-2 h-6 text-[10px]' 
-    : 'w-8 h-7 text-xs';
+  const sizeClasses = SIZE_CLASSES[size];
 
   return (
     <div className="space-y-2">
@@ -45,12 +57,9 @@ export default function ToggleButtonGroup<T extends string>({
               key={option.value}
               type="button"
               onClick={() => handleToggle(option.value)}
-              className={`flex items-center justify-center ${sizeClasses} rounded border cursor-pointer transition-colors ${
-                isSelected
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-background hover:bg-muted border-input'
-              }`}
+              className={getToggleButtonClasses(isSelected, sizeClasses)}
               aria-pressed={isSelected}
+              aria-label={option.label}
             >
               {option.label}
             </button>

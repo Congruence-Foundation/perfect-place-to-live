@@ -40,6 +40,8 @@ export function useLatestRef<T>(value: T): React.MutableRefObject<T> {
   
   // Update synchronously during render to ensure the ref is always current
   // This avoids the stale-value-on-first-render issue that occurs with useEffect
+  // This is a well-known pattern (useLatestRef) that intentionally updates refs during render
+  // eslint-disable-next-line react-hooks/refs
   ref.current = value;
   
   return ref;

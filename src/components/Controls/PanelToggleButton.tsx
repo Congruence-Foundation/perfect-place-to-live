@@ -20,6 +20,8 @@ interface PanelToggleButtonProps {
   size?: 'sm' | 'md';
   /** Additional className */
   className?: string;
+  /** Hide from accessibility tree (for placeholder buttons) */
+  'aria-hidden'?: boolean;
 }
 
 /**
@@ -35,6 +37,7 @@ export function PanelToggleButton({
   ErrorIcon,
   size = 'md',
   className,
+  'aria-hidden': ariaHidden,
 }: PanelToggleButtonProps) {
   const sizeClasses = size === 'sm' ? 'w-8 h-8' : 'w-10 h-10';
   const iconSizeClasses = size === 'sm' ? 'h-4 w-4' : 'h-5 w-5';
@@ -55,8 +58,10 @@ export function PanelToggleButton({
         className
       )}
       title={title}
-      aria-expanded={isOpen}
-      aria-label={title}
+      aria-expanded={ariaHidden ? undefined : isOpen}
+      aria-label={ariaHidden ? undefined : title}
+      aria-hidden={ariaHidden}
+      tabIndex={ariaHidden ? -1 : undefined}
     >
       {showErrorIcon ? (
         <ErrorIcon className={iconSizeClasses} />

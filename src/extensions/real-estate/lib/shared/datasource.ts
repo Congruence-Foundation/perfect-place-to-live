@@ -84,7 +84,7 @@ export type DataSourceFeature =
  * Fetches from all enabled sources in parallel and merges results.
  */
 export class MultiSourceDataSource implements IPropertyDataSource {
-  readonly name: PropertyDataSource = 'otodom'; // Primary source for ID purposes
+  readonly name: PropertyDataSource; // Uses first source's name for ID purposes
   readonly displayName = 'All Sources';
 
   private sources: IPropertyDataSource[];
@@ -94,6 +94,7 @@ export class MultiSourceDataSource implements IPropertyDataSource {
       throw new Error('MultiSourceDataSource requires at least one source');
     }
     this.sources = sources;
+    this.name = sources[0].name; // Use first source's name for compatibility
   }
 
   async searchProperties(params: UnifiedSearchParams): Promise<UnifiedSearchResult> {
@@ -190,8 +191,9 @@ export class MultiSourceDataSource implements IPropertyDataSource {
 // ============================================================================
 
 // Import adapters lazily to avoid circular dependencies
-let OtodomAdapter: new () => IPropertyDataSource;
-let GratkaAdapter: new () => IPropertyDataSource;
+type AdapterConstructor = new () => IPropertyDataSource;
+let OtodomAdapter: AdapterConstructor | undefined;
+let GratkaAdapter: AdapterConstructor | undefined;
 
 /**
  * Create a data source adapter for the specified source

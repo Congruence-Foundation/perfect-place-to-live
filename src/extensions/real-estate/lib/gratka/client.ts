@@ -42,6 +42,23 @@ import {
   GRATKA_DEFAULT_PAGE_SIZE,
   GRATKA_CLUSTER_RADIUS_METERS,
 } from '../../config/constants';
+
+// ============================================
+// TYPES
+// ============================================
+
+/**
+ * Filter options for cache key generation
+ */
+interface CacheKeyFilters {
+  transaction?: GratkaTransactionType;
+  propertyType?: GratkaPropertyType[];
+  priceMin?: number;
+  priceMax?: number;
+  areaMin?: number;
+  areaMax?: number;
+  rooms?: number[];
+}
 import { createTimer, logPerf } from '@/lib/profiling';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import { CACHE_CONFIG } from '@/constants/performance';
@@ -63,15 +80,7 @@ const GRATKA_HEADERS: Record<string, string> = {
  */
 function generateCacheKey(
   bounds: { north: number; south: number; east: number; west: number },
-  filters: {
-    transaction?: GratkaTransactionType;
-    propertyType?: GratkaPropertyType[];
-    priceMin?: number;
-    priceMax?: number;
-    areaMin?: number;
-    areaMax?: number;
-    rooms?: number[];
-  }
+  filters: CacheKeyFilters
 ): string {
   // Snap bounds to 4 decimal places for cache efficiency
   const snappedBounds = {

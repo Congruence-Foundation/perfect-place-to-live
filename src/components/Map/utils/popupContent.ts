@@ -21,7 +21,7 @@ export interface HeatmapPopupTranslations {
   noData: string;
 }
 
-// Legacy alias for backwards compatibility
+// Type alias used throughout the codebase
 export type PopupTranslations = HeatmapPopupTranslations;
 
 // Factor name translations type

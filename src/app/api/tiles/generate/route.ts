@@ -7,7 +7,7 @@ import { cacheGet, cacheSet } from '@/lib/cache';
 import { DEFAULT_FACTORS } from '@/config/factors';
 import type { POI, PrecomputedTile, Factor } from '@/types';
 import { errorResponse, handleApiError } from '@/lib/api-utils';
-import { TILE_CONFIG } from '@/constants/performance';
+import { TILE_CONFIG, PERFORMANCE_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,12 +31,16 @@ interface GenerationResult {
 
 /**
  * Calculate adaptive grid size based on zoom level
+ * Uses TILE_CONFIG constants for zoom-based scaling
  */
-function calculateGridSize(zoom: number): number {
-  return Math.max(
-    TILE_CONFIG.MIN_GRID_SIZE,
-    TILE_CONFIG.BASE_GRID_SIZE / Math.pow(2, zoom - TILE_CONFIG.GRID_ZOOM_BASE)
-  );
+function calculateGridSizeForZoom(zoom: number): number {
+  const { MIN_GRID_SIZE, BASE_GRID_SIZE, GRID_ZOOM_BASE } = TILE_CONFIG;
+  const { MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
+  
+  const calculatedSize = BASE_GRID_SIZE / Math.pow(2, zoom - GRID_ZOOM_BASE);
+  
+  // Clamp to reasonable bounds
+  return Math.max(MIN_GRID_SIZE, Math.min(MAX_CELL_SIZE, calculatedSize));
 }
 
 /**
@@ -148,7 +152,7 @@ export async function POST(request: NextRequest) {
     const bounds = customBounds || POLAND_BOUNDS;
     const tiles = getTilesForBounds(bounds, zoom);
     const enabledFactors = DEFAULT_FACTORS.filter((f) => f.enabled && f.weight > 0);
-    const gridSize = calculateGridSize(zoom);
+    const gridSize = calculateGridSizeForZoom(zoom);
 
     console.log(`Generating ${tiles.length} tiles at zoom ${zoom}`);
 

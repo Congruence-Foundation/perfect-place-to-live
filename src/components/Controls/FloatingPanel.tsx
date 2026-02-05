@@ -25,6 +25,8 @@ interface FloatingPanelProps {
   className?: string;
   /** Whether to enable scrolling for mobile */
   mobileScrollable?: boolean;
+  /** Accessible label for the panel (used with aria-label) */
+  ariaLabel?: string;
 }
 
 const POSITION_CLASSES: Record<PanelPosition, string> = {
@@ -56,11 +58,15 @@ export function FloatingPanel({
   width = 'w-64',
   className,
   mobileScrollable = false,
+  ariaLabel,
 }: FloatingPanelProps) {
   if (!isOpen) return null;
 
   return (
     <div
+      role="dialog"
+      aria-modal="false"
+      aria-label={ariaLabel}
       className={cn(
         'absolute bg-background/95 backdrop-blur-sm rounded-2xl shadow-lg border p-4 duration-200',
         POSITION_CLASSES[position],

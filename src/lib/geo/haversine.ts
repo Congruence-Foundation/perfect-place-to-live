@@ -166,6 +166,6 @@ export class GenericSpatialIndex<T extends GeoLocated> {
  */
 export class SpatialIndex extends GenericSpatialIndex<POI> {
   constructor(pois: POI[], cellSizeDegrees: number = SPATIAL_INDEX_CONFIG.DEFAULT_CELL_SIZE_DEGREES) {
-    super(pois, (p1, p2) => haversineDistance(p1, { lat: p2.lat, lng: p2.lng }), cellSizeDegrees);
+    super(pois, (p1, p2) => haversineDistance(p1, p2), cellSizeDegrees);
   }
 }

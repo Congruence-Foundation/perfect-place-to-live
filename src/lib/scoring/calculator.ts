@@ -44,9 +44,9 @@ function calculateKStats(points: HeatmapPoint[]): KStats | null {
 }
 
 /**
- * Log K value statistics to console
+ * Log K value statistics to console for debugging
  * @param points - Heatmap points to analyze
- * @param context - Additional context to include in log message
+ * @param context - Optional context string to include in log message
  */
 export function logKStats(points: HeatmapPoint[], context?: string): void {
   const stats = calculateKStats(points);
@@ -56,6 +56,20 @@ export function logKStats(points: HeatmapPoint[], context?: string): void {
   console.log(
     `K value stats: min=${stats.min.toFixed(3)}, max=${stats.max.toFixed(3)}, avg=${stats.avg.toFixed(3)}, stdDev=${stats.stdDev.toFixed(3)}${contextStr}`
   );
+}
+
+/**
+ * Sensitivity bounds for distance curve calculations
+ * Prevents division by zero and extreme values
+ */
+const SENSITIVITY_MIN = 0.1;
+const SENSITIVITY_MAX = 10;
+
+/**
+ * Clamp sensitivity to safe bounds [0.1, 10]
+ */
+function clampSensitivity(sensitivity: number): number {
+  return Math.max(SENSITIVITY_MIN, Math.min(SENSITIVITY_MAX, sensitivity));
 }
 
 /**
@@ -73,23 +87,23 @@ type DistanceCurveFn = (ratio: number, sensitivity: number) => number;
 const DISTANCE_CURVES: Record<DistanceCurve, DistanceCurveFn> = {
   linear: (ratio) => ratio,
   
-  // Logarithmic - sensitivity controls the base: higher = more sensitive
+  // Logarithmic - sensitivity controls curve steepness via log base
   log: (ratio, sensitivity) => {
-    const safeSensitivity = Math.max(0.1, Math.min(10, sensitivity));
+    const safeSensitivity = clampSensitivity(sensitivity);
     const logBase = 1 + (Math.E - 1) * safeSensitivity;
     return Math.log(1 + ratio * (logBase - 1)) / Math.log(logBase);
   },
   
   // Exponential decay - sensitivity controls decay rate (default k=3 gives 95% at maxDistance)
   exp: (ratio, sensitivity) => {
-    const safeSensitivity = Math.max(0.1, Math.min(10, sensitivity));
+    const safeSensitivity = clampSensitivity(sensitivity);
     const k = 3 * safeSensitivity;
     return 1 - Math.exp(-k * ratio);
   },
   
   // Power curve - sensitivity controls exponent (default n=0.5 is square root)
   power: (ratio, sensitivity) => {
-    const safeSensitivity = Math.max(0.1, Math.min(10, sensitivity));
+    const safeSensitivity = clampSensitivity(sensitivity);
     const n = 0.5 / safeSensitivity;
     return Math.pow(ratio, n);
   },
@@ -291,7 +305,16 @@ export function buildSpatialIndexes(
 
 /**
  * Calculate heatmap data for a given bounds and factors
+ * 
+ * @param bounds - Geographic bounds to calculate heatmap for
+ * @param poiData - Map of factor ID to POI array
+ * @param factors - Array of factors with weights and settings
+ * @param gridSize - Optional grid cell size in meters (auto-calculated if not provided)
+ * @param distanceCurve - Distance curve type for score calculation (default: 'log')
+ * @param sensitivity - Curve sensitivity parameter (default: 1)
+ * @param normalizeToViewport - Whether to normalize K values to viewport range
  * @param prebuiltSpatialIndexes - Optional pre-built spatial indexes to avoid rebuilding
+ * @returns Array of heatmap points with lat, lng, and value (K score)
  */
 export function calculateHeatmap(
   bounds: Bounds,

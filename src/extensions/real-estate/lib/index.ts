@@ -89,8 +89,7 @@ export {
   // Utilities
   createUnifiedId,
   isEnrichedUnifiedProperty,
-  // Data Source Factory
-  createDataSource,
+  // Data Source Factory (createDataSource is internal, only createMultiSource is public)
   createMultiSource,
 } from './shared';
 
@@ -129,8 +128,8 @@ export {
   filterPropertiesByPriceValue,
   analyzeClusterPrices,
   analyzeClusterPricesFromCache,
-  getPricePerMeter,
   findMinMaxCategories,
+  // Note: getPricePerMeter is internal - only used within price-analysis.ts
 } from './price-analysis';
 export type { ClusterPriceAnalysis, ClusterAnalysisMap } from './price-analysis';
 

@@ -100,14 +100,16 @@ export function generatePropertyMarkerHtml(
 }
 
 /**
- * Convert hex color to RGB string
+ * Convert hex color to RGB string for CSS rgba()
+ * Returns null for special values like 'transparent' or 'white'
  */
 function hexToRgb(hex: string): string | null {
   if (hex === 'transparent' || hex === 'white') return null;
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result 
-    ? `${parseInt(result[1], 16)},${parseInt(result[2], 16)},${parseInt(result[3], 16)}`
-    : null;
+  // Remove # prefix if present and parse hex values
+  const cleanHex = hex.replace(/^#/, '');
+  const result = /^([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(cleanHex);
+  if (!result || result.length < 4) return null;
+  return `${parseInt(result[1], 16)},${parseInt(result[2], 16)},${parseInt(result[3], 16)}`;
 }
 
 /**

@@ -52,6 +52,9 @@ const POPUP_COLORS = {
   BUTTON_DISABLED: '#d1d5db', // Gray-300
 } as const;
 
+/** Common style for gallery navigation buttons */
+const GALLERY_NAV_BUTTON_STYLE = `background: ${POPUP_COLORS.BG_OVERLAY}; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;`;
+
 /** Data source badge colors */
 const SOURCE_BADGE_COLORS: Record<string, string> = {
   otodom: '#2563eb',  // Blue-600
@@ -190,7 +193,7 @@ function generateGalleryNavButtonHtml(
   return `
     <button 
       ${idAttr}
-      style="position: absolute; ${position} top: calc(50% + 12px); transform: translateY(-50%); background: ${POPUP_COLORS.BG_OVERLAY}; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; ${opacity}"
+      style="position: absolute; ${position} top: calc(50% + 12px); transform: translateY(-50%); ${GALLERY_NAV_BUTTON_STYLE} ${opacity}"
     >${symbol}</button>
   `;
 }
@@ -237,7 +240,7 @@ export function generatePropertyPopupHtml(
           img.src = imgs[idx];
           counter.textContent = idx + 1;
         })()"
-        style="position: absolute; left: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: ${POPUP_COLORS.BG_OVERLAY}; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
+        style="position: absolute; left: 8px; top: calc(50% + 12px); transform: translateY(-50%); ${GALLERY_NAV_BUTTON_STYLE}"
       >‹</button>
       ${generateImageCounterHtml(`${galleryId}-counter`, 0, imageCount)}
       <button 
@@ -250,7 +253,7 @@ export function generatePropertyPopupHtml(
           img.src = imgs[idx];
           counter.textContent = (idx + 1) + '/${imageCount}';
         })()"
-        style="position: absolute; right: 8px; top: calc(50% + 12px); transform: translateY(-50%); background: ${POPUP_COLORS.BG_OVERLAY}; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;"
+        style="position: absolute; right: 8px; top: calc(50% + 12px); transform: translateY(-50%); ${GALLERY_NAV_BUTTON_STYLE}"
       >›</button>
     ` : '';
     

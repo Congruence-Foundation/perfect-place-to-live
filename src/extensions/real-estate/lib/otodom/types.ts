@@ -6,6 +6,7 @@
  */
 
 import type { PropertyPriceAnalysis } from '../shared/types';
+import { DEFAULT_SELL_PRICE } from '../../config/constants';
 
 // ============================================================================
 // Enums / Union Types
@@ -190,8 +191,8 @@ export interface OtodomPropertyFilters {
 export const OTODOM_DEFAULT_FILTERS: OtodomPropertyFilters = {
   transaction: 'SELL',
   estate: ['FLAT'], // Default to apartment only
-  priceMin: 100000,
-  priceMax: 2000000,
+  priceMin: DEFAULT_SELL_PRICE.min,
+  priceMax: DEFAULT_SELL_PRICE.max,
   areaMin: 20,
   areaMax: 150,
   ownerType: 'ALL',

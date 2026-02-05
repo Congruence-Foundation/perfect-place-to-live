@@ -77,8 +77,11 @@ function renderTileSet(
 }
 
 /**
- * Hook to render debug tile borders on the map
- * Supports both heatmap and property tile visualization
+ * Hook to render debug tile borders on the map.
+ * Supports both heatmap and property tile visualization.
+ * 
+ * @param mapReady - Whether the map is ready for rendering
+ * @param mapInstance - The Leaflet map instance
  */
 export function useTileBorders(
   mapReady: boolean,
@@ -103,10 +106,15 @@ export function useTileBorders(
       return;
     }
 
+    // Track if effect is still active (for async callback safety)
+    let isActive = true;
+
     const renderTileBorders = async () => {
       try {
         const L = (await import('leaflet')).default;
-        if (!mapInstance) return;
+        
+        // Safety check: abort if effect was cleaned up
+        if (!isActive || !mapInstance) return;
 
         // Create or clear tile border layer
         if (!tileBorderLayerRef.current) {
@@ -154,6 +162,7 @@ export function useTileBorders(
     
     // Cleanup: remove layer group from map when component unmounts or map changes
     return () => {
+      isActive = false;
       if (tileBorderLayerRef.current) {
         tileBorderLayerRef.current.remove();
         tileBorderLayerRef.current = null;

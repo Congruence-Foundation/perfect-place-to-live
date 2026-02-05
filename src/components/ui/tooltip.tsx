@@ -1,10 +1,9 @@
-"use client"
+'use client';
 
-import * as React from "react"
-import * as TooltipPrimitive from "@radix-ui/react-tooltip"
+import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 
-import { cn } from "@/lib/utils"
-import { Z_INDEX } from "@/constants/z-index"
+import { cn } from '@/lib/utils';
+import { Z_INDEX } from '@/constants/z-index';
 
 function TooltipProvider({
   delayDuration = 0,

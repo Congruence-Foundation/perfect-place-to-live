@@ -10,7 +10,7 @@
  * 4. MessagePack encoding for ~30% smaller responses
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { calculateHeatmapParallel } from '@/lib/scoring/calculator-parallel';
 import { buildSpatialIndexes } from '@/lib/scoring/calculator';
 import type { Factor, POI, HeatmapPoint, Bounds } from '@/types';
@@ -19,6 +19,7 @@ import {
   getHeatmapTileKey, 
   hashHeatmapConfig, 
   getPoiTilesForHeatmapTiles,
+  getTileKeyString,
   type TileCoord,
 } from '@/lib/geo/tiles';
 import { 
@@ -215,7 +216,7 @@ export async function POST(request: NextRequest) {
 // Validation
 // ============================================================================
 
-function validateRequest(body: BatchHeatmapRequest): NextResponse | null {
+function validateRequest(body: BatchHeatmapRequest): Response | null {
   const { tiles } = body;
 
   if (!tiles || !Array.isArray(tiles) || tiles.length === 0) {
@@ -258,7 +259,7 @@ async function checkHeatmapCacheParallel(
   const uncachedTiles: TileCoord[] = [];
 
   for (const { tile, cached } of cacheChecks) {
-    const tileKey = `${tile.z}:${tile.x}:${tile.y}`;
+    const tileKey = getTileKeyString(tile);
     if (cached) {
       cachedResults[tileKey] = { points: cached.points, cached: true };
     } else {
@@ -272,6 +273,16 @@ async function checkHeatmapCacheParallel(
 // ============================================================================
 // Heatmap Computation
 // ============================================================================
+
+/**
+ * Check if heatmap data has meaningful variation in values
+ * Returns false if all values are the same (likely empty POI data)
+ */
+function hasValueVariation(points: HeatmapPoint[]): boolean {
+  if (points.length < 2) return true;
+  const firstValue = points[0].value;
+  return points.some(p => Math.abs(p.value - firstValue) > 0.001);
+}
 
 /**
  * Compute heatmap for uncached tiles and cache the results
@@ -315,17 +326,11 @@ async function computeUncachedTiles(
       sharedSpatialIndexes  // Pass pre-built indexes
     );
 
-    const tileKey = `${tile.z}:${tile.x}:${tile.y}`;
+    const tileKey = getTileKeyString(tile);
 
-    // Check if heatmap data is valid (has variation in K values)
-    // If all K values are the same, POI data is likely empty - don't cache
-    const shouldCache = heatmapPoints.length > 0 && (() => {
-      if (heatmapPoints.length < 2) return true;
-      const firstK = heatmapPoints[0].value;
-      return heatmapPoints.some(p => Math.abs(p.value - firstK) > 0.001);
-    })();
+    // Only cache if data has meaningful variation (not empty POI data)
+    const shouldCache = heatmapPoints.length > 0 && hasValueVariation(heatmapPoints);
 
-    // Only cache if data is valid (has variation)
     if (shouldCache) {
       const cacheKey = getHeatmapTileKey(tile.z, tile.x, tile.y, configHash);
       setCachedHeatmapTile(cacheKey, {

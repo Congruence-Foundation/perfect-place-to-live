@@ -17,15 +17,16 @@ export function getExtensions(): MapExtension[] {
 
 /**
  * Render extension components of a specific type.
+ * Returns the components wrapped in a fragment, ready to render.
  * 
  * @param componentKey - The component type to render from each extension
  * @param props - Props to pass (only used for SettingsPanel)
  */
-function renderExtensionComponents<K extends ExtensionComponentKey>(
+export function renderExtensionComponents<K extends ExtensionComponentKey>(
   componentKey: K,
   props?: K extends 'SettingsPanel' ? ExtensionSettingsPanelProps : undefined
-): React.ReactNode[] {
-  return getExtensions()
+): React.ReactNode {
+  const components = getExtensions()
     .map((extension) => {
       const Component = extension[componentKey];
       if (!Component) return null;
@@ -39,15 +40,7 @@ function renderExtensionComponents<K extends ExtensionComponentKey>(
       return <SelfContainedComponent key={extension.id} />;
     })
     .filter(Boolean);
+
+  return <>{components}</>;
 }
 
-/**
- * Hook to render extension components of a specific type.
- * Returns the components wrapped in a fragment, ready to render.
- */
-export function useExtensionComponents<K extends ExtensionComponentKey>(
-  componentKey: K,
-  props?: K extends 'SettingsPanel' ? ExtensionSettingsPanelProps : undefined
-): React.ReactNode {
-  return <>{renderExtensionComponents(componentKey, props)}</>;
-}

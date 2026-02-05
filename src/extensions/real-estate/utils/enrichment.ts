@@ -1,17 +1,10 @@
 import type { HeatmapPoint } from '@/types';
 import type { UnifiedProperty, EnrichedUnifiedProperty } from '../lib/shared';
 import { enrichPropertiesSimplified } from '../lib';
-import { UI_CONFIG, CLUSTER_CONFIG } from '@/constants/performance';
+import { UI_CONFIG } from '@/constants/performance';
 
 /**
- * Default cluster radius for UI-level cluster analysis and price comparison.
- * Note: OTODOM_CLUSTER_RADIUS_METERS in otodom.ts (500m) is smaller and used
- * for API requests when fetching properties within a cluster area.
- */
-export const DEFAULT_CLUSTER_RADIUS = CLUSTER_CONFIG.DEFAULT_RADIUS_METERS;
-
-/**
- * Enrich fetched cluster properties with price analysis data
+ * Enrich fetched cluster properties with price analysis data.
  * 
  * Priority:
  * 1. Use existing enriched properties from the main list (properly compared against all properties)
@@ -20,7 +13,11 @@ export const DEFAULT_CLUSTER_RADIUS = CLUSTER_CONFIG.DEFAULT_RADIUS_METERS;
  * Note: For accurate price analysis, cluster properties should be cached and re-enriched
  * together with all properties in the parent component.
  * 
- * Now works with unified property format.
+ * @param fetchedProperties - Properties fetched from the cluster API
+ * @param existingEnrichedProperties - Already-enriched properties for lookup
+ * @param heatmapPoints - Heatmap points for location quality calculation
+ * @param gridCellSize - Grid cell size in meters (default: UI_CONFIG.DEFAULT_GRID_CELL_SIZE)
+ * @returns Array of enriched properties with price analysis where available
  */
 export function enrichClusterProperties(
   fetchedProperties: UnifiedProperty[],
@@ -64,7 +61,7 @@ export function enrichClusterProperties(
     enrichedProps.push(...relevantNewlyEnriched);
   } else if (needsEnrichment.length > 0) {
     // No heatmap data, just convert to EnrichedUnifiedProperty without analysis
-    enrichedProps.push(...needsEnrichment.map(p => ({ ...p } as EnrichedUnifiedProperty)));
+    enrichedProps.push(...needsEnrichment.map((p): EnrichedUnifiedProperty => ({ ...p, priceAnalysis: undefined })));
   }
   
   return enrichedProps;

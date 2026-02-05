@@ -93,53 +93,54 @@ export const DEBUG_COLORS = {
   PROPERTY_TILE_BORDER: '#f97316',
 } as const;
 
+/** Color stop for gradient interpolation */
+interface ColorStop {
+  pos: number;
+  r: number;
+  g: number;
+  b: number;
+}
+
+/** 
+ * Color gradient stops from green (excellent) to red (poor)
+ * Used for K value visualization where K is 0-1
+ */
+const K_VALUE_GRADIENT: ColorStop[] = [
+  { pos: 0, r: 22, g: 163, b: 74 },     // green-600 - excellent (K=0)
+  { pos: 0.25, r: 101, g: 163, b: 13 }, // lime-600
+  { pos: 0.5, r: 202, g: 138, b: 4 },   // yellow-600
+  { pos: 0.75, r: 234, g: 88, b: 12 },  // orange-600
+  { pos: 1, r: 220, g: 38, b: 38 },     // red-600 - poor (K=1)
+];
+
 /**
  * Color interpolation for K values
  * Uses ABSOLUTE K values (not normalized) so colors are consistent
  * K is 0-1 where 0 = excellent, 1 = poor
  */
 export function getColorForK(k: number): string {
-  // Handle non-finite values
   if (!Number.isFinite(k)) {
     return DEFAULT_FALLBACK_COLOR;
   }
   
-  // Color stops: green (good, low K) to red (bad, high K)
-  const colors = [
-    { pos: 0, r: 22, g: 163, b: 74 },    // green-600 - excellent (K=0)
-    { pos: 0.25, r: 101, g: 163, b: 13 }, // lime-600
-    { pos: 0.5, r: 202, g: 138, b: 4 },   // yellow-600
-    { pos: 0.75, r: 234, g: 88, b: 12 },  // orange-600
-    { pos: 1, r: 220, g: 38, b: 38 },     // red-600 - poor (K=1)
-  ];
-  
   // Clamp K to 0-1 range
-  const normalized = Math.max(0, Math.min(1, k));
+  const clamped = Math.max(0, Math.min(1, k));
   
-  // Handle exact boundary cases
-  if (normalized === 0) {
-    return `rgb(${colors[0].r},${colors[0].g},${colors[0].b})`;
-  }
-  if (normalized === 1) {
-    const last = colors[colors.length - 1];
-    return `rgb(${last.r},${last.g},${last.b})`;
-  }
+  // Find the two color stops to interpolate between
+  let lower = K_VALUE_GRADIENT[0];
+  let upper = K_VALUE_GRADIENT[K_VALUE_GRADIENT.length - 1];
   
-  // Find the two colors to interpolate between
-  let lower = colors[0];
-  let upper = colors[colors.length - 1];
-  
-  for (let i = 0; i < colors.length - 1; i++) {
-    if (normalized >= colors[i].pos && normalized <= colors[i + 1].pos) {
-      lower = colors[i];
-      upper = colors[i + 1];
+  for (let i = 0; i < K_VALUE_GRADIENT.length - 1; i++) {
+    if (clamped >= K_VALUE_GRADIENT[i].pos && clamped <= K_VALUE_GRADIENT[i + 1].pos) {
+      lower = K_VALUE_GRADIENT[i];
+      upper = K_VALUE_GRADIENT[i + 1];
       break;
     }
   }
   
-  // Interpolate
+  // Interpolate between the two stops
   const range = upper.pos - lower.pos;
-  const t = range > 0 ? (normalized - lower.pos) / range : 0;
+  const t = range > 0 ? (clamped - lower.pos) / range : 0;
   
   const r = Math.round(lower.r + (upper.r - lower.r) * t);
   const g = Math.round(lower.g + (upper.g - lower.g) * t);
