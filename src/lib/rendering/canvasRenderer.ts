@@ -131,7 +131,6 @@ export function renderHeatmapToCanvas(
   }
   
   // Apply blur to smooth out the grid pattern and tile boundaries
-  // This is done by drawing the canvas onto itself with a blur filter
   if (ctx.filter !== undefined) {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvasWidth;

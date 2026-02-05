@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 
 import { useTranslations } from 'next-intl';
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource, HeatmapSettings } from '@/types';
 import { DEFAULT_FACTORS } from '@/config/factors';
@@ -373,22 +373,6 @@ function HomeContent({
               isMobile={false}
             />
           </>
-        )}
-
-        {/* Loading Overlay - centered in visible map area (above bottom sheet on mobile) */}
-        {isLoading && isMobile && (
-          <div
-            className="absolute inset-0 bg-background/30 backdrop-blur-[2px] flex items-center justify-center"
-            style={{
-              zIndex: Z_INDEX.FLOATING_CONTROLS - 1,
-              bottom: `${bottomSheetHeight}px`,
-            }}
-          >
-            <div className="bg-background/95 backdrop-blur-sm px-5 py-3 rounded-2xl shadow-lg flex items-center gap-3">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              <span className="text-sm font-medium">{tControls('calculating')}</span>
-            </div>
-          </div>
         )}
 
         {/* Toast Notification */}

@@ -6,7 +6,7 @@
 export const MAP_INIT_DELAY_MS = 100;
 
 // Canvas rendering configuration
-export const CANVAS_PIXELS_PER_CELL = 4;
+export const CANVAS_PIXELS_PER_CELL = 8;
 export const CANVAS_MAX_DIMENSION = 4096;
 export const CANVAS_MIN_DIMENSION = 256;
 

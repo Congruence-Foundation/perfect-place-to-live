@@ -89,17 +89,24 @@ function calculateBounds(
 
 /**
  * Calculates canvas dimensions based on geographic area and fixed cell size
+ * Scales by device pixel ratio for crisp rendering on high-DPI displays
  */
 function calculateCanvasDimensions(
   latRange: number,
   lngRange: number,
   centerLat: number
 ): { width: number; height: number } {
+  // Get device pixel ratio, capped at 2 for performance on mobile
+  const dpr = typeof window !== 'undefined' 
+    ? Math.min(window.devicePixelRatio || 1, 2) 
+    : 1;
+  
   const cellsLng = Math.ceil((lngRange * metersPerDegreeLng(centerLat)) / HEATMAP_CELL_SIZE_METERS);
   const cellsLat = Math.ceil((latRange * METERS_PER_DEGREE_LAT) / HEATMAP_CELL_SIZE_METERS);
   
-  const width = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, cellsLng * CANVAS_PIXELS_PER_CELL));
-  const height = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, cellsLat * CANVAS_PIXELS_PER_CELL));
+  // Scale by DPI for crisp rendering on high-DPI displays
+  const width = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, cellsLng * CANVAS_PIXELS_PER_CELL * dpr));
+  const height = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, cellsLat * CANVAS_PIXELS_PER_CELL * dpr));
   
   return { width, height };
 }
