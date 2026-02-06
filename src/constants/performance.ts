@@ -319,7 +319,7 @@ export const UI_CONFIG = {
   GEOLOCATION_MAX_AGE_MS: 60000,
   
   /** Default heatmap opacity */
-  DEFAULT_HEATMAP_OPACITY: 0.20,
+  DEFAULT_HEATMAP_OPACITY: 0.15,
   
   /** Search radius multiplier for heatmap point lookup */
   SEARCH_RADIUS_MULTIPLIER: 1.5,

@@ -17,6 +17,23 @@ interface CanvasRenderOptions {
 }
 
 /**
+ * Check if we should use enhanced gradients (larger, more gradual)
+ * On mobile/high-DPI devices, the dot pattern is more visible so we need bigger gradients
+ */
+function shouldUseEnhancedGradients(): boolean {
+  if (typeof window === 'undefined') return false;
+  
+  // Use enhanced gradients on high-DPI devices (mobile phones typically have 2x+ DPI)
+  const dpr = window.devicePixelRatio || 1;
+  if (dpr >= 2) return true;
+  
+  // Also check for touch devices (mobile)
+  if ('ontouchstart' in window) return true;
+  
+  return false;
+}
+
+/**
  * Extract RGB components from color string
  * Note: getColorForK always returns rgb(r,g,b) format without spaces
  */
@@ -113,9 +130,13 @@ export function renderHeatmapToCanvas(
   cellWidthPx = Math.max(cellWidthPx, CANVAS_CONFIG.MIN_CELL_SIZE_PX);
   cellHeightPx = Math.max(cellHeightPx, CANVAS_CONFIG.MIN_CELL_SIZE_PX);
 
+  // On high-DPI/mobile devices, use larger gradients with more gradual falloff
+  const useEnhanced = shouldUseEnhancedGradients();
+  
   // Calculate radius for radial gradients - use larger of width/height for circular coverage
-  // Multiply by 1.0 to ensure full overlap between adjacent cells
-  const cellRadius = Math.max(cellWidthPx, cellHeightPx) * 1.0;
+  // On mobile/high-DPI, use much larger radius for smoother blending
+  const radiusMultiplier = useEnhanced ? 1.8 : 1.0;
+  const cellRadius = Math.max(cellWidthPx, cellHeightPx) * radiusMultiplier;
 
   // Draw each point as a radial gradient circle for smooth blending
   for (const point of points) {
@@ -130,13 +151,24 @@ export function renderHeatmapToCanvas(
     if (!rgb) continue;
 
     // Create radial gradient: solid center, fading to transparent edge
-    // Extended gradient stops for smoother blending
     const gradient = ctx.createRadialGradient(x, y, 0, x, y, cellRadius);
-    gradient.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity})`);
-    gradient.addColorStop(0.3, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.95})`);
-    gradient.addColorStop(0.6, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.7})`);
-    gradient.addColorStop(0.85, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.3})`);
-    gradient.addColorStop(1, `rgba(${rgb.r},${rgb.g},${rgb.b},0)`);
+    if (useEnhanced) {
+      // Mobile/high-DPI: very gradual falloff with large overlap
+      gradient.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.7})`);
+      gradient.addColorStop(0.15, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.65})`);
+      gradient.addColorStop(0.3, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.5})`);
+      gradient.addColorStop(0.5, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.35})`);
+      gradient.addColorStop(0.7, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.2})`);
+      gradient.addColorStop(0.85, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.08})`);
+      gradient.addColorStop(1, `rgba(${rgb.r},${rgb.g},${rgb.b},0)`);
+    } else {
+      // Desktop: standard gradient with blur filter applied after
+      gradient.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity})`);
+      gradient.addColorStop(0.3, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.95})`);
+      gradient.addColorStop(0.6, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.7})`);
+      gradient.addColorStop(0.85, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.3})`);
+      gradient.addColorStop(1, `rgba(${rgb.r},${rgb.g},${rgb.b},0)`);
+    }
 
     ctx.fillStyle = gradient;
     ctx.beginPath();
@@ -144,9 +176,9 @@ export function renderHeatmapToCanvas(
     ctx.fill();
   }
   
-  // Apply blur to smooth out any remaining patterns and tile boundaries
-  // Scale blur very aggressively on high-DPI screens where the dot pattern is more visible
-  if (ctx.filter !== undefined) {
+  // Apply blur filter only on desktop (non-enhanced mode)
+  // On mobile/high-DPI, we rely on the larger gradients instead
+  if (!useEnhanced && ctx.filter !== undefined) {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvasWidth;
     tempCanvas.height = canvasHeight;
@@ -155,10 +187,9 @@ export function renderHeatmapToCanvas(
       // Copy current content
       tempCtx.drawImage(ctx.canvas, 0, 0);
       // Clear and redraw with blur to smooth tile boundaries
-      // Use cubic DPI scaling for very aggressive blur on high-DPI devices (iPhone 3x)
+      // Linear DPI scaling: more DPI = more blur
       const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
-      const dprMultiplier = Math.min(Math.pow(dpr, 3), 27); // 1x->1, 2x->8, 3x->27
-      const blurAmount = CANVAS_CONFIG.TILE_BOUNDARY_BLUR_PX * dprMultiplier;
+      const blurAmount = CANVAS_CONFIG.TILE_BOUNDARY_BLUR_PX * dpr;
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
       ctx.filter = `blur(${blurAmount}px)`;
       ctx.drawImage(tempCanvas, 0, 0);
