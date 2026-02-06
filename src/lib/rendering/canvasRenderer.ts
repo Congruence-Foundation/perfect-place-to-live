@@ -145,7 +145,7 @@ export function renderHeatmapToCanvas(
   }
   
   // Apply blur to smooth out any remaining patterns and tile boundaries
-  // Scale blur more aggressively on high-DPI screens where the dot pattern is more visible
+  // Scale blur very aggressively on high-DPI screens where the dot pattern is more visible
   if (ctx.filter !== undefined) {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvasWidth;
@@ -157,7 +157,7 @@ export function renderHeatmapToCanvas(
       // Clear and redraw with blur to smooth tile boundaries
       // Use cubic DPI scaling for very aggressive blur on high-DPI devices (iPhone 3x)
       const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
-      const dprMultiplier = Math.min(Math.pow(dpr, 2.5), 16); // 1x->1, 2x->5.7, 3x->15.6
+      const dprMultiplier = Math.min(Math.pow(dpr, 3), 27); // 1x->1, 2x->8, 3x->27
       const blurAmount = CANVAS_CONFIG.TILE_BOUNDARY_BLUR_PX * dprMultiplier;
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
       ctx.filter = `blur(${blurAmount}px)`;
