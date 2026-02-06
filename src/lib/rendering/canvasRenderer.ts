@@ -114,7 +114,8 @@ export function renderHeatmapToCanvas(
   cellHeightPx = Math.max(cellHeightPx, CANVAS_CONFIG.MIN_CELL_SIZE_PX);
 
   // Calculate radius for radial gradients - use larger of width/height for circular coverage
-  const cellRadius = Math.max(cellWidthPx, cellHeightPx) * 0.7;
+  // Multiply by 1.0 to ensure full overlap between adjacent cells
+  const cellRadius = Math.max(cellWidthPx, cellHeightPx) * 1.0;
 
   // Draw each point as a radial gradient circle for smooth blending
   for (const point of points) {
@@ -129,10 +130,12 @@ export function renderHeatmapToCanvas(
     if (!rgb) continue;
 
     // Create radial gradient: solid center, fading to transparent edge
+    // Extended gradient stops for smoother blending
     const gradient = ctx.createRadialGradient(x, y, 0, x, y, cellRadius);
     gradient.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity})`);
-    gradient.addColorStop(0.5, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.9})`);
-    gradient.addColorStop(0.8, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.5})`);
+    gradient.addColorStop(0.3, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.95})`);
+    gradient.addColorStop(0.6, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.7})`);
+    gradient.addColorStop(0.85, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.3})`);
     gradient.addColorStop(1, `rgba(${rgb.r},${rgb.g},${rgb.b},0)`);
 
     ctx.fillStyle = gradient;
