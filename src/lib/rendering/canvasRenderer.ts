@@ -17,16 +17,19 @@ interface CanvasRenderOptions {
 }
 
 /**
- * Convert rgb(r,g,b) color string to rgba with alpha
+ * Extract RGB components from color string
  * Note: getColorForK always returns rgb(r,g,b) format without spaces
  */
-function rgbToRgba(color: string, alpha: number): string {
-  // getColorForK returns "rgb(r,g,b)" - extract values directly
+function extractRgb(color: string): { r: number; g: number; b: number } | null {
   const rgbMatch = color.match(/rgb\((\d+),(\d+),(\d+)\)/);
   if (rgbMatch) {
-    return `rgba(${rgbMatch[1]},${rgbMatch[2]},${rgbMatch[3]},${alpha})`;
+    return {
+      r: parseInt(rgbMatch[1], 10),
+      g: parseInt(rgbMatch[2], 10),
+      b: parseInt(rgbMatch[3], 10),
+    };
   }
-  return color;
+  return null;
 }
 
 /**
@@ -110,7 +113,10 @@ export function renderHeatmapToCanvas(
   cellWidthPx = Math.max(cellWidthPx, CANVAS_CONFIG.MIN_CELL_SIZE_PX);
   cellHeightPx = Math.max(cellHeightPx, CANVAS_CONFIG.MIN_CELL_SIZE_PX);
 
-  // Draw each point
+  // Calculate radius for radial gradients - use larger of width/height for circular coverage
+  const cellRadius = Math.max(cellWidthPx, cellHeightPx) * 0.7;
+
+  // Draw each point as a radial gradient circle for smooth blending
   for (const point of points) {
     // Convert lat/lng to canvas coordinates
     // Y is inverted because canvas Y increases downward
@@ -119,18 +125,24 @@ export function renderHeatmapToCanvas(
 
     // Get color for this K value
     const color = getColorForK(point.value);
-    ctx.fillStyle = rgbToRgba(color, opacity);
+    const rgb = extractRgb(color);
+    if (!rgb) continue;
 
-    // Draw rectangle centered on the point
-    ctx.fillRect(
-      x - cellWidthPx / 2,
-      y - cellHeightPx / 2,
-      cellWidthPx,
-      cellHeightPx
-    );
+    // Create radial gradient: solid center, fading to transparent edge
+    const gradient = ctx.createRadialGradient(x, y, 0, x, y, cellRadius);
+    gradient.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity})`);
+    gradient.addColorStop(0.5, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.9})`);
+    gradient.addColorStop(0.8, `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity * 0.5})`);
+    gradient.addColorStop(1, `rgba(${rgb.r},${rgb.g},${rgb.b},0)`);
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, y, cellRadius, 0, Math.PI * 2);
+    ctx.fill();
   }
   
-  // Apply blur to smooth out the grid pattern and tile boundaries
+  // Apply blur to smooth out any remaining patterns and tile boundaries
+  // Scale blur by device pixel ratio for consistent appearance on high-DPI screens
   if (ctx.filter !== undefined) {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvasWidth;
@@ -140,8 +152,10 @@ export function renderHeatmapToCanvas(
       // Copy current content
       tempCtx.drawImage(ctx.canvas, 0, 0);
       // Clear and redraw with blur to smooth tile boundaries
+      const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+      const blurAmount = CANVAS_CONFIG.TILE_BOUNDARY_BLUR_PX * dpr;
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-      ctx.filter = `blur(${CANVAS_CONFIG.TILE_BOUNDARY_BLUR_PX}px)`;
+      ctx.filter = `blur(${blurAmount}px)`;
       ctx.drawImage(tempCanvas, 0, 0);
       ctx.filter = 'none';
     }

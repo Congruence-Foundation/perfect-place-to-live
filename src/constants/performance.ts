@@ -380,12 +380,12 @@ export const FETCH_CONFIG = {
  * Canvas rendering configuration
  */
 export const CANVAS_CONFIG = {
-  /** Cell overlap multiplier for smooth blending */
-  CELL_OVERLAP_MULTIPLIER: 1.2,
+  /** Cell overlap multiplier for smooth blending (higher = more overlap between cells) */
+  CELL_OVERLAP_MULTIPLIER: 1.5,
   /** Minimum cell size in pixels */
-  MIN_CELL_SIZE_PX: 3,
-  /** Tile boundary blur in pixels */
-  TILE_BOUNDARY_BLUR_PX: 3,
+  MIN_CELL_SIZE_PX: 4,
+  /** Tile boundary blur in pixels (scaled by DPI in renderer) */
+  TILE_BOUNDARY_BLUR_PX: 4,
 } as const;
 
 /**
