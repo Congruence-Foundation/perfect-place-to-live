@@ -155,9 +155,9 @@ export function renderHeatmapToCanvas(
       // Copy current content
       tempCtx.drawImage(ctx.canvas, 0, 0);
       // Clear and redraw with blur to smooth tile boundaries
-      // Use squared DPI for more aggressive blur on high-DPI devices
+      // Use cubic DPI scaling for very aggressive blur on high-DPI devices (iPhone 3x)
       const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
-      const dprMultiplier = Math.min(dpr * dpr, 9); // 1x->1, 2x->4, 3x->9
+      const dprMultiplier = Math.min(Math.pow(dpr, 2.5), 16); // 1x->1, 2x->5.7, 3x->15.6
       const blurAmount = CANVAS_CONFIG.TILE_BOUNDARY_BLUR_PX * dprMultiplier;
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
       ctx.filter = `blur(${blurAmount}px)`;
