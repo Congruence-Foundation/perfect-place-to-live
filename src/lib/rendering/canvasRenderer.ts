@@ -145,7 +145,7 @@ export function renderHeatmapToCanvas(
   }
   
   // Apply blur to smooth out any remaining patterns and tile boundaries
-  // Scale blur by device pixel ratio for consistent appearance on high-DPI screens
+  // Scale blur by device pixel ratio since high-DPI screens need more blur to achieve same visual effect
   if (ctx.filter !== undefined) {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvasWidth;
@@ -155,7 +155,7 @@ export function renderHeatmapToCanvas(
       // Copy current content
       tempCtx.drawImage(ctx.canvas, 0, 0);
       // Clear and redraw with blur to smooth tile boundaries
-      const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+      const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 3) : 1;
       const blurAmount = CANVAS_CONFIG.TILE_BOUNDARY_BLUR_PX * dpr;
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
       ctx.filter = `blur(${blurAmount}px)`;

@@ -319,7 +319,7 @@ export const UI_CONFIG = {
   GEOLOCATION_MAX_AGE_MS: 60000,
   
   /** Default heatmap opacity */
-  DEFAULT_HEATMAP_OPACITY: 0.25,
+  DEFAULT_HEATMAP_OPACITY: 0.20,
   
   /** Search radius multiplier for heatmap point lookup */
   SEARCH_RADIUS_MULTIPLIER: 1.5,
@@ -384,8 +384,8 @@ export const CANVAS_CONFIG = {
   CELL_OVERLAP_MULTIPLIER: 1.5,
   /** Minimum cell size in pixels */
   MIN_CELL_SIZE_PX: 4,
-  /** Tile boundary blur in pixels (scaled by DPI in renderer) */
-  TILE_BOUNDARY_BLUR_PX: 8,
+  /** Tile boundary blur in pixels */
+  TILE_BOUNDARY_BLUR_PX: 5,
 } as const;
 
 /**
