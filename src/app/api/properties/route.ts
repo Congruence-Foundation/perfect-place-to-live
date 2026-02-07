@@ -3,6 +3,7 @@ import { createMultiSource } from '@/extensions/real-estate/lib/shared';
 import type { UnifiedSearchParams, UnifiedEstateType } from '@/extensions/real-estate/lib/shared';
 import type { PropertyDataSource } from '@/extensions/real-estate/config';
 import { PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/extensions/real-estate/types';
+import { fromOtodomRoomCount } from '@/extensions/real-estate/lib/otodom';
 import { isValidBounds, tileToBounds } from '@/lib/geo';
 import { hashFilters } from '@/lib/geo/tiles';
 import { getCachedTile, setCachedTile, generateTileCacheKey, type TileCacheEntry } from '@/lib/tile-cache';
@@ -35,19 +36,11 @@ function toUnifiedSearchParams(
   bounds: Bounds,
   filters: PropertyFilters
 ): UnifiedSearchParams {
-  // Map estate types to unified format
-  const estateTypes = Array.isArray(filters.estate) ? filters.estate : [filters.estate];
-  const propertyTypes: UnifiedEstateType[] = estateTypes.map(e => {
-    // Otodom uses same names as unified
-    return e as UnifiedEstateType;
-  });
+  // filters.estate is already OtodomEstateType[] which matches UnifiedEstateType
+  const propertyTypes = filters.estate as UnifiedEstateType[];
 
-  // Map room counts from string enum to numbers
-  const roomCountMap: Record<string, number> = {
-    'ONE': 1, 'TWO': 2, 'THREE': 3, 'FOUR': 4, 'FIVE': 5,
-    'SIX': 6, 'SEVEN': 7, 'EIGHT': 8, 'NINE': 9, 'TEN': 10, 'MORE': 11,
-  };
-  const rooms = filters.roomsNumber?.map(r => roomCountMap[r] || 1);
+  // Map room counts from string enum to numbers using the shared converter
+  const rooms = filters.roomsNumber?.map(fromOtodomRoomCount);
 
   return {
     bounds,
@@ -133,7 +126,7 @@ export async function POST(request: NextRequest) {
       bounds = tileToBounds(tile.z, tile.x, tile.y);
       // Include data sources in cache key by appending to filter hash
       const baseFilterHash = hashFilters(filters);
-      const filterHash = `${baseFilterHash}-${dataSources.sort().join(',')}`;
+      const filterHash = `${baseFilterHash}-${[...dataSources].sort().join(',')}`;
       cacheKey = generateTileCacheKey(tile.z, tile.x, tile.y, filterHash);
 
       // Check cache for tile requests

@@ -44,6 +44,7 @@ export interface PropertyMarkerOptions {
     priceCategory?: PriceCategory,
     price?: number | null
   ) => L.DivIcon | null;
+  popupTranslations?: import('./popups').PropertyPopupTranslations;
 }
 
 /** Options for updating cluster markers */
@@ -66,6 +67,8 @@ export interface ClusterMarkerOptions {
     noOffersFound: string;
     loadError: string;
   };
+  /** Translations for property popups (type badges, price categories, etc.) */
+  popupTranslations?: import('./popups').PropertyPopupTranslations;
 }
 
 /** Result of cluster price category computation */

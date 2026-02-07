@@ -49,4 +49,5 @@ export { fetchGratkaClusterProperties } from './client';
 // Adapter
 export {
   GratkaAdapter,
+  toUnifiedProperty as toUnifiedGratkaProperty,
 } from './adapter';

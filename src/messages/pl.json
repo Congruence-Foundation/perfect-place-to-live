@@ -436,7 +436,13 @@
       "rooms": "pok.",
       "loadingOffers": "Ładowanie {count} ofert...",
       "noOffersFound": "Nie znaleziono ofert w tym obszarze",
-      "loadError": "Błąd ładowania ofert"
+      "loadError": "Błąd ładowania ofert",
+      "similar": "podobnych",
+      "priceCategoryGreatDeal": "Świetna okazja",
+      "priceCategoryGoodDeal": "Dobra cena",
+      "priceCategoryFair": "Uczciwa cena",
+      "priceCategoryAboveAvg": "Powyżej śr.",
+      "priceCategoryOverpriced": "Zawyżona"
     }
   }
 }

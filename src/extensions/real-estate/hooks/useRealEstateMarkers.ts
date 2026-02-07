@@ -66,7 +66,7 @@ function updatePropertyMarkers(
   options: PropertyMarkerOptions
 ): Set<string> {
   const { L, map, layerGroup, propertyMarkersRef, clusterMarkersRef } = ctx;
-  const { properties, clusterPriceAnalysis, createPropertyIcon } = options;
+  const { properties, clusterPriceAnalysis, createPropertyIcon, popupTranslations } = options;
 
   const stopTimer = createTimer('markers:property-markers');
   const currentPropertyIds = new Set<string>();
@@ -93,7 +93,7 @@ function updatePropertyMarkers(
 
     newCount++;
     const galleryId = `gallery-${property.id}`;
-    const popupContent = generatePropertyPopupHtml(property, galleryId);
+    const popupContent = generatePropertyPopupHtml(property, galleryId, popupTranslations);
 
     const icon = createPropertyIcon(property.estateType, priceCategory, property.price);
     if (!icon) continue;
@@ -239,6 +239,7 @@ async function handleClusterClick(
     clusterPriceAnalysis,
     onClusterPropertiesFetched,
     translations,
+    popupTranslations,
   } = options;
 
   // Generate unique request ID to track this specific request
@@ -256,7 +257,7 @@ async function handleClusterClick(
 
   // Show loading popup
   clusterMarker.unbindPopup();
-  clusterMarker.bindPopup(generateLoadingPopupHtml(cluster.count), {
+  clusterMarker.bindPopup(generateLoadingPopupHtml(cluster.count, popupTranslations), {
     className: 'cluster-popup',
     maxWidth: CLUSTER_POPUP_MAX_WIDTH,
     closeOnClick: false,
@@ -327,7 +328,8 @@ async function handleClusterClick(
         navState.propertyIndex,
         actualTotalCount,
         fetchedCount,
-        navState.imageIndex
+        navState.imageIndex,
+        popupTranslations
       );
       clusterMarker.setPopupContent(html);
 
@@ -523,6 +525,8 @@ export interface UseRealEstateMarkersOptions {
     noOffersFound: string;
     loadError: string;
   };
+  /** Translations for property popups (type badges, price categories, etc.) */
+  popupTranslations?: import('../utils/popups').PropertyPopupTranslations;
 }
 
 // =============================================================================
@@ -553,6 +557,7 @@ export function useRealEstateMarkers({
   clusterAnalysisData,
   onClusterPropertiesFetched,
   translations,
+  popupTranslations,
 }: UseRealEstateMarkersOptions) {
   // Refs for tracking markers
   const propertyMarkersRef = useRef<Map<string, L.Marker>>(new Map());
@@ -631,9 +636,87 @@ export function useRealEstateMarkers({
     prevPropertiesPriceHashRef.current = priceHash;
   }, [properties, layerGroup]);
 
-  // Main effect for updating markers
+  // Use a ref to hold the latest values for the main effect.
+  // This avoids a large dependency array that Turbopack may incorrectly compile
+  // (spreading array/Map deps into the useEffect dependency list, causing
+  // "changed size between renders" errors).
+  const latestRef = useRef({
+    properties,
+    allEnrichedProperties,
+    clusters,
+    filters,
+    clusterPriceDisplay,
+    clusterPriceAnalysis,
+    detailedModeThreshold,
+    heatmapPoints,
+    gridCellSize,
+    clusterPropertiesCache,
+    clusterAnalysisData,
+    onClusterPropertiesFetched,
+    createPropertyIcon,
+    stableTranslations,
+    popupTranslations,
+  });
+  latestRef.current = {
+    properties,
+    allEnrichedProperties,
+    clusters,
+    filters,
+    clusterPriceDisplay,
+    clusterPriceAnalysis,
+    detailedModeThreshold,
+    heatmapPoints,
+    gridCellSize,
+    clusterPropertiesCache,
+    clusterAnalysisData,
+    onClusterPropertiesFetched,
+    createPropertyIcon,
+    stableTranslations,
+    popupTranslations,
+  };
+
+  // Compute a version counter that changes when any dependency changes.
+  // Uses lengths/identities of arrays and Maps to detect changes cheaply.
+  const depsVersion = useMemo(() => ({}), [
+    properties,
+    allEnrichedProperties,
+    clusters,
+    enabled,
+    filters,
+    clusterPriceDisplay,
+    clusterPriceAnalysis,
+    detailedModeThreshold,
+    heatmapPoints,
+    gridCellSize,
+    clusterAnalysisData,
+    clusterPropertiesCache,
+    onClusterPropertiesFetched,
+    createPropertyIcon,
+    stableTranslations,
+    popupTranslations,
+  ]);
+
+  // Main effect for updating markers — uses a fixed-size dependency array
   useEffect(() => {
     if (!L || !map || !layerGroup) return;
+
+    const {
+      properties: curProperties,
+      allEnrichedProperties: curAllEnrichedProperties,
+      clusters: curClusters,
+      filters: curFilters,
+      clusterPriceDisplay: curClusterPriceDisplay,
+      clusterPriceAnalysis: curClusterPriceAnalysis,
+      detailedModeThreshold: curDetailedModeThreshold,
+      heatmapPoints: curHeatmapPoints,
+      gridCellSize: curGridCellSize,
+      clusterPropertiesCache: curClusterPropertiesCache,
+      clusterAnalysisData: curClusterAnalysisData,
+      onClusterPropertiesFetched: curOnClusterPropertiesFetched,
+      createPropertyIcon: curCreatePropertyIcon,
+      stableTranslations: curStableTranslations,
+      popupTranslations: curPopupTranslations,
+    } = latestRef.current;
 
     // Create new AbortController for this effect cycle
     abortControllerRef.current = new AbortController();
@@ -665,26 +748,28 @@ export function useRealEstateMarkers({
 
     // Update property markers
     updatePropertyMarkers(ctx, {
-      properties,
-      clusterPriceAnalysis,
-      createPropertyIcon,
+      properties: curProperties,
+      clusterPriceAnalysis: curClusterPriceAnalysis,
+      createPropertyIcon: curCreatePropertyIcon,
+      popupTranslations: curPopupTranslations,
     });
 
     // Update cluster markers
     const clusterOptions: ClusterMarkerOptions = {
-      clusters,
-      properties,
-      allEnrichedProperties,
-      filters,
-      clusterPriceDisplay,
-      clusterPriceAnalysis,
-      detailedModeThreshold,
-      heatmapPoints,
-      gridCellSize,
-      clusterPropertiesCache,
-      clusterAnalysisData: clusterAnalysisData ?? new Map(),
-      onClusterPropertiesFetched,
-      translations: stableTranslations,
+      clusters: curClusters,
+      properties: curProperties,
+      allEnrichedProperties: curAllEnrichedProperties,
+      filters: curFilters,
+      clusterPriceDisplay: curClusterPriceDisplay,
+      clusterPriceAnalysis: curClusterPriceAnalysis,
+      detailedModeThreshold: curDetailedModeThreshold,
+      heatmapPoints: curHeatmapPoints,
+      gridCellSize: curGridCellSize,
+      clusterPropertiesCache: curClusterPropertiesCache,
+      clusterAnalysisData: curClusterAnalysisData ?? new Map(),
+      onClusterPropertiesFetched: curOnClusterPropertiesFetched,
+      translations: curStableTranslations,
+      popupTranslations: curPopupTranslations,
     };
     updateClusterMarkers(ctx, clusterOptions);
 
@@ -697,24 +782,8 @@ export function useRealEstateMarkers({
     return () => {
       abortControllerRef.current?.abort();
     };
-  }, [
-    L,
-    map,
-    layerGroup,
-    properties,
-    allEnrichedProperties,
-    clusters,
-    enabled,
-    filters,
-    clusterPriceDisplay,
-    clusterPriceAnalysis,
-    detailedModeThreshold,
-    heatmapPoints,
-    gridCellSize,
-    clusterAnalysisData,
-    clusterPropertiesCache,
-    onClusterPropertiesFetched,
-    createPropertyIcon,
-    stableTranslations,
-  ]);
+  // depsVersion is a new object reference whenever any tracked dependency changes.
+  // This keeps the dependency array a fixed size (5 items) regardless of data sizes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [L, map, layerGroup, enabled, depsVersion]);
 }

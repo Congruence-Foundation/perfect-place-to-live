@@ -436,7 +436,13 @@
       "rooms": "rooms",
       "loadingOffers": "Loading {count} offers...",
       "noOffersFound": "No offers found in this area",
-      "loadError": "Failed to load offers"
+      "loadError": "Failed to load offers",
+      "similar": "similar",
+      "priceCategoryGreatDeal": "Great Deal",
+      "priceCategoryGoodDeal": "Good Deal",
+      "priceCategoryFair": "Fair Price",
+      "priceCategoryAboveAvg": "Above Avg",
+      "priceCategoryOverpriced": "Overpriced"
     }
   }
 }

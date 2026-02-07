@@ -7,6 +7,21 @@ import type { ClusterPriceDisplay } from '@/types/heatmap';
 import { PRICE_BADGE_COLORS, PRICE_BADGE_LABELS_EN, PRICE_CATEGORY_COLORS } from '../config/price-colors';
 import { CLUSTER_ICON_SIZE, CLUSTER_ICON_WITH_LABEL_HEIGHT } from '../config/constants';
 import { formatCompactPrice } from '@/lib/format';
+import type { PropertyPopupTranslations } from './popups';
+
+/** Price badge labels derived from popup translations */
+type PriceBadgeLabels = Record<Exclude<PriceCategory, 'no_data'>, string>;
+
+function getPriceBadgeLabels(translations?: PropertyPopupTranslations): PriceBadgeLabels {
+  if (!translations) return PRICE_BADGE_LABELS_EN;
+  return {
+    great_deal: translations.priceCategoryGreatDeal,
+    good_deal: translations.priceCategoryGoodDeal,
+    fair: translations.priceCategoryFair,
+    above_avg: translations.priceCategoryAboveAvg,
+    overpriced: translations.priceCategoryOverpriced,
+  };
+}
 
 /**
  * Generate cluster price label based on display mode
@@ -143,19 +158,24 @@ export function createClusterDivIcon(
  * Generate price analysis badge HTML for property popups
  * Now accepts unified PropertyPriceAnalysis type
  */
-export function generatePriceAnalysisBadgeHtml(priceAnalysis: PropertyPriceAnalysis | undefined): string {
+export function generatePriceAnalysisBadgeHtml(
+  priceAnalysis: PropertyPriceAnalysis | undefined,
+  translations?: PropertyPopupTranslations
+): string {
   if (!priceAnalysis || priceAnalysis.priceCategory === 'no_data') {
     return '';
   }
   
   const colors = PRICE_BADGE_COLORS[priceAnalysis.priceCategory] || PRICE_BADGE_COLORS.fair;
-  const label = PRICE_BADGE_LABELS_EN[priceAnalysis.priceCategory] || 'Fair';
+  const labels = getPriceBadgeLabels(translations);
+  const label = labels[priceAnalysis.priceCategory] || labels.fair;
+  const similarText = translations?.similar ?? 'similar';
   const percentSign = priceAnalysis.percentFromMedian >= 0 ? '+' : '';
   
   return `
     <div style="margin-bottom: 6px; padding: 6px 8px; background: ${colors.bg}; border-radius: 4px;">
       <div style="display: flex; align-items: center; justify-content: space-between;">
-        <span style="font-size: 10px; color: ${colors.text};">${label} · vs ${priceAnalysis.groupSize} similar</span>
+        <span style="font-size: 10px; color: ${colors.text};">${label} · vs ${priceAnalysis.groupSize} ${similarText}</span>
         <span style="font-weight: 600; color: ${colors.text}; font-size: 11px;">${percentSign}${priceAnalysis.percentFromMedian}%</span>
       </div>
     </div>

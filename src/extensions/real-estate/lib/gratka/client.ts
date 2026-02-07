@@ -404,18 +404,15 @@ query getLocationSuggestions(
 // ============================================
 
 /**
- * Format a number as a Gratka price string (decimal format)
+ * Format a number as a Gratka decimal string (2 decimal places).
+ * Used for both prices and areas in Gratka API requests.
  */
-export function formatGratkaPrice(price: number): string {
-  return price.toFixed(2);
+export function formatGratkaDecimal(value: number): string {
+  return value.toFixed(2);
 }
 
-/**
- * Format a number as a Gratka area string (decimal format)
- */
-function formatGratkaArea(area: number): string {
-  return area.toFixed(2);
-}
+// Alias for backward compatibility and semantic clarity
+export const formatGratkaPrice = formatGratkaDecimal;
 
 /**
  * Build default search parameters with map bounds
@@ -434,10 +431,10 @@ export function buildGratkaSearchParams(options: {
     searchParameters: {
       transaction: options.transaction ?? 'SALE',
       type: options.propertyType ?? ['FLAT'],
-      priceFrom: options.priceMin ? formatGratkaPrice(options.priceMin) : null,
-      priceTo: options.priceMax ? formatGratkaPrice(options.priceMax) : null,
-      areaFrom: options.areaMin ? formatGratkaArea(options.areaMin) : null,
-      areaTo: options.areaMax ? formatGratkaArea(options.areaMax) : null,
+      priceFrom: options.priceMin ? formatGratkaDecimal(options.priceMin) : null,
+      priceTo: options.priceMax ? formatGratkaDecimal(options.priceMax) : null,
+      areaFrom: options.areaMin ? formatGratkaDecimal(options.areaMin) : null,
+      areaTo: options.areaMax ? formatGratkaDecimal(options.areaMax) : null,
       numberOfRooms: options.rooms ?? [],
       location: {
         identifiers: null,

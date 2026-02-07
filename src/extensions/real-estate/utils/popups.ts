@@ -77,6 +77,12 @@ export interface PropertyPopupTranslations {
   rooms: string;
   loadingOffers: string;
   noOffersFound: string;
+  similar: string;
+  priceCategoryGreatDeal: string;
+  priceCategoryGoodDeal: string;
+  priceCategoryFair: string;
+  priceCategoryAboveAvg: string;
+  priceCategoryOverpriced: string;
 }
 
 export const DEFAULT_POPUP_TRANSLATIONS: PropertyPopupTranslations = {
@@ -86,6 +92,12 @@ export const DEFAULT_POPUP_TRANSLATIONS: PropertyPopupTranslations = {
   rooms: 'rooms',
   loadingOffers: 'Loading {count} offers...',
   noOffersFound: 'No offers found in this area',
+  similar: 'similar',
+  priceCategoryGreatDeal: 'Great Deal',
+  priceCategoryGoodDeal: 'Good Deal',
+  priceCategoryFair: 'Fair Price',
+  priceCategoryAboveAvg: 'Above Avg',
+  priceCategoryOverpriced: 'Overpriced',
 };
 
 // ============================================================================
@@ -274,7 +286,7 @@ export function generatePropertyPopupHtml(
 
   // Generate price analysis badge HTML using shared utility
   const priceAnalysisBadgeHtml = property.priceAnalysis 
-    ? generatePriceAnalysisBadgeHtml(property.priceAnalysis)
+    ? generatePriceAnalysisBadgeHtml(property.priceAnalysis, translations)
     : '';
 
   // Price display - null means price is hidden/negotiable
@@ -330,7 +342,7 @@ export function generateClusterPropertyPopupHtml(
   // Generate price analysis badge HTML for cluster popup (only if enriched)
   let clusterPriceAnalysisBadgeHtml = '';
   if (isEnrichedUnifiedProperty(property) && property.priceAnalysis) {
-    clusterPriceAnalysisBadgeHtml = generatePriceAnalysisBadgeHtml(property.priceAnalysis);
+    clusterPriceAnalysisBadgeHtml = generatePriceAnalysisBadgeHtml(property.priceAnalysis, translations);
   }
 
   // Price display - null means price is hidden/negotiable

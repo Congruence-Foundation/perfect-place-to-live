@@ -437,6 +437,21 @@ export function RealEstateController() {
     loadError: t('loadError'),
   }), [t]);
 
+  const popupTranslations = useMemo(() => ({
+    house: t('house'),
+    flat: t('flat'),
+    priceNegotiable: t('priceNegotiable'),
+    rooms: t('rooms'),
+    loadingOffers: t('loadingOffers', { count: '{count}' }),
+    noOffersFound: t('noOffersFound'),
+    similar: t('similar'),
+    priceCategoryGreatDeal: t('priceCategoryGreatDeal'),
+    priceCategoryGoodDeal: t('priceCategoryGoodDeal'),
+    priceCategoryFair: t('priceCategoryFair'),
+    priceCategoryAboveAvg: t('priceCategoryAboveAvg'),
+    priceCategoryOverpriced: t('priceCategoryOverpriced'),
+  }), [t]);
+
   useRealEstateMarkers({
     L: isMapReady ? leaflet : null,
     map: isMapReady ? map : null,
@@ -455,6 +470,7 @@ export function RealEstateController() {
     clusterAnalysisData,
     onClusterPropertiesFetched: cacheClusterProperties,
     translations: markerTranslations,
+    popupTranslations,
   });
 
   // No UI - this is a controller component

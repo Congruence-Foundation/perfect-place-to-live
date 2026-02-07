@@ -231,16 +231,9 @@ function toGratkaParams(params: UnifiedSearchParams): GratkaListingParametersInp
     baseParams.searchParameters.priceM2To = formatGratkaPrice(params.pricePerMeterMax);
   }
 
-  // Extended params type for optional filters not in base UnifiedSearchParams
-  type ExtendedParams = UnifiedSearchParams & {
-    buildingMaterials?: string[];
-  };
-  const extendedParams = params as ExtendedParams;
-
   // Building materials filter (convert to Gratka dictionaries format)
-  const materialsToUse = params.buildingMaterial ?? extendedParams.buildingMaterials;
-  if (materialsToUse && materialsToUse.length > 0) {
-    const dictionaries = toGratkaBuildingMaterials(materialsToUse);
+  if (params.buildingMaterial && params.buildingMaterial.length > 0) {
+    const dictionaries = toGratkaBuildingMaterials(params.buildingMaterial);
     if (dictionaries.length > 0) {
       baseParams.searchParameters.dictionaries = dictionaries;
     }
@@ -283,8 +276,23 @@ function toGratkaParams(params: UnifiedSearchParams): GratkaListingParametersInp
 
 /**
  * Convert Gratka property to unified format
+ *
+ * @param property - The Gratka property node to convert
+ * @param options - Optional overrides for coordinates and inferred types
  */
-function toUnifiedProperty(property: GratkaPropertyNode): UnifiedProperty {
+export function toUnifiedProperty(
+  property: GratkaPropertyNode,
+  options?: {
+    /** Fallback latitude if property has no coordinates */
+    fallbackLat?: number;
+    /** Fallback longitude if property has no coordinates */
+    fallbackLng?: number;
+    /** Override estate type (useful when API doesn't return it) */
+    estateType?: UnifiedEstateType;
+    /** Override transaction type (useful when API doesn't return it) */
+    transaction?: UnifiedTransactionType;
+  }
+): UnifiedProperty {
   // Parse price from Gratka format - API uses 'amount' field
   const totalPrice = property.price 
     ? parseGratkaNumber(property.price.amount ?? property.price.totalPrice, null)
@@ -302,8 +310,15 @@ function toUnifiedProperty(property: GratkaPropertyNode): UnifiedProperty {
   const floor = parseFloorFromFormatted(property.floorFormatted);
 
   // Get coordinates - location may not have coordinates in listing response
-  const lat = property.location?.coordinates?.latitude ?? property.location?.map?.center.latitude ?? 0;
-  const lng = property.location?.coordinates?.longitude ?? property.location?.map?.center.longitude ?? 0;
+  // Use fallback coordinates if provided and property has no coordinates
+  const lat = property.location?.coordinates?.latitude 
+    ?? property.location?.map?.center.latitude 
+    ?? options?.fallbackLat 
+    ?? 0;
+  const lng = property.location?.coordinates?.longitude 
+    ?? property.location?.map?.center.longitude 
+    ?? options?.fallbackLng 
+    ?? 0;
 
   // Map images - Gratka uses thumbs.cdngr.pl with base64 photo.id
   const images = (property.photos ?? []).map((photo) => ({
@@ -329,13 +344,11 @@ function toUnifiedProperty(property: GratkaPropertyNode): UnifiedProperty {
     images,
     isPromoted: property.isHighlighted ?? property.isPromoted ?? false,
     createdAt: property.addedAt,
-    // Property type and transaction are not in listing response, use defaults
-    estateType: property.propertyType
-      ? mapGratkaPropertyType(property.propertyType)
-      : 'FLAT',
-    transaction: property.transaction
-      ? mapGratkaTransaction(property.transaction)
-      : 'SELL',
+    // Use override types if provided, otherwise try to get from property, fallback to defaults
+    estateType: options?.estateType 
+      ?? (property.propertyType ? mapGratkaPropertyType(property.propertyType) : 'FLAT'),
+    transaction: options?.transaction 
+      ?? (property.transaction ? mapGratkaTransaction(property.transaction) : 'SELL'),
     rawData: property,
   };
 }

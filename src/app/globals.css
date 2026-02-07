@@ -211,6 +211,14 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Prevent SVG elements inside markers from becoming drag targets.
+   Leaflet 1.9.4 crashes in DomUtil.getClass when e.target is an SVG
+   sub-element (path, line, etc.) that has no className property. */
+.leaflet-marker-icon svg,
+.leaflet-marker-icon svg * {
+  pointer-events: none;
+}
+
 /* Safe area padding for mobile devices with notches */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   .safe-area-bottom {
