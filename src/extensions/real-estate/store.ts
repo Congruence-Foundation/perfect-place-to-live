@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { devtools, subscribeWithSelector } from 'zustand/middleware';
+import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';
 
 import { PROPERTY_TILE_CONFIG } from '@/constants/performance';
 import type { PropertyFilters } from './types';
@@ -57,6 +57,9 @@ export interface RealEstateState {
   // Cache
   clusterPropertiesCache: Map<string, UnifiedProperty[]>;
   cacheVersion: number;
+  
+  // Hydration tracking
+  _hasHydrated: boolean;
 }
 
 /**
@@ -87,6 +90,9 @@ export interface RealEstateActions {
   
   // Clear all
   clearProperties: () => void;
+  
+  // Hydration
+  setHasHydrated: (hasHydrated: boolean) => void;
 }
 
 /**
@@ -116,13 +122,14 @@ const initialState: RealEstateState = {
   error: null,
   clusterPropertiesCache: new Map(),
   cacheVersion: 0,
+  _hasHydrated: false,
 };
 
 /**
  * Real estate extension store using Zustand
  * 
  * This store holds all state for the real estate extension:
- * - User preferences (enabled, filters, score range)
+ * - User preferences (enabled, filters, score range) - persisted to localStorage
  * - Raw API data (properties, clusters)
  * - Computed/filtered data (enriched properties)
  * - Loading/error state
@@ -130,116 +137,149 @@ const initialState: RealEstateState = {
  */
 export const useRealEstateStore = create<RealEstateStore>()(
   devtools(
-    subscribeWithSelector((set, get) => ({
-      // Initial state
-      ...initialState,
-      
-      // Core actions
-      setEnabled: (enabled) => set({ enabled }, false, 'setEnabled'),
-      
-      setFilters: (filters) => set(
-        (state) => ({ filters: { ...state.filters, ...filters } }),
-        false,
-        'setFilters'
-      ),
-      
-      setScoreRange: (scoreRange) => set({ scoreRange }, false, 'setScoreRange'),
-      
-      setPriceValueRange: (priceValueRange) => set({ priceValueRange }, false, 'setPriceValueRange'),
-      
-      setDataSources: (dataSources) => set({
-        dataSources,
-        // Set loading state immediately to show loading indicator
-        isLoading: true,
-        // Clear all data to prevent stale data from previous sources
-        rawProperties: [],
-        rawClusters: [],
-        properties: [],
-        clusters: [],
-        clusterPropertiesCache: new Map(),
-        clusterAnalysisData: new Map(),
-        cacheVersion: get().cacheVersion + 1,
-      }, false, 'setDataSources'),
-      
-      setPriceAnalysisRadius: (priceAnalysisRadius) => set(
-        { priceAnalysisRadius: Math.min(Math.max(priceAnalysisRadius, 0), PROPERTY_TILE_CONFIG.MAX_PRICE_RADIUS) },
-        false,
-        'setPriceAnalysisRadius'
-      ),
-      
-      // Data actions
-      setRawData: (rawProperties, rawClusters, totalCount) => set(
+    subscribeWithSelector(
+      persist(
+        (set, get) => ({
+          // Initial state
+          ...initialState,
+          
+          // Core actions
+          setEnabled: (enabled) => set({ enabled }, false, 'setEnabled'),
+          
+          setFilters: (filters) => set(
+            (state) => ({ filters: { ...state.filters, ...filters } }),
+            false,
+            'setFilters'
+          ),
+          
+          setScoreRange: (scoreRange) => set({ scoreRange }, false, 'setScoreRange'),
+          
+          setPriceValueRange: (priceValueRange) => set({ priceValueRange }, false, 'setPriceValueRange'),
+          
+          setDataSources: (dataSources) => set({
+            dataSources,
+            // Set loading state immediately to show loading indicator
+            isLoading: true,
+            // Clear all data to prevent stale data from previous sources
+            rawProperties: [],
+            rawClusters: [],
+            properties: [],
+            clusters: [],
+            clusterPropertiesCache: new Map(),
+            clusterAnalysisData: new Map(),
+            cacheVersion: get().cacheVersion + 1,
+          }, false, 'setDataSources'),
+          
+          setPriceAnalysisRadius: (priceAnalysisRadius) => set(
+            { priceAnalysisRadius: Math.min(Math.max(priceAnalysisRadius, 0), PROPERTY_TILE_CONFIG.MAX_PRICE_RADIUS) },
+            false,
+            'setPriceAnalysisRadius'
+          ),
+          
+          // Data actions
+          setRawData: (rawProperties, rawClusters, totalCount) => set(
+            {
+              rawProperties,
+              rawClusters,
+              totalCount,
+              clusterPropertiesCache: new Map(),
+              cacheVersion: get().cacheVersion + 1,
+            },
+            false,
+            'setRawData'
+          ),
+          
+          setComputedData: (properties, clusters, clusterAnalysisData) => set(
+            { properties, clusters, clusterAnalysisData },
+            false,
+            'setComputedData'
+          ),
+          
+          // API state actions
+          setIsLoading: (isLoading) => set({ isLoading }, false, 'setIsLoading'),
+          setIsTooLarge: (isTooLarge) => set({ isTooLarge }, false, 'setIsTooLarge'),
+          setIsBelowMinZoom: (isBelowMinZoom) => set({ isBelowMinZoom }, false, 'setIsBelowMinZoom'),
+          setError: (error) => set({ error }, false, 'setError'),
+          
+          // Cache actions
+          cacheClusterProperties: (clusterId, properties) => set(
+            (state) => {
+              const newCache = new Map(state.clusterPropertiesCache);
+              newCache.set(clusterId, properties);
+              return {
+                clusterPropertiesCache: newCache,
+                cacheVersion: state.cacheVersion + 1,
+              };
+            },
+            false,
+            'cacheClusterProperties'
+          ),
+          
+          cacheClusterPropertiesBatch: (entries) => set(
+            (state) => {
+              const newCache = new Map(state.clusterPropertiesCache);
+              for (const { clusterId, properties } of entries) {
+                newCache.set(clusterId, properties);
+              }
+              return {
+                clusterPropertiesCache: newCache,
+                cacheVersion: state.cacheVersion + 1, // Single increment for entire batch
+              };
+            },
+            false,
+            'cacheClusterPropertiesBatch'
+          ),
+          
+          // Clear all properties
+          clearProperties: () => set(
+            {
+              rawProperties: [],
+              rawClusters: [],
+              properties: [],
+              clusters: [],
+              totalCount: 0,
+              error: null,
+              isLoading: false,
+              isTooLarge: false,
+              clusterPropertiesCache: new Map(),
+              clusterAnalysisData: new Map(),
+              cacheVersion: get().cacheVersion + 1,
+            },
+            false,
+            'clearProperties'
+          ),
+          
+          // Hydration action
+          setHasHydrated: (hasHydrated) => set(
+            { _hasHydrated: hasHydrated },
+            false,
+            'setHasHydrated'
+          ),
+        }),
         {
-          rawProperties,
-          rawClusters,
-          totalCount,
-          clusterPropertiesCache: new Map(),
-          cacheVersion: get().cacheVersion + 1,
-        },
-        false,
-        'setRawData'
-      ),
-      
-      setComputedData: (properties, clusters, clusterAnalysisData) => set(
-        { properties, clusters, clusterAnalysisData },
-        false,
-        'setComputedData'
-      ),
-      
-      // API state actions
-      setIsLoading: (isLoading) => set({ isLoading }, false, 'setIsLoading'),
-      setIsTooLarge: (isTooLarge) => set({ isTooLarge }, false, 'setIsTooLarge'),
-      setIsBelowMinZoom: (isBelowMinZoom) => set({ isBelowMinZoom }, false, 'setIsBelowMinZoom'),
-      setError: (error) => set({ error }, false, 'setError'),
-      
-      // Cache actions
-      cacheClusterProperties: (clusterId, properties) => set(
-        (state) => {
-          const newCache = new Map(state.clusterPropertiesCache);
-          newCache.set(clusterId, properties);
-          return {
-            clusterPropertiesCache: newCache,
-            cacheVersion: state.cacheVersion + 1,
-          };
-        },
-        false,
-        'cacheClusterProperties'
-      ),
-      
-      cacheClusterPropertiesBatch: (entries) => set(
-        (state) => {
-          const newCache = new Map(state.clusterPropertiesCache);
-          for (const { clusterId, properties } of entries) {
-            newCache.set(clusterId, properties);
-          }
-          return {
-            clusterPropertiesCache: newCache,
-            cacheVersion: state.cacheVersion + 1, // Single increment for entire batch
-          };
-        },
-        false,
-        'cacheClusterPropertiesBatch'
-      ),
-      
-      // Clear all properties
-      clearProperties: () => set(
-        {
-          rawProperties: [],
-          rawClusters: [],
-          properties: [],
-          clusters: [],
-          totalCount: 0,
-          error: null,
-          isLoading: false,
-          isTooLarge: false,
-          clusterPropertiesCache: new Map(),
-          clusterAnalysisData: new Map(),
-          cacheVersion: get().cacheVersion + 1,
-        },
-        false,
-        'clearProperties'
-      ),
-    })),
+          name: 'real-estate-preferences',
+          partialize: (state) => ({
+            enabled: state.enabled,
+            filters: state.filters,
+            scoreRange: state.scoreRange,
+            priceValueRange: state.priceValueRange,
+            dataSources: state.dataSources,
+            priceAnalysisRadius: state.priceAnalysisRadius,
+          }),
+          skipHydration: true, // We'll hydrate manually for instant loading
+          onRehydrateStorage: () => (state) => {
+            // Called when hydration completes
+            state?.setHasHydrated(true);
+          },
+        }
+      )
+    ),
     { name: 'real-estate-store' }
   )
 );
+
+/**
+ * Hook to check if the real estate store has hydrated from localStorage
+ */
+export const useRealEstateHydrated = () => 
+  useRealEstateStore((state) => state._hasHydrated);

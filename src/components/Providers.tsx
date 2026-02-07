@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { StoreHydration } from '@/components/StoreHydration';
 import { PROPERTY_TILE_CONFIG, FETCH_CONFIG, UI_CONFIG } from '@/constants/performance';
 
 function makeQueryClient() {
@@ -38,7 +39,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={UI_CONFIG.TOOLTIP_DELAY_MS}>
-        {children}
+        <StoreHydration>
+          {children}
+        </StoreHydration>
       </TooltipProvider>
     </QueryClientProvider>
   );

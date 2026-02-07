@@ -22,7 +22,7 @@ import {
 } from './lib';
 import { useRealEstateMarkers } from './hooks/useRealEstateMarkers';
 import { useTileQueries } from './hooks/useTileQueries';
-import { useRealEstateStore } from './store';
+import { useRealEstateStore, useRealEstateHydrated } from './store';
 
 /** Maximum properties to fetch per cluster in detailed mode */
 const DETAILED_MODE_CLUSTER_FETCH_LIMIT = 50;
@@ -115,6 +115,9 @@ export function RealEstateController() {
       clearProperties: s.clearProperties,
     }))
   );
+  
+  // Wait for store hydration before enabling queries
+  const hasHydrated = useRealEstateHydrated();
 
   // ============================================
   // TILE-BASED FETCHING: Use useTileQueries hook
@@ -132,7 +135,7 @@ export function RealEstateController() {
     zoom,
     filters,
     priceAnalysisRadius,
-    enabled,
+    enabled: enabled && hasHydrated, // Only enable after hydration
     dataSources,
   });
 

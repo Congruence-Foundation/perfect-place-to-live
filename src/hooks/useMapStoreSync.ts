@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useMapStore } from '@/stores/mapStore';
+import { usePreferencesHydrated } from '@/stores/preferencesStore';
 import type { Bounds, HeatmapPoint, Factor, HeatmapSettings } from '@/types';
 
 interface UseMapStoreSyncOptions {
@@ -29,6 +30,7 @@ export function useMapStoreSync({
   debouncedFactors,
 }: UseMapStoreSyncOptions): void {
   const setMapContext = useMapStore((s) => s.setMapContext);
+  const preferencesHydrated = usePreferencesHydrated();
 
   // Track previous values to avoid unnecessary updates
   const prevContextRef = useRef<string>('');
@@ -82,10 +84,13 @@ export function useMapStoreSync({
   ]);
 
   // Update map store when factors change (reference equality check)
+  // Wait for preferences store to hydrate before syncing factors
   useEffect(() => {
+    if (!preferencesHydrated) return;
+    
     if (debouncedFactors !== prevFactorsRef.current) {
       prevFactorsRef.current = debouncedFactors;
       setMapContext({ factors: debouncedFactors });
     }
-  }, [debouncedFactors, setMapContext]);
+  }, [debouncedFactors, setMapContext, preferencesHydrated]);
 }
