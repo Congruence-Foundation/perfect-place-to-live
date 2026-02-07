@@ -340,6 +340,7 @@
     "ownerPrivate": "Private",
     "ownerDeveloper": "Developer",
     "ownerAgency": "Agency",
+    "ownerCommune": "Municipal",
     "pricePerMeter": "Price per m²",
     "buildYear": "Build Year",
     "listingAge": "Listing Age",

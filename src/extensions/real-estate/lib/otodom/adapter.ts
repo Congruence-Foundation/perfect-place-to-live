@@ -101,9 +101,6 @@ function toOtodomFilters(params: UnifiedSearchParams): OtodomPropertyFilters {
 
   const roomsNumber = params.rooms?.map(toOtodomRoomCount) as OtodomPropertyFilters['roomsNumber'];
 
-  // Handle optional daysSinceCreated from extended params
-  const extendedParams = params as UnifiedSearchParams & { daysSinceCreated?: number };
-
   return {
     transaction: params.transaction as 'SELL' | 'RENT',
     estate: estateTypes,
@@ -118,7 +115,19 @@ function toOtodomFilters(params: UnifiedSearchParams): OtodomPropertyFilters {
     pricePerMeterMax: params.pricePerMeterMax,
     buildYearMin: params.buildYearMin,
     buildYearMax: params.buildYearMax,
-    daysSinceCreated: toOtodomDaysSinceCreated(extendedParams.daysSinceCreated),
+    // Advanced filters
+    buildingMaterial: params.buildingMaterial as OtodomPropertyFilters['buildingMaterial'],
+    extras: params.extras as OtodomPropertyFilters['extras'],
+    description: params.description,
+    daysSinceCreated: toOtodomDaysSinceCreated(typeof params.daysSinceCreated === 'string' ? Number(params.daysSinceCreated) : params.daysSinceCreated),
+    floors: params.floors as OtodomPropertyFilters['floors'],
+    floorsNumberMin: params.floorsNumberMin,
+    floorsNumberMax: params.floorsNumberMax,
+    flatBuildingType: params.flatBuildingType as OtodomPropertyFilters['flatBuildingType'],
+    terrainAreaMin: params.terrainAreaMin,
+    terrainAreaMax: params.terrainAreaMax,
+    houseBuildingType: params.houseBuildingType as OtodomPropertyFilters['houseBuildingType'],
+    isBungalow: params.isBungalow,
   };
 }
 

@@ -114,6 +114,18 @@ function generatePropertyCacheKey(bounds: Bounds, filters: OtodomPropertyFilters
     isSingleFlat ? (filters.flatBuildingType ?? []).sort().join(',') : '',
     isSingleHouse ? `${filters.terrainAreaMin ?? 0}-${filters.terrainAreaMax ?? FILTER_DEFAULT_TERRAIN_AREA_MAX}` : '',
     isSingleHouse ? (filters.houseBuildingType ?? []).sort().join(',') : '',
+    // Advanced filters
+    (filters.extras ?? []).sort().join(','),
+    (filters.buildingMaterial ?? []).sort().join(','),
+    filters.pricePerMeterMin ?? '',
+    filters.pricePerMeterMax ?? '',
+    filters.buildYearMin ?? '',
+    filters.buildYearMax ?? '',
+    filters.daysSinceCreated ?? '',
+    filters.description ?? '',
+    isSingleFlat ? (filters.floorsNumberMin ?? '') : '',
+    isSingleFlat ? (filters.floorsNumberMax ?? '') : '',
+    isSingleHouse ? (filters.isBungalow ?? '') : '',
   ].join(':');
 
   return `otodom:${snappedBounds.south},${snappedBounds.west},${snappedBounds.north},${snappedBounds.east}:${filterKey}`;

@@ -226,6 +226,32 @@ export interface UnifiedSearchParams {
   market?: UnifiedMarketType;
   owner?: UnifiedOwnerType;
 
+  // Advanced filters (passed through to source adapters)
+  /** Building material types */
+  buildingMaterial?: string[];
+  /** Property extras/features (e.g., BALCONY, GARAGE, GARDEN) */
+  extras?: string[];
+  /** Description text search */
+  description?: string;
+  /** Days since listing was created */
+  daysSinceCreated?: string | number;
+  /** Floor levels (FLAT-specific) */
+  floors?: string[];
+  /** Min number of floors in building (FLAT-specific) */
+  floorsNumberMin?: number;
+  /** Max number of floors in building (FLAT-specific) */
+  floorsNumberMax?: number;
+  /** Building type for flats */
+  flatBuildingType?: string[];
+  /** Terrain/plot area min (HOUSE-specific) */
+  terrainAreaMin?: number;
+  /** Terrain/plot area max (HOUSE-specific) */
+  terrainAreaMax?: number;
+  /** Building type for houses */
+  houseBuildingType?: string[];
+  /** Whether the house is a bungalow */
+  isBungalow?: boolean;
+
   // Sorting
   sort?: UnifiedSortKey;
 

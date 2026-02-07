@@ -151,9 +151,10 @@ export const MARKET_OPTIONS: TranslatableFilterOption<MarketType>[] = [
 // Owner Type Options
 // ============================================================================
 
-export const OWNER_TYPE_OPTIONS: TranslatableFilterOption<OwnerType>[] = [
+export const OWNER_TYPE_OPTIONS: TranslatableFilterOption<string>[] = [
   { value: 'ALL', labelKey: 'ownerAll' },
   { value: 'PRIVATE', labelKey: 'ownerPrivate' },
   { value: 'DEVELOPER', labelKey: 'ownerDeveloper' },
   { value: 'AGENCY', labelKey: 'ownerAgency' },
+  { value: 'COMMUNE', labelKey: 'ownerCommune' },
 ];

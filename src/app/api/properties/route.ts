@@ -60,6 +60,23 @@ function toUnifiedSearchParams(
     rooms,
     market: filters.market,
     owner: filters.ownerType,
+    // Advanced filters
+    buildYearMin: filters.buildYearMin,
+    buildYearMax: filters.buildYearMax,
+    pricePerMeterMin: filters.pricePerMeterMin,
+    pricePerMeterMax: filters.pricePerMeterMax,
+    buildingMaterial: filters.buildingMaterial,
+    extras: filters.extras,
+    description: filters.description,
+    daysSinceCreated: filters.daysSinceCreated,
+    floors: filters.floors,
+    floorsNumberMin: filters.floorsNumberMin,
+    floorsNumberMax: filters.floorsNumberMax,
+    flatBuildingType: filters.flatBuildingType,
+    terrainAreaMin: filters.terrainAreaMin,
+    terrainAreaMax: filters.terrainAreaMax,
+    houseBuildingType: filters.houseBuildingType,
+    isBungalow: filters.isBungalow,
   };
 }
 

@@ -110,6 +110,7 @@ const EXTRAS_TO_ATTRIBUTES: Record<string, keyof GratkaPropertyAttributes> = {
   BASEMENT: 'basement',
   LIFT: 'elevator',
   GARDEN: 'garden',
+  GARAGE: 'parkingPlaces',
 };
 
 /** Convert unified building materials to Gratka dictionaries format (2D array) */
@@ -233,22 +234,21 @@ function toGratkaParams(params: UnifiedSearchParams): GratkaListingParametersInp
   // Extended params type for optional filters not in base UnifiedSearchParams
   type ExtendedParams = UnifiedSearchParams & {
     buildingMaterials?: string[];
-    extras?: string[];
-    daysSinceCreated?: number;
   };
   const extendedParams = params as ExtendedParams;
 
   // Building materials filter (convert to Gratka dictionaries format)
-  if (extendedParams.buildingMaterials && extendedParams.buildingMaterials.length > 0) {
-    const dictionaries = toGratkaBuildingMaterials(extendedParams.buildingMaterials);
+  const materialsToUse = params.buildingMaterial ?? extendedParams.buildingMaterials;
+  if (materialsToUse && materialsToUse.length > 0) {
+    const dictionaries = toGratkaBuildingMaterials(materialsToUse);
     if (dictionaries.length > 0) {
       baseParams.searchParameters.dictionaries = dictionaries;
     }
   }
 
   // Extras/amenities filter (convert to Gratka attributes format)
-  if (extendedParams.extras && extendedParams.extras.length > 0) {
-    const attributes = toGratkaAttributes(extendedParams.extras);
+  if (params.extras && params.extras.length > 0) {
+    const attributes = toGratkaAttributes(params.extras);
     if (Object.keys(attributes).length > 0) {
       baseParams.searchParameters.attributes = {
         ...baseParams.searchParameters.attributes,
@@ -257,14 +257,15 @@ function toGratkaParams(params: UnifiedSearchParams): GratkaListingParametersInp
     }
     
     // Handle HAS_PHOTOS special case
-    if (extendedParams.extras.includes('HAS_PHOTOS')) {
+    if (params.extras.includes('HAS_PHOTOS')) {
       baseParams.searchParameters.withPhoto = true;
     }
   }
 
   // Listing age filter (convert days to dateFrom)
-  if (extendedParams.daysSinceCreated) {
-    baseParams.searchParameters.dateFrom = toGratkaDateFrom(extendedParams.daysSinceCreated);
+  if (params.daysSinceCreated) {
+    const days = typeof params.daysSinceCreated === 'string' ? Number(params.daysSinceCreated) : params.daysSinceCreated;
+    baseParams.searchParameters.dateFrom = toGratkaDateFrom(days);
   }
 
   // Sort order
