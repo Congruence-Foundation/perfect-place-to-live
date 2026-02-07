@@ -384,8 +384,8 @@ export const CANVAS_CONFIG = {
   CELL_OVERLAP_MULTIPLIER: 1.5,
   /** Minimum cell size in pixels */
   MIN_CELL_SIZE_PX: 4,
-  /** Tile boundary blur in pixels (scaled by DPI squared in renderer) */
-  TILE_BOUNDARY_BLUR_PX: 4,
+  /** Tile boundary blur in pixels (scaled by DPI in renderer) */
+  TILE_BOUNDARY_BLUR_PX: 6,
 } as const;
 
 /**

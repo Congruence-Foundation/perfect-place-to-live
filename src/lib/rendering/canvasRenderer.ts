@@ -176,9 +176,9 @@ export function renderHeatmapToCanvas(
     ctx.fill();
   }
   
-  // Apply blur filter only on desktop (non-enhanced mode)
-  // On mobile/high-DPI, we rely on the larger gradients instead
-  if (!useEnhanced && ctx.filter !== undefined) {
+  // Apply blur filter on all devices to smooth out dot patterns
+  // The enhanced gradients on mobile complement (not replace) the blur
+  if (ctx.filter !== undefined) {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvasWidth;
     tempCanvas.height = canvasHeight;
@@ -187,9 +187,9 @@ export function renderHeatmapToCanvas(
       // Copy current content
       tempCtx.drawImage(ctx.canvas, 0, 0);
       // Clear and redraw with blur to smooth tile boundaries
-      // Linear DPI scaling: more DPI = more blur
+      // Use Math.max(dpr, 1.5) to ensure minimum effective blur even on 1x DPI screens
       const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
-      const blurAmount = CANVAS_CONFIG.TILE_BOUNDARY_BLUR_PX * dpr;
+      const blurAmount = CANVAS_CONFIG.TILE_BOUNDARY_BLUR_PX * Math.max(dpr, 1.5);
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
       ctx.filter = `blur(${blurAmount}px)`;
       ctx.drawImage(tempCanvas, 0, 0);
