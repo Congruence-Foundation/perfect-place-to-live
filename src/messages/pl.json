@@ -67,6 +67,8 @@
     "heatmapArea_0": "Widok",
     "heatmapArea_1": "+1 kafel",
     "heatmapArea_2": "+2 kafle",
+    "progressiveLoading": "Progresywne ładowanie",
+    "progressiveLoadingTooltip": "Po włączeniu widok ładuje się najpierw dla natychmiastowej odpowiedzi, potem kafelki w tle ładują się stopniowo. Po wyłączeniu wszystkie kafelki ładują się naraz (może wydawać się wolniejsze, ale ładuje wszystko razem).",
     "poiBuffer": "Bufor POI",
     "poiBufferTooltip": "Jak daleko poza granice kafelka pobierać POI. Wyższe wartości zapewniają dokładniejsze wyniki na krawędziach, ale pobierają więcej danych. Bazuje na 2x maksymalnej odległości czynnika.",
     "poiBuffer_1": "1x (szybki)",
@@ -120,7 +122,14 @@
     "activeFactors": "Aktywne czynniki",
     "gridPoints": "Punkty siatki",
     "poisLoaded": "Załadowane POI",
-    "computeTime": "Czas obliczeń"
+    "computeTime": "Czas obliczeń",
+    "rendering": "Renderowanie",
+    "phase": "Faza",
+    "phaseViewport": "widok",
+    "phaseRing": "+{n} pierścień",
+    "phaseDone": "Gotowe",
+    "viewportTiles": "Kafelki widoku",
+    "renderedTiles": "Wyrenderowane"
   },
   "search": {
     "placeholder": "Szukaj miasta...",

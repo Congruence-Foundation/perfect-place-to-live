@@ -236,6 +236,26 @@ export function hashFilters(filters: PropertyFilters): string {
 export const HEATMAP_TILE_ZOOM = HEATMAP_TILE_CONFIG.TILE_ZOOM;
 
 /**
+ * Calculate the difference between two tile sets (tiles in larger set but not in smaller set)
+ * Used for progressive pre-fetching to determine which tiles need to be fetched at each radius
+ * 
+ * @param largerSet - The expanded tile set (e.g., viewport + radius N)
+ * @param smallerSet - The base tile set (e.g., viewport + radius N-1)
+ * @returns Array of tiles that are in largerSet but not in smallerSet
+ */
+export function calculateTileDelta(
+  largerSet: TileCoord[],
+  smallerSet: TileCoord[]
+): TileCoord[] {
+  const smallerKeys = new Set(
+    smallerSet.map(t => `${t.z}:${t.x}:${t.y}`)
+  );
+  return largerSet.filter(
+    t => !smallerKeys.has(`${t.z}:${t.x}:${t.y}`)
+  );
+}
+
+/**
  * Heatmap configuration for cache key generation
  */
 export interface HeatmapConfig {

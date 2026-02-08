@@ -5,7 +5,7 @@
  * 
  * Fetches heatmap data using the batch endpoint with:
  * - Tile-aligned POI caching for efficient cache reuse
- * - Single batch request for all tiles
+ * - Progressive background pre-fetching for smooth panning
  * - Automatic deduplication of heatmap points across tiles
  * - Configurable POI buffer scale for accuracy vs performance
  * 
@@ -26,6 +26,8 @@ import { HEATMAP_TILE_CONFIG, FETCH_CONFIG } from '@/constants/performance';
 import {
   hashHeatmapConfig,
   calculateTilesWithRadius,
+  calculateTileDelta,
+  getTileKeyString,
   type TileCoord,
   HEATMAP_TILE_ZOOM,
 } from '@/lib/geo/tiles';
@@ -36,10 +38,6 @@ import { useMapStore } from '@/stores/mapStore';
 // ============================================================================
 // Types
 // ============================================================================
-
-/**
- * Response from the batch heatmap API
- */
 interface BatchHeatmapResponse {
   tiles: Record<string, {
     points: HeatmapPoint[];
@@ -73,19 +71,17 @@ interface CombinedBounds {
 }
 
 // ============================================================================
-// Helper Functions
+// Helpers
 // ============================================================================
-
-/**
- * Generate a stable cache key from tiles array
- */
 function getTilesKey(tiles: TileCoord[]): string {
-  return tiles.map(t => `${t.z}:${t.x}:${t.y}`).sort().join(',');
+  return tiles.map(getTileKeyString).sort().join(',');
 }
 
-/**
- * Calculate combined bounds from an array of tiles
- */
+/** Create a Set of tile key strings for fast lookup */
+function toTileKeySet(tiles: TileCoord[]): Set<string> {
+  return new Set(tiles.map(getTileKeyString));
+}
+
 function calculateCombinedBounds(tiles: TileCoord[]): CombinedBounds | null {
   if (tiles.length === 0) return null;
   
@@ -103,9 +99,6 @@ function calculateCombinedBounds(tiles: TileCoord[]): CombinedBounds | null {
   return { minLat, maxLat, minLng, maxLng };
 }
 
-/**
- * Check if a point is within the given bounds
- */
 function isPointInBounds(point: { lat: number; lng: number }, bounds: CombinedBounds): boolean {
   return point.lat >= bounds.minLat && 
          point.lat <= bounds.maxLat && 
@@ -113,9 +106,6 @@ function isPointInBounds(point: { lat: number; lng: number }, bounds: CombinedBo
          point.lng <= bounds.maxLng;
 }
 
-/**
- * Prune heatmap points outside the given bounds
- */
 function prunePointsOutsideBounds(
   pointsMap: Map<string, HeatmapPoint>,
   bounds: CombinedBounds
@@ -127,9 +117,6 @@ function prunePointsOutsideBounds(
   }
 }
 
-/**
- * Prune POIs outside the given bounds
- */
 function prunePoisOutsideBounds(
   poisByFactor: Record<string, POI[]>,
   bounds: CombinedBounds
@@ -141,9 +128,7 @@ function prunePoisOutsideBounds(
   }
 }
 
-/**
- * Merge new POIs with existing ones, deduplicating by coordinates
- */
+/** Merge new POIs into existing, deduplicating by coordinates */
 function mergePois(
   existing: Record<string, POI[]>,
   newPois: Record<string, POI[]>
@@ -158,10 +143,7 @@ function mergePois(
   }
 }
 
-/**
- * Calculate tile overlap ratio between two sets of tiles
- * Returns a value between 0 (no overlap) and 1 (complete overlap)
- */
+/** Returns 0..1 overlap ratio between two tile key sets */
 function calculateTileOverlapRatio(
   currentTiles: Set<string>,
   previousTiles: Set<string>
@@ -177,12 +159,8 @@ function calculateTileOverlapRatio(
 }
 
 // ============================================================================
-// Hook Options and Result Types
+// Hook Types
 // ============================================================================
-
-/**
- * Options for the useHeatmapTiles hook
- */
 interface UseHeatmapTilesOptions {
   bounds: Bounds | null;
   factors: Factor[];
@@ -194,11 +172,10 @@ interface UseHeatmapTilesOptions {
   tileRadius: number;
   poiBufferScale: number;
   enabled: boolean;
+  /** Whether to use progressive prefetch (true) or batch mode (false) */
+  usePrefetchMode: boolean;
 }
 
-/**
- * Metadata returned from heatmap processing
- */
 interface HeatmapMetadata {
   gridSize: number | string;
   pointCount: number;
@@ -214,9 +191,6 @@ interface HeatmapMetadata {
   };
 }
 
-/**
- * Return type for the useHeatmapTiles hook
- */
 interface UseHeatmapTilesResult {
   heatmapPoints: HeatmapPoint[];
   pois: Record<string, POI[]>;
@@ -226,24 +200,20 @@ interface UseHeatmapTilesResult {
   metadata: HeatmapMetadata | null;
   tileCount: number;
   viewportTileCount: number;
-  loadedTileCount: number;
   usedFallback: boolean;
   clearFallbackNotification: () => void;
   abort: () => void;
   refresh: () => void;
-  /** Current tiles (synchronous with heatmapPoints for canvas bounds) */
   tiles: TileCoord[];
-  /** True when heatmapPoints are ready for current tiles (prevents stale renders) */
   isDataReady: boolean;
+  prefetchPhase: number | null;
 }
 
 // ============================================================================
-// API Fetch Function
+// API
 // ============================================================================
 
-/**
- * Fetch heatmap data for multiple tiles using batch endpoint
- */
+/** Fetch heatmap data for multiple tiles via the batch endpoint */
 async function fetchHeatmapBatch(
   tiles: TileCoord[],
   factors: Factor[],
@@ -323,6 +293,10 @@ async function fetchHeatmapBatch(
 /**
  * Hook for fetching heatmap tiles using batch endpoint
  * 
+ * Implements progressive background pre-fetching:
+ * - Phase 0: Fetch viewport tiles immediately, render as soon as ready
+ * - Phase 1..N: Fetch expanding rings in background for smooth panning
+ * 
  * @param options - Configuration options for heatmap tile fetching
  * @returns Object containing heatmap data, loading state, and control functions
  */
@@ -338,6 +312,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     tileRadius,
     poiBufferScale,
     enabled,
+    usePrefetchMode,
   } = options;
   
   const setHeatmapDebugTiles = useMapStore((s) => s.setHeatmapDebugTiles);
@@ -346,37 +321,64 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
   const [loadingState, setLoadingState] = useState<'idle' | 'loading' | 'done'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [usedFallback, setUsedFallback] = useState(false);
-  const [batchResult, setBatchResult] = useState<BatchHeatmapResponse | null>(null);
+  const [prefetchPhase, setPrefetchPhase] = useState<number | null>(null);
+  
+  // State for current rendered tiles (expands as prefetch phases complete)
+  const [renderedTiles, setRenderedTiles] = useState<TileCoord[]>([]);
 
-  // Refs for tracking fetch state
+  // Refs for accumulated state across fetches
   const abortControllerRef = useRef<AbortController | null>(null);
   const fetchIdRef = useRef(0);
-  
-  // Ref to track which tiles the current batchResult corresponds to
-  // This prevents rendering stale data when tiles change but batchResult hasn't updated yet
-  const batchResultTilesRef = useRef<string>('');
-  
-  // Ref to preserve last valid POIs when zoomed out
+  const prefetchPhaseRef = useRef<number | null>(null);
+  const renderedTilesKeyRef = useRef<string>('');
+  const renderedTilesRef = useRef<TileCoord[]>([]);
   const lastValidPoisRef = useRef<Record<string, POI[]>>({});
-  
-  // Ref to accumulate heatmap points across pans
   const accumulatedPointsRef = useRef<Map<string, HeatmapPoint>>(new Map());
+  const lastMetadataRef = useRef<BatchHeatmapResponse['metadata'] | null>(null);
+  // Ref to hold latest options for reading inside effect without adding unstable deps
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
-  // Calculate tiles needed (fixed zoom 13)
-  const { viewportTiles, allTiles, isTooLarge } = useMemo(() => {
+  /** Update prefetch phase in both ref (for abort logic) and state (for UI) */
+  const updatePhase = (phase: number | null) => {
+    prefetchPhaseRef.current = phase;
+    setPrefetchPhase(phase);
+  };
+  
+  /** Clear all accumulated data and reset rendered state */
+  const clearAccumulated = () => {
+    accumulatedPointsRef.current.clear();
+    lastValidPoisRef.current = {};
+    lastMetadataRef.current = null;
+    setRenderedTiles([]);
+    renderedTilesRef.current = [];
+    renderedTilesKeyRef.current = '';
+  };
+
+  // Calculate viewport tiles (tile zoom level from config, radius 0 for viewport only)
+  const { viewportTiles, isTooLarge } = useMemo(() => {
     return calculateTilesWithRadius({
       bounds,
       tileZoom: HEATMAP_TILE_ZOOM,
-      radius: tileRadius,
+      radius: 0, // Always start with viewport only
       maxViewportTiles: HEATMAP_TILE_CONFIG.MAX_VIEWPORT_TILES,
       maxTotalTiles: HEATMAP_TILE_CONFIG.MAX_TOTAL_TILES,
     });
-  }, [bounds, tileRadius]);
+  }, [bounds]);
 
-  // Sync heatmap tiles to store for debug rendering
+  // Stable key for viewport tiles - used to detect actual tile changes
+  const viewportTilesKey = useMemo(() => getTilesKey(viewportTiles), [viewportTiles]);
+  
+  // Ref to track previous viewport tiles key for smart abort logic
+  const prevViewportTilesKeyRef = useRef<string>('');
+  
+  // Ref to track previous fetch trigger key to detect config changes
+  const prevFetchTriggerKeyRef = useRef<string>('');
+
+  // Sync heatmap tiles to store for debug rendering (use rendered tiles, not just viewport)
   useEffect(() => {
-    setHeatmapDebugTiles(allTiles);
-  }, [allTiles, setHeatmapDebugTiles]);
+    setHeatmapDebugTiles(renderedTiles.length > 0 ? renderedTiles : viewportTiles);
+  }, [renderedTiles, viewportTiles, setHeatmapDebugTiles]);
 
   // Generate config hash for cache keys
   const configHash = useMemo(() => hashHeatmapConfig({
@@ -386,37 +388,34 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     lambda,
   }), [factors, distanceCurve, sensitivity, lambda]);
 
-  // Clear accumulated data when config changes (scores would be different)
+  // Stable key that triggers re-fetch when any fetch-relevant option changes
+  const fetchTriggerKey = `${configHash}|${normalizeToViewport}|${dataSource}|${poiBufferScale}|${tileRadius}|${usePrefetchMode}|${enabled}|${isTooLarge}`;
+
+  // Clear accumulated data when config changes or viewport tiles shift significantly (zoom)
   const prevConfigHashRef = useRef(configHash);
-  const prevTileSetRef = useRef<Set<string>>(new Set());
+  const prevViewportTileSetRef = useRef<Set<string>>(new Set());
   
   useEffect(() => {
-    if (prevConfigHashRef.current !== configHash) {
-      accumulatedPointsRef.current.clear();
-      lastValidPoisRef.current = {};
-      setBatchResult(null); // Clear old results to avoid showing stale scores
-      prevConfigHashRef.current = configHash;
-      prevTileSetRef.current.clear();
-    }
-  }, [configHash]);
-  
-  // Clear accumulated data when tiles change significantly (zoom change)
-  // This prevents the "double overlay" effect when zooming out
-  // We detect significant change by checking if less than 50% of tiles overlap
-  useEffect(() => {
-    const currentTileSet = new Set(allTiles.map(t => `${t.z}:${t.x}:${t.y}`));
-    const prevTileSet = prevTileSetRef.current;
+    const configChanged = prevConfigHashRef.current !== configHash;
     
+    if (configChanged) {
+      clearAccumulated();
+      prevConfigHashRef.current = configHash;
+      prevViewportTileSetRef.current.clear();
+      return;
+    }
+    
+    // Detect significant viewport tile change (likely a zoom) by overlap ratio
+    const currentTileSet = toTileKeySet(viewportTiles);
+    const prevTileSet = prevViewportTileSetRef.current;
     const overlapRatio = calculateTileOverlapRatio(currentTileSet, prevTileSet);
     
-    // If less than 50% overlap, clear accumulated data (likely a zoom change)
     if (overlapRatio < 0.5 && prevTileSet.size > 0 && currentTileSet.size > 0) {
-      accumulatedPointsRef.current.clear();
-      lastValidPoisRef.current = {};
+      clearAccumulated();
     }
     
-    prevTileSetRef.current = currentTileSet;
-  }, [allTiles]);
+    prevViewportTileSetRef.current = currentTileSet;
+  }, [configHash, viewportTiles]);
 
   // Clear fallback notification
   const clearFallbackNotification = useCallback(() => {
@@ -430,31 +429,46 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
       abortControllerRef.current = null;
     }
     setLoadingState('idle');
+    updatePhase(null);
   }, []);
 
   // Force refresh by clearing cache and refetching
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const refresh = useCallback(() => {
-    // Clear accumulated data
-    accumulatedPointsRef.current.clear();
-    lastValidPoisRef.current = {};
-    setBatchResult(null);
-    // Trigger refetch by incrementing counter
+    clearAccumulated();
     setRefreshTrigger(prev => prev + 1);
   }, []);
 
-  // Batch fetching effect
+  // Progressive phased fetching effect
   useEffect(() => {
     // Check if any factors are enabled
+    const { factors, distanceCurve, sensitivity, lambda, normalizeToViewport, 
+            dataSource, tileRadius, poiBufferScale, enabled, usePrefetchMode, bounds } = optionsRef.current;
     const enabledFactors = factors.filter(f => f.enabled && f.weight !== 0);
     
-    if (!enabled || isTooLarge || allTiles.length === 0 || enabledFactors.length === 0 || !bounds) {
+    if (!enabled || isTooLarge || viewportTiles.length === 0 || enabledFactors.length === 0 || !bounds) {
       setLoadingState('idle');
-      setBatchResult(null);
+      updatePhase(null);
       return;
     }
 
-    // Cancel any pending fetch
+    // Smart abort logic: only skip re-fetch when nothing meaningful changed
+    const viewportTilesChanged = viewportTilesKey !== prevViewportTilesKeyRef.current;
+    const configChanged = fetchTriggerKey !== prevFetchTriggerKeyRef.current;
+    prevViewportTilesKeyRef.current = viewportTilesKey;
+    prevFetchTriggerKeyRef.current = fetchTriggerKey;
+    
+    // If nothing changed and a fetch is already in progress, let it continue
+    if (!viewportTilesChanged && !configChanged && prefetchPhaseRef.current !== null) {
+      return;
+    }
+    
+    // Config changed → clear accumulated data (scores are different)
+    if (configChanged) {
+      clearAccumulated();
+    }
+
+    // Cancel any pending fetch (viewport changed or starting fresh)
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -462,154 +476,207 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     const controller = new AbortController();
     abortControllerRef.current = controller;
     const currentFetchId = ++fetchIdRef.current;
+    
+    // Snapshot viewportTiles for this effect run (stable reference)
+    const currentViewportTiles = viewportTiles;
+    
+    // Build phase list:
+    // - Prefetch mode: [0, 1, 2, ...tileRadius] (progressive rings)
+    // - Batch mode:    [tileRadius]              (single fetch at full radius)
+    const phases = (usePrefetchMode && tileRadius > 0)
+      ? Array.from({ length: tileRadius + 1 }, (_, i) => i)
+      : [tileRadius];
 
-    const fetchBatch = async () => {
-      setLoadingState('loading');
+    const isAborted = () => controller.signal.aborted || currentFetchId !== fetchIdRef.current;
+
+    /** Merge a batch result into accumulated state */
+    const mergeResult = (result: BatchHeatmapResponse) => {
+      if (dataSource === 'neon' && result.metadata.dataSource === 'overpass') {
+        setUsedFallback(true);
+      }
+      for (const tileData of Object.values(result.tiles)) {
+        for (const point of tileData.points) {
+          accumulatedPointsRef.current.set(createCoordinateKey(point.lat, point.lng), point);
+        }
+      }
+      if (Object.keys(result.pois).length > 0) {
+        mergePois(lastValidPoisRef.current, result.pois);
+      }
+      lastMetadataRef.current = result.metadata;
+    };
+
+    /** Update rendered tiles in both ref and state */
+    const commitTiles = (tiles: TileCoord[]) => {
+      const copy = [...tiles];
+      renderedTilesRef.current = copy;
+      renderedTilesKeyRef.current = getTilesKey(tiles);
+      setRenderedTiles(copy);
+    };
+
+    const fetchData = async () => {
       setError(null);
       setUsedFallback(false);
-
+      
+      // Read latest bounds from optionsRef (already destructured above)
+      if (!bounds) return;
+      
+      // Read from ref to get the latest rendered tiles (avoids stale closure capture)
+      const currentRendered = renderedTilesRef.current;
+      
+      // Start from tiles we already have data for -- delta calculations will skip them
+      let fetchedTiles: TileCoord[] = [...currentRendered];
+      
+      // Check if viewport tiles are already covered by pre-fetched data
+      const renderedTileKeys = toTileKeySet(currentRendered);
+      const viewportCovered = currentViewportTiles.length > 0 && currentViewportTiles.every(
+        t => renderedTileKeys.has(getTileKeyString(t))
+      );
+      
+      // Only show loading spinner if viewport tiles need fetching
+      if (!viewportCovered) {
+        setLoadingState('loading');
+      }
+      
       try {
-        const result = await fetchHeatmapBatch(
-          allTiles,
-          factors,
-          distanceCurve,
-          sensitivity,
-          lambda,
-          normalizeToViewport,
-          dataSource,
-          poiBufferScale,
-          bounds,
-          controller.signal
-        );
-
-        if (controller.signal.aborted || currentFetchId !== fetchIdRef.current) {
-          return;
+        for (let i = 0; i < phases.length; i++) {
+          const radius = phases[i];
+          if (isAborted()) return;
+          
+          updatePhase(radius);
+          
+          const { allTiles: tilesAtRadius } = calculateTilesWithRadius({
+            bounds,
+            tileZoom: HEATMAP_TILE_ZOOM,
+            radius,
+            maxViewportTiles: HEATMAP_TILE_CONFIG.MAX_VIEWPORT_TILES,
+            maxTotalTiles: HEATMAP_TILE_CONFIG.MAX_TOTAL_TILES,
+          });
+          
+          if (tilesAtRadius.length === 0) break;
+          
+          // Only fetch tiles we don't already have (from previous phases or previous fetches)
+          const tilesToFetch = calculateTileDelta(tilesAtRadius, fetchedTiles);
+          
+          if (tilesToFetch.length === 0) {
+            // Tiles at this radius are already covered -- only expand fetchedTiles, never shrink
+            if (tilesAtRadius.length > fetchedTiles.length) {
+              fetchedTiles = tilesAtRadius;
+              commitTiles(fetchedTiles);
+            }
+            // Do NOT set fetchedTiles = tilesAtRadius when it's smaller (would lose pre-fetched tiles)
+            continue;
+          }
+          
+          // Yield to main thread between background phases
+          if (i > 0) {
+            await new Promise(resolve => setTimeout(resolve, HEATMAP_TILE_CONFIG.PREFETCH_DELAY_MS));
+            if (isAborted()) return;
+          }
+          
+          const result = await fetchHeatmapBatch(
+            tilesToFetch, factors, distanceCurve, sensitivity,
+            lambda, normalizeToViewport, dataSource, poiBufferScale,
+            bounds, controller.signal
+          );
+          if (isAborted()) return;
+          
+          mergeResult(result);
+          fetchedTiles = tilesAtRadius;
+          commitTiles(fetchedTiles);
+          
+          // After first phase completes, mark loading as done (background phases don't block UI)
+          if (i === 0) setLoadingState('done');
         }
-
-        // Check if fallback occurred
-        if (dataSource === 'neon' && result.metadata.dataSource === 'overpass') {
-          setUsedFallback(true);
-        }
-
-        // Track which tiles this batch result corresponds to
-        const tilesKey = getTilesKey(allTiles);
-        batchResultTilesRef.current = tilesKey;
         
-        setBatchResult(result);
+        // All phases complete - ensure loading is done even if all deltas were empty
         setLoadingState('done');
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
-          // Request was aborted, don't update state - a new request will be started
-          return;
+        updatePhase(null);
+        
+        // Prune points and POIs outside final tile bounds to prevent unbounded growth
+        const combinedBounds = calculateCombinedBounds(fetchedTiles);
+        if (combinedBounds) {
+          prunePointsOutsideBounds(accumulatedPointsRef.current, combinedBounds);
+          prunePoisOutsideBounds(lastValidPoisRef.current, combinedBounds);
         }
+        
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
         if (currentFetchId === fetchIdRef.current) {
           setError(err instanceof Error ? err.message : 'Failed to fetch heatmap');
           setLoadingState('done');
+          updatePhase(null);
         }
       }
     };
 
-    fetchBatch();
+    fetchData();
 
     return () => {
       controller.abort();
-      // Reset loading state when effect cleanup runs (e.g., when dependencies change)
-      // The new effect will set it to 'loading' if needed
     };
   }, [
-    allTiles,
-    bounds,
-    factors,
-    distanceCurve,
-    sensitivity,
-    lambda,
-    normalizeToViewport,
-    dataSource,
-    poiBufferScale,
-    enabled,
-    isTooLarge,
+    viewportTilesKey,
+    fetchTriggerKey,
     refreshTrigger,
   ]);
 
   // Memoize tiles key to avoid recomputing in multiple places
-  const currentTilesKey = useMemo(() => getTilesKey(allTiles), [allTiles]);
+  const currentRenderedTilesKey = useMemo(() => getTilesKey(renderedTiles), [renderedTiles]);
 
-  // Process batch result into heatmap points
-  const { heatmapPoints, pois, metadata } = useMemo(() => {
-    const tilesMatch = batchResultTilesRef.current === currentTilesKey;
-    
-    // Early return for zoomed out or tiles mismatch - return accumulated data without modification
-    if (!batchResult || isTooLarge || !tilesMatch) {
-      return { 
-        heatmapPoints: Array.from(accumulatedPointsRef.current.values()), 
-        pois: { ...lastValidPoisRef.current }, 
-        metadata: null 
-      };
-    }
+  // Build metadata from latest fetch result
+  const metadata: HeatmapMetadata | null = useMemo(() => {
+    const tilesMatch = renderedTilesKeyRef.current === currentRenderedTilesKey;
+    if (isTooLarge || !tilesMatch || renderedTiles.length === 0) return null;
 
-    // Add new points to accumulated map (merge with existing)
-    for (const tileData of Object.values(batchResult.tiles)) {
-      for (const point of tileData.points) {
-        const pointKey = createCoordinateKey(point.lat, point.lng);
-        accumulatedPointsRef.current.set(pointKey, point);
-      }
-    }
-
-    // Prune points and POIs outside current tile bounds to prevent unbounded growth
-    const combinedBounds = calculateCombinedBounds(allTiles);
-    if (combinedBounds) {
-      prunePointsOutsideBounds(accumulatedPointsRef.current, combinedBounds);
-      prunePoisOutsideBounds(lastValidPoisRef.current, combinedBounds);
-    }
-
-    // Merge new POIs with existing ones
-    if (Object.keys(batchResult.pois).length > 0) {
-      mergePois(lastValidPoisRef.current, batchResult.pois);
-    }
-
-    const enabledFactorCount = factors.filter(f => f.enabled && f.weight !== 0).length;
+    const lastMeta = lastMetadataRef.current;
+    if (!lastMeta) return null;
 
     return {
-      heatmapPoints: Array.from(accumulatedPointsRef.current.values()),
-      pois: { ...lastValidPoisRef.current },
-      metadata: {
-        gridSize: 'adaptive',
-        pointCount: accumulatedPointsRef.current.size,
-        computeTimeMs: batchResult.metadata.computeTimeMs,
-        factorCount: enabledFactorCount,
-        dataSource: batchResult.metadata.dataSource,
-        poiCounts: batchResult.metadata.poiCounts,
-        poiTileCount: batchResult.metadata.poiTileCount,
-        cachedTiles: batchResult.metadata.cachedTiles,
-        l1CacheStats: batchResult.metadata.l1CacheStats,
-      },
+      gridSize: 'adaptive',
+      pointCount: accumulatedPointsRef.current.size,
+      computeTimeMs: lastMeta.computeTimeMs,
+      factorCount: factors.filter(f => f.enabled && f.weight !== 0).length,
+      dataSource: lastMeta.dataSource,
+      poiCounts: lastMeta.poiCounts,
+      poiTileCount: lastMeta.poiTileCount,
+      cachedTiles: lastMeta.cachedTiles,
+      l1CacheStats: lastMeta.l1CacheStats,
     };
-  }, [batchResult, isTooLarge, factors, allTiles, currentTilesKey]);
+  }, [isTooLarge, factors, renderedTiles, currentRenderedTilesKey]);
+
+  // Snapshot accumulated points and POIs (re-derived when renderedTiles change)
+  const heatmapPoints = useMemo(
+    () => Array.from(accumulatedPointsRef.current.values()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [renderedTiles]
+  );
+  const pois = useMemo(
+    () => ({ ...lastValidPoisRef.current }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [renderedTiles]
+  );
 
   // Check if current data matches current tiles (for preventing stale renders)
   const isDataReady = useMemo(
-    () => (batchResult && batchResultTilesRef.current === currentTilesKey) || allTiles.length === 0,
-    [batchResult, currentTilesKey, allTiles.length]
+    () => (renderedTiles.length > 0 && renderedTilesKeyRef.current === currentRenderedTilesKey) || viewportTiles.length === 0,
+    [renderedTiles.length, currentRenderedTilesKey, viewportTiles.length]
   );
 
   return {
     heatmapPoints,
     pois,
-    // Show loading state whenever we're actively fetching new tiles
-    isLoading: loadingState === 'loading',
+    isLoading: loadingState === 'loading' && prefetchPhase === 0,
     isTooLarge,
     error,
     metadata,
-    tileCount: allTiles.length,
+    tileCount: renderedTiles.length,
     viewportTileCount: viewportTiles.length,
-    loadedTileCount: batchResult ? Object.keys(batchResult.tiles).length : 0,
     usedFallback,
     clearFallbackNotification,
     abort,
     refresh,
-    // Expose tiles for canvas bounds calculation (synchronous with points)
-    tiles: allTiles,
-    // Flag indicating if heatmapPoints are ready for current tiles (prevents stale renders)
+    tiles: renderedTiles.length > 0 ? renderedTiles : viewportTiles,
     isDataReady,
+    prefetchPhase,
   };
 }

@@ -20,6 +20,8 @@ export interface MapState {
   detailedModeThreshold: number;
   heatmapTileRadius: number;
   poiBufferScale: number;
+  /** Whether to use progressive prefetch (true) or batch mode (false) */
+  usePrefetchMode: boolean;
   
   // Debug options
   showHeatmapTileBorders: boolean;
@@ -50,6 +52,7 @@ export interface MapActions {
   // Individual setters (only those actually used)
   setHeatmapTileRadius: (radius: number) => void;
   setPoiBufferScale: (scale: number) => void;
+  setUsePrefetchMode: (use: boolean) => void;
   setShowHeatmapTileBorders: (show: boolean) => void;
   setShowPropertyTileBorders: (show: boolean) => void;
   setHeatmapDebugTiles: (tiles: TileCoordinates[]) => void;
@@ -76,6 +79,7 @@ const initialState: MapState = {
   detailedModeThreshold: UI_CONFIG.DEFAULT_DETAILED_MODE_THRESHOLD,
   heatmapTileRadius: HEATMAP_TILE_CONFIG.DEFAULT_TILE_RADIUS,
   poiBufferScale: POI_TILE_CONFIG.DEFAULT_POI_BUFFER_SCALE,
+  usePrefetchMode: true,
   showHeatmapTileBorders: false,
   showPropertyTileBorders: false,
   heatmapDebugTiles: [],
@@ -125,6 +129,7 @@ export const useMapStore = create<MapStore>()(
       // Individual setters (only those actually used)
       setHeatmapTileRadius: (heatmapTileRadius) => set({ heatmapTileRadius }, false, 'setHeatmapTileRadius'),
       setPoiBufferScale: (poiBufferScale) => set({ poiBufferScale }, false, 'setPoiBufferScale'),
+      setUsePrefetchMode: (usePrefetchMode) => set({ usePrefetchMode }, false, 'setUsePrefetchMode'),
       setShowHeatmapTileBorders: (showHeatmapTileBorders) => set({ showHeatmapTileBorders }, false, 'setShowHeatmapTileBorders'),
       setShowPropertyTileBorders: (showPropertyTileBorders) => set({ showPropertyTileBorders }, false, 'setShowPropertyTileBorders'),
       setHeatmapDebugTiles: (heatmapDebugTiles) => set({ heatmapDebugTiles }, false, 'setHeatmapDebugTiles'),

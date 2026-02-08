@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import type { Bounds, Factor, HeatmapPoint, POI, DistanceCurve, POIDataSource, HeatmapSettings } from '@/types';
 import { DEFAULT_FACTORS } from '@/config/factors';
-import { UI_CONFIG, POWER_MEAN_CONFIG } from '@/constants/performance';
+import { UI_CONFIG, POWER_MEAN_CONFIG, HEATMAP_TILE_CONFIG } from '@/constants/performance';
 import { Z_INDEX } from '@/constants/z-index';
 import {
   useHeatmapTiles,
@@ -72,6 +72,12 @@ interface HomeContentProps {
   onRefresh: () => void;
   heatmapTileCoords: { z: number; x: number; y: number }[];
   isHeatmapDataReady: boolean;
+  renderingInfo: {
+    prefetchPhase: number | null;
+    viewportTileCount: number;
+    renderedTileCount: number;
+    maxPrefetchRadius: number;
+  };
 }
 
 /**
@@ -100,6 +106,7 @@ function HomeContent({
   onRefresh,
   heatmapTileCoords,
   isHeatmapDataReady,
+  renderingInfo,
 }: HomeContentProps) {
   const tControls = useTranslations('controls');
   const isMobile = useIsMobile();
@@ -360,6 +367,7 @@ function HomeContent({
               error={error}
               isMobile={false}
               zoomLevel={zoomLevel}
+              renderingInfo={renderingInfo}
             />
 
             {/* Map Settings - Bottom Right */}
@@ -399,6 +407,7 @@ function HomeContent({
                 error={error}
                 isMobile={true}
                 zoomLevel={zoomLevel}
+                renderingInfo={renderingInfo}
               />
 
               {/* Loading Progress or Zoom Warning - Center */}
@@ -443,6 +452,7 @@ export default function Home() {
   const factors = useMapStore((s) => s.factors);
   const heatmapTileRadius = useMapStore((s) => s.heatmapTileRadius);
   const poiBufferScale = useMapStore((s) => s.poiBufferScale);
+  const usePrefetchMode = useMapStore((s) => s.usePrefetchMode);
 
   // Local state for settings
   const [distanceCurve, setDistanceCurve] = useState<DistanceCurve>('exp');
@@ -472,6 +482,9 @@ export default function Home() {
     refresh,
     tiles: heatmapTileCoords,
     isDataReady: isHeatmapDataReady,
+    prefetchPhase,
+    viewportTileCount,
+    tileCount: renderedTileCount,
   } = useHeatmapTiles({
     bounds,
     factors: effectiveFactors,
@@ -482,6 +495,7 @@ export default function Home() {
     dataSource: useOverpassAPI ? 'overpass' : 'neon',
     tileRadius: heatmapTileRadius,
     poiBufferScale,
+    usePrefetchMode,
     enabled:
       bounds !== null && effectiveFactors.filter((f) => f.enabled && f.weight !== 0).length > 0,
   });
@@ -531,6 +545,12 @@ export default function Home() {
         onRefresh={refresh}
         heatmapTileCoords={heatmapTileCoords}
         isHeatmapDataReady={isHeatmapDataReady}
+        renderingInfo={{
+          prefetchPhase,
+          viewportTileCount,
+          renderedTileCount,
+          maxPrefetchRadius: HEATMAP_TILE_CONFIG.PREFETCH_MAX_RADIUS,
+        }}
       />
     </>
   );

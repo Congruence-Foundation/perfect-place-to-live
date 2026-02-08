@@ -212,11 +212,11 @@ export const HEATMAP_TILE_CONFIG = {
   /** Fixed tile zoom level for heatmap (~2.4km x 2.4km tiles at Poland's latitude) */
   TILE_ZOOM: SHARED_TILE_ZOOM,
   
-  /** Maximum viewport tiles before showing "zoom in" message */
-  MAX_VIEWPORT_TILES: 36,
+  /** Maximum viewport tiles before showing "zoom in" message (supports zoom 12 on wide screens) */
+  MAX_VIEWPORT_TILES: 120,
   
-  /** Hard limit on total tiles including radius buffer */
-  MAX_TOTAL_TILES: 64,
+  /** Hard limit on total tiles including radius buffer (viewport + 2 rings at zoom 12) */
+  MAX_TOTAL_TILES: 300,
   
   /** Number of tiles to fetch per batch */
   BATCH_SIZE: SHARED_BATCH_SIZE,
@@ -225,10 +225,20 @@ export const HEATMAP_TILE_CONFIG = {
   BATCH_DELAY_MS: 1,
   
   /** Default heatmap tile radius (number of tile layers around viewport) */
-  DEFAULT_TILE_RADIUS: 0,
+  DEFAULT_TILE_RADIUS: 2,
   
   /** Maximum heatmap tile radius */
   MAX_TILE_RADIUS: 2,
+  
+  /** 
+   * Maximum radius for progressive background pre-fetching
+   * After viewport renders, fetch +1, +2, ... up to this radius in background
+   * Change this single value to control how many rings are pre-fetched
+   */
+  PREFETCH_MAX_RADIUS: 2,
+  
+  /** Delay between pre-fetch phases in milliseconds (yields to main thread) */
+  PREFETCH_DELAY_MS: 50,
   
   /** Server-side LRU cache maximum entries */
   SERVER_LRU_MAX: 10000,
@@ -319,7 +329,7 @@ export const UI_CONFIG = {
   GEOLOCATION_MAX_AGE_MS: 60000,
   
   /** Default heatmap opacity */
-  DEFAULT_HEATMAP_OPACITY: 0.15,
+  DEFAULT_HEATMAP_OPACITY: 0.55,
   
   /** Search radius multiplier for heatmap point lookup */
   SEARCH_RADIUS_MULTIPLIER: 1.5,
@@ -384,8 +394,6 @@ export const CANVAS_CONFIG = {
   CELL_OVERLAP_MULTIPLIER: 1.5,
   /** Minimum cell size in pixels */
   MIN_CELL_SIZE_PX: 4,
-  /** Tile boundary blur in pixels (scaled by DPI in renderer) */
-  TILE_BOUNDARY_BLUR_PX: 6,
 } as const;
 
 /**

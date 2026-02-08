@@ -21,6 +21,17 @@ interface L1CacheStats {
   poi: { size: number; max: number; l1Hits: number; l2Hits: number; misses: number };
 }
 
+interface RenderingInfo {
+  /** Current phase: 0=viewport, 1..N=rings, null=done/idle */
+  prefetchPhase: number | null;
+  /** Number of tiles in the viewport */
+  viewportTileCount: number;
+  /** Number of tiles currently rendered (expands as phases complete) */
+  renderedTileCount: number;
+  /** Maximum prefetch radius from config */
+  maxPrefetchRadius: number;
+}
+
 interface DebugInfoProps {
   enabledFactorCount: number;
   metadata: {
@@ -32,6 +43,7 @@ interface DebugInfoProps {
   error: string | null;
   isMobile?: boolean;
   zoomLevel?: number;
+  renderingInfo?: RenderingInfo;
 }
 
 export default function DebugInfo({
@@ -41,6 +53,7 @@ export default function DebugInfo({
   error,
   isMobile = false,
   zoomLevel,
+  renderingInfo,
 }: DebugInfoProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [l2Status, setL2Status] = useState<L2CacheStatus | null>(null);
@@ -124,6 +137,39 @@ export default function DebugInfo({
               <AlertCircle className="h-3 w-3 flex-shrink-0" />
               <span className="truncate">{error}</span>
             </div>
+          )}
+          
+          {/* Rendering Section */}
+          {renderingInfo && (
+            <>
+              <div className="border-t pt-2 mt-2">
+                <span className="text-muted-foreground text-[10px] uppercase tracking-wide">{t('rendering')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('phase')}</span>
+                <span className="font-mono font-medium">
+                  {renderingInfo.prefetchPhase === null ? (
+                    <span className="text-green-500">{t('phaseDone')}</span>
+                  ) : renderingInfo.prefetchPhase === 0 ? (
+                    <span className="text-yellow-500">
+                      0/{renderingInfo.maxPrefetchRadius} ({t('phaseViewport')})
+                    </span>
+                  ) : (
+                    <span className="text-blue-500">
+                      {renderingInfo.prefetchPhase}/{renderingInfo.maxPrefetchRadius} ({t('phaseRing', { n: renderingInfo.prefetchPhase })})
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('viewportTiles')}</span>
+                <span className="font-mono font-medium">{renderingInfo.viewportTileCount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('renderedTiles')}</span>
+                <span className="font-mono font-medium">{renderingInfo.renderedTileCount}</span>
+              </div>
+            </>
           )}
           
           {/* Extension Debug Panels - Self-contained (rendered at the end) */}

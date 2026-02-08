@@ -67,6 +67,8 @@
     "heatmapArea_0": "Viewport",
     "heatmapArea_1": "+1 tile",
     "heatmapArea_2": "+2 tiles",
+    "progressiveLoading": "Progressive Loading",
+    "progressiveLoadingTooltip": "When enabled, viewport loads first for instant feedback, then background tiles load progressively. When disabled, all tiles load at once (may feel slower but loads everything together).",
     "poiBuffer": "POI Buffer",
     "poiBufferTooltip": "How far beyond tile boundaries to fetch POIs. Higher values ensure accurate scoring at edges but fetch more data. Based on 2x the maximum factor distance.",
     "poiBuffer_1": "1x (fast)",
@@ -120,7 +122,14 @@
     "activeFactors": "Active factors",
     "gridPoints": "Grid points",
     "poisLoaded": "POIs loaded",
-    "computeTime": "Compute time"
+    "computeTime": "Compute time",
+    "rendering": "Rendering",
+    "phase": "Phase",
+    "phaseViewport": "viewport",
+    "phaseRing": "+{n} ring",
+    "phaseDone": "Done",
+    "viewportTiles": "Viewport tiles",
+    "renderedTiles": "Rendered tiles"
   },
   "search": {
     "placeholder": "Search city...",

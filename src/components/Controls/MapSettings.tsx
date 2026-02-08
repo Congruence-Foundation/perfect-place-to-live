@@ -55,6 +55,10 @@ export default function MapSettings({
   const heatmapTileRadius = useMapStore((s) => s.heatmapTileRadius);
   const setHeatmapTileRadius = useMapStore((s) => s.setHeatmapTileRadius);
   
+  // Get prefetch mode from store
+  const usePrefetchMode = useMapStore((s) => s.usePrefetchMode);
+  const setUsePrefetchMode = useMapStore((s) => s.setUsePrefetchMode);
+  
   // Get POI buffer scale from store
   const poiBufferScale = useMapStore((s) => s.poiBufferScale);
   const setPoiBufferScale = useMapStore((s) => s.setPoiBufferScale);
@@ -246,6 +250,22 @@ export default function MapSettings({
             </Select>
           </div>
 
+          {/* Progressive Loading - only show when radius > 0 */}
+          {heatmapTileRadius > 0 && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <Label className="text-xs">{t('progressiveLoading')}</Label>
+                <InfoTooltip>
+                  <p className="text-xs">{t('progressiveLoadingTooltip')}</p>
+                </InfoTooltip>
+              </div>
+              <Switch
+                checked={usePrefetchMode}
+                onCheckedChange={setUsePrefetchMode}
+              />
+            </div>
+          )}
+
           {/* POI Buffer Scale */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1">
@@ -314,7 +334,7 @@ export default function MapSettings({
                 <div className="flex items-center gap-1">
                   <Label className="text-xs">Heatmap tiles</Label>
                   <InfoTooltip>
-                    <p className="text-xs">Shows tile boundaries used for heatmap calculation (zoom level 13 tiles)</p>
+                    <p className="text-xs">Shows tile boundaries used for heatmap calculation</p>
                   </InfoTooltip>
                 </div>
                 <Switch

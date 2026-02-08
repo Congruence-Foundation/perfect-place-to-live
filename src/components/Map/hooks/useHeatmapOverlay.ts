@@ -1,11 +1,18 @@
 'use client';
 
 /**
- * Hook for managing heatmap canvas overlay on the map
- * Extracts heatmap rendering logic from MapView for better separation of concerns
+ * Hook for managing heatmap canvas overlay on the map.
+ * 
+ * Uses a raw <canvas> element positioned in a Leaflet pane instead of
+ * L.imageOverlay. This avoids the image encode/decode cycle that causes
+ * a visible flicker on each update (the browser's img.src decode is always
+ * async, even for data URLs and blob URLs).
+ * 
+ * The canvas content is updated synchronously via drawImage(), eliminating
+ * all flickering between phase transitions.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import type { HeatmapPoint, Bounds } from '@/types';
 import { Z_INDEX } from '@/constants';
 import { tileToBounds, METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '@/lib/geo';
@@ -27,51 +34,36 @@ interface UseHeatmapOverlayOptions {
   isHeatmapDataReady: boolean;
 }
 
-/**
- * Creates a hash of heatmap data to detect actual changes
- * Uses length + sample of points + tiles for efficiency
- */
 function createHeatmapHash(
   points: HeatmapPoint[],
   opacity: number,
   tileCoords: TileCoord[]
 ): string {
   if (points.length === 0) return 'empty';
-  
   const sample = points
     .slice(0, 10)
     .map(p => `${p.lat.toFixed(5)},${p.lng.toFixed(5)},${p.value.toFixed(3)}`)
     .join('|');
-  const tilesHash = tileCoords
-    .map(t => `${t.z}:${t.x}:${t.y}`)
-    .sort()
-    .join(',');
-  
+  const tilesHash = tileCoords.map(t => `${t.z}:${t.x}:${t.y}`).sort().join(',');
   return `${points.length}:${opacity}:${tilesHash}:${sample}`;
 }
 
-/**
- * Calculates bounds from tile coordinates or falls back to point bounds
- */
 function calculateBounds(
   tileCoords: TileCoord[],
   points: HeatmapPoint[]
 ): { bounds: Bounds; latRange: number; lngRange: number } {
   let minLat = Infinity, maxLat = -Infinity;
   let minLng = Infinity, maxLng = -Infinity;
-  
+
   if (tileCoords.length > 0) {
-    // Use tile bounds for stable canvas sizing
     for (const tile of tileCoords) {
-      const tileBounds = tileToBounds(tile.z, tile.x, tile.y);
-      
-      if (tileBounds.south < minLat) minLat = tileBounds.south;
-      if (tileBounds.north > maxLat) maxLat = tileBounds.north;
-      if (tileBounds.west < minLng) minLng = tileBounds.west;
-      if (tileBounds.east > maxLng) maxLng = tileBounds.east;
+      const tb = tileToBounds(tile.z, tile.x, tile.y);
+      if (tb.south < minLat) minLat = tb.south;
+      if (tb.north > maxLat) maxLat = tb.north;
+      if (tb.west < minLng) minLng = tb.west;
+      if (tb.east > maxLng) maxLng = tb.east;
     }
   } else {
-    // Fallback to point bounds if no tiles available
     for (const point of points) {
       if (point.lat < minLat) minLat = point.lat;
       if (point.lat > maxLat) maxLat = point.lat;
@@ -79,7 +71,7 @@ function calculateBounds(
       if (point.lng > maxLng) maxLng = point.lng;
     }
   }
-  
+
   return {
     bounds: { north: maxLat, south: minLat, east: maxLng, west: minLng },
     latRange: maxLat - minLat,
@@ -87,12 +79,6 @@ function calculateBounds(
   };
 }
 
-/**
- * Calculates canvas dimensions based on geographic area and fixed cell size
- * Note: We intentionally don't scale by DPI here - Leaflet handles the stretching
- * and the blur filter smooths the result. DPI scaling creates too many discrete
- * points that become visible as a dot pattern on high-DPI mobile devices.
- */
 function calculateCanvasDimensions(
   latRange: number,
   lngRange: number,
@@ -100,18 +86,39 @@ function calculateCanvasDimensions(
 ): { width: number; height: number } {
   const cellsLng = Math.ceil((lngRange * metersPerDegreeLng(centerLat)) / HEATMAP_CELL_SIZE_METERS);
   const cellsLat = Math.ceil((latRange * METERS_PER_DEGREE_LAT) / HEATMAP_CELL_SIZE_METERS);
-  
-  const width = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, cellsLng * CANVAS_PIXELS_PER_CELL));
-  const height = Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, cellsLat * CANVAS_PIXELS_PER_CELL));
-  
-  return { width, height };
+  return {
+    width: Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, cellsLng * CANVAS_PIXELS_PER_CELL)),
+    height: Math.min(CANVAS_MAX_DIMENSION, Math.max(CANVAS_MIN_DIMENSION, cellsLat * CANVAS_PIXELS_PER_CELL)),
+  };
 }
 
 /**
- * Hook to manage heatmap canvas overlay on the map
- * 
- * @param options - Configuration options for the heatmap overlay
+ * Position a canvas element in a Leaflet pane to cover the given geographic bounds.
+ * Uses Leaflet's coordinate system so the canvas moves correctly during pan/zoom.
  */
+function positionCanvasInPane(
+  canvasEl: HTMLCanvasElement,
+  map: L.Map,
+  geoBounds: Bounds
+): void {
+  const L = (window as unknown as Record<string, unknown>).L as typeof import('leaflet');
+  const sw = L.latLng(geoBounds.south, geoBounds.west);
+  const ne = L.latLng(geoBounds.north, geoBounds.east);
+
+  // Convert geographic bounds to layer pixel coordinates
+  const swPoint = map.latLngToLayerPoint(sw);
+  const nePoint = map.latLngToLayerPoint(ne);
+
+  const width = Math.abs(nePoint.x - swPoint.x);
+  const height = Math.abs(swPoint.y - nePoint.y);
+
+  canvasEl.style.position = 'absolute';
+  canvasEl.style.left = `${Math.min(swPoint.x, nePoint.x)}px`;
+  canvasEl.style.top = `${Math.min(swPoint.y, nePoint.y)}px`;
+  canvasEl.style.width = `${width}px`;
+  canvasEl.style.height = `${height}px`;
+}
+
 export function useHeatmapOverlay({
   mapReady,
   mapInstance,
@@ -120,147 +127,142 @@ export function useHeatmapOverlay({
   heatmapTileCoords,
   isHeatmapDataReady,
 }: UseHeatmapOverlayOptions): void {
-  const canvasOverlayRef = useRef<L.ImageOverlay | null>(null);
+  // The visible canvas that sits in the heatmapPane (DOM element)
+  const visibleCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Offscreen canvas for rendering (never in the DOM)
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const blobUrlRef = useRef<string | null>(null);
   const prevHeatmapHashRef = useRef<string>('');
+  const renderSeqRef = useRef(0);
+  const appliedSeqRef = useRef(0);
+  // Current geographic bounds of the visible canvas
+  const currentBoundsRef = useRef<Bounds | null>(null);
 
+  // Reposition the visible canvas when the map moves/zooms
+  const repositionCanvas = useCallback(() => {
+    if (!mapInstance || !visibleCanvasRef.current || !currentBoundsRef.current) return;
+    positionCanvasInPane(visibleCanvasRef.current, mapInstance, currentBoundsRef.current);
+  }, [mapInstance]);
+
+  // Set up map move listener for repositioning
   useEffect(() => {
     if (!mapReady || !mapInstance) return;
     
-    // Skip rendering if data is not ready for current tiles
-    // This prevents the "rough edges" flash when tiles change but data hasn't arrived
-    if (!isHeatmapDataReady) {
-      return;
-    }
+    // Leaflet fires 'zoomanim' during zoom animation and 'move' during pan
+    mapInstance.on('zoomanim', repositionCanvas);
+    mapInstance.on('move', repositionCanvas);
+    mapInstance.on('viewreset', repositionCanvas);
+    
+    return () => {
+      mapInstance.off('zoomanim', repositionCanvas);
+      mapInstance.off('move', repositionCanvas);
+      mapInstance.off('viewreset', repositionCanvas);
+    };
+  }, [mapReady, mapInstance, repositionCanvas]);
+
+  // Main render effect
+  useEffect(() => {
+    if (!mapReady || !mapInstance) return;
+    if (!isHeatmapDataReady) return;
 
     const currentHash = createHeatmapHash(heatmapPoints, heatmapOpacity, heatmapTileCoords);
-    if (currentHash === prevHeatmapHashRef.current) {
-      return; // Data hasn't changed, skip re-render
-    }
+    if (currentHash === prevHeatmapHashRef.current) return;
     prevHeatmapHashRef.current = currentHash;
 
-    // Track if effect is still active (for async callback safety)
-    let isActive = true;
+    const seq = ++renderSeqRef.current;
 
     const updateOverlay = async () => {
       try {
-        const L = (await import('leaflet')).default;
         if (!mapInstance) return;
 
-        // If no points, remove existing overlay and return
+        // Handle empty state
         if (heatmapPoints.length === 0) {
-          if (canvasOverlayRef.current) {
-            canvasOverlayRef.current.remove();
-            canvasOverlayRef.current = null;
-          }
-          if (blobUrlRef.current) {
-            URL.revokeObjectURL(blobUrlRef.current);
-            blobUrlRef.current = null;
+          if (heatmapTileCoords.length === 0 && visibleCanvasRef.current) {
+            visibleCanvasRef.current.remove();
+            visibleCanvasRef.current = null;
+            currentBoundsRef.current = null;
           }
           return;
         }
 
+        if (seq <= appliedSeqRef.current) return;
+
         const { bounds, latRange, lngRange } = calculateBounds(heatmapTileCoords, heatmapPoints);
         const centerLat = (bounds.north + bounds.south) / 2;
         const { width: canvasWidth, height: canvasHeight } = calculateCanvasDimensions(
-          latRange,
-          lngRange,
-          centerLat
+          latRange, lngRange, centerLat
         );
 
+        // Offscreen canvas for rendering
         if (!offscreenCanvasRef.current) {
           offscreenCanvasRef.current = document.createElement('canvas');
         }
+        const offscreen = offscreenCanvasRef.current;
+        offscreen.width = canvasWidth;
+        offscreen.height = canvasHeight;
 
-        const canvas = offscreenCanvasRef.current;
-        canvas.width = canvasWidth;
-        canvas.height = canvasHeight;
+        const offCtx = offscreen.getContext('2d');
+        if (!offCtx) return;
 
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        renderHeatmapToCanvas(ctx, heatmapPoints, bounds, canvas.width, canvas.height, {
+        // Render heatmap to offscreen canvas
+        renderHeatmapToCanvas(offCtx, heatmapPoints, bounds, canvasWidth, canvasHeight, {
           opacity: heatmapOpacity,
           cellSizeMeters: HEATMAP_CELL_SIZE_METERS,
         });
 
-        const overlayBounds: L.LatLngBoundsExpression = [
-          [bounds.south, bounds.west],
-          [bounds.north, bounds.east],
-        ];
+        // Discard if a newer render was already applied while we were rendering
+        if (seq <= appliedSeqRef.current) return;
 
-        canvas.toBlob((blob) => {
-          // Safety check: abort if effect was cleaned up or map was destroyed
-          if (!isActive || !blob || !mapInstance) return;
-          
-          const url = URL.createObjectURL(blob);
-          const oldUrl = blobUrlRef.current;
-          const oldOverlay = canvasOverlayRef.current;
-          blobUrlRef.current = url;
+        // Ensure heatmapPane exists
+        let pane = mapInstance.getPane('heatmapPane');
+        if (!pane) {
+          mapInstance.createPane('heatmapPane');
+          pane = mapInstance.getPane('heatmapPane');
+          if (pane) pane.style.zIndex = String(Z_INDEX.MAP_HEATMAP_PANE);
+        }
+        if (!pane) return;
 
-          // Create pane if needed
-          let pane = mapInstance.getPane('heatmapPane');
-          if (!pane) {
-            mapInstance.createPane('heatmapPane');
-            pane = mapInstance.getPane('heatmapPane');
-            if (pane) pane.style.zIndex = String(Z_INDEX.MAP_HEATMAP_PANE);
-          }
-          
-          // Pre-load the new image first
-          const tempImg = new Image();
-          tempImg.onload = () => {
-            // Safety check: abort if effect was cleaned up
-            if (!isActive || !mapInstance) return;
-            
-            // Image is now cached - create new overlay (will load instantly)
-            const newOverlay = L.imageOverlay(url, overlayBounds, {
-              opacity: 1,
-              interactive: false,
-              pane: 'heatmapPane',
-            });
-            
-            // Remove old overlay BEFORE adding new one to prevent double overlays
-            if (oldOverlay) {
-              oldOverlay.remove();
-            }
-            if (oldUrl) {
-              URL.revokeObjectURL(oldUrl);
-            }
-            
-            // Add new overlay to map
-            newOverlay.addTo(mapInstance);
-            
-            // Update ref
-            canvasOverlayRef.current = newOverlay;
-          };
-          tempImg.src = url;
-        }, 'image/png');
+        // Create visible canvas if needed
+        if (!visibleCanvasRef.current) {
+          const canvas = document.createElement('canvas');
+          canvas.style.pointerEvents = 'none';
+          pane.appendChild(canvas);
+          visibleCanvasRef.current = canvas;
+        }
 
+        const visible = visibleCanvasRef.current;
+
+        // Set the visible canvas dimensions to match the rendered content
+        visible.width = canvasWidth;
+        visible.height = canvasHeight;
+
+        // Copy offscreen content to visible canvas — this is SYNCHRONOUS, no decode cycle
+        const visCtx = visible.getContext('2d');
+        if (visCtx) {
+          visCtx.drawImage(offscreen, 0, 0);
+        }
+
+        // Position the canvas in the pane using Leaflet's coordinate system
+        currentBoundsRef.current = bounds;
+        positionCanvasInPane(visible, mapInstance, bounds);
+
+        appliedSeqRef.current = seq;
       } catch (error) {
         console.error('Error updating heatmap overlay:', error);
       }
     };
 
     updateOverlay();
-
-    return () => {
-      isActive = false;
-    };
   }, [mapReady, mapInstance, heatmapPoints, heatmapOpacity, heatmapTileCoords, isHeatmapDataReady]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (canvasOverlayRef.current) {
-        canvasOverlayRef.current.remove();
-        canvasOverlayRef.current = null;
-      }
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = null;
+      if (visibleCanvasRef.current) {
+        visibleCanvasRef.current.remove();
+        visibleCanvasRef.current = null;
       }
       offscreenCanvasRef.current = null;
+      currentBoundsRef.current = null;
     };
   }, []);
 }
