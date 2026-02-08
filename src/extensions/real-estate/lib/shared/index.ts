@@ -39,6 +39,5 @@ export type {
 } from './datasource';
 
 export {
-  createDataSource,
   createMultiSource,
 } from './datasource';

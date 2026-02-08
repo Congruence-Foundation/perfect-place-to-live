@@ -59,6 +59,25 @@ export const DETAILED_THRESHOLD_MAX = 500;
 export const DETAILED_THRESHOLD_STEP = 20;
 
 // =============================================================================
+// Detailed Mode Batch Fetching
+// =============================================================================
+
+/** Maximum properties to fetch per cluster in detailed mode */
+export const DETAILED_MODE_CLUSTER_FETCH_LIMIT = 50;
+
+/** Batch size for concurrent cluster fetches */
+export const CLUSTER_FETCH_BATCH_SIZE = 5;
+
+/** Delay between batch fetches in milliseconds */
+export const CLUSTER_FETCH_BATCH_DELAY_MS = 100;
+
+/** Number of API batches before flushing to cache (5 batches = 25 clusters) */
+export const CACHE_FLUSH_INTERVAL = 5;
+
+/** Threshold for significant cluster count change (triggers cache clear) */
+export const CLUSTER_CHANGE_THRESHOLD = 50;
+
+// =============================================================================
 // Fetch Limits
 // =============================================================================
 
@@ -185,6 +204,12 @@ export const DEFAULT_PRICE_VALUE_RANGE: [number, number] = [0, 100];
 
 /** Default data sources for property fetching */
 export const DEFAULT_DATA_SOURCES: PropertyDataSource[] = ['otodom', 'gratka'];
+
+/** Data source metadata for UI components */
+export const DATA_SOURCE_OPTIONS: { id: PropertyDataSource; label: string }[] = [
+  { id: 'otodom', label: 'Otodom' },
+  { id: 'gratka', label: 'Gratka' },
+];
 
 // =============================================================================
 // Transaction Type Price Defaults

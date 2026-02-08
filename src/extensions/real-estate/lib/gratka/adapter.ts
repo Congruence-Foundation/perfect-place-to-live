@@ -25,7 +25,7 @@ import { createUnifiedId } from '../shared/types';
 import {
   gratkaClient,
   buildGratkaSearchParams,
-  formatGratkaPrice,
+  formatGratkaDecimal,
 } from './client';
 import type {
   GratkaPropertyNode,
@@ -225,10 +225,10 @@ function toGratkaParams(params: UnifiedSearchParams): GratkaListingParametersInp
 
   // Price per meter filters (Gratka uses string format)
   if (params.pricePerMeterMin !== undefined) {
-    baseParams.searchParameters.priceM2From = formatGratkaPrice(params.pricePerMeterMin);
+    baseParams.searchParameters.priceM2From = formatGratkaDecimal(params.pricePerMeterMin);
   }
   if (params.pricePerMeterMax !== undefined) {
-    baseParams.searchParameters.priceM2To = formatGratkaPrice(params.pricePerMeterMax);
+    baseParams.searchParameters.priceM2To = formatGratkaDecimal(params.pricePerMeterMax);
   }
 
   // Building materials filter (convert to Gratka dictionaries format)

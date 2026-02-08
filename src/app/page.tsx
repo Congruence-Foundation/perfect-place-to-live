@@ -139,19 +139,10 @@ function HomeContent({
     onSettingsChange,
   });
 
-  // Bottom sheet height for mobile loading overlay positioning
-  const [bottomSheetHeight, setBottomSheetHeight] = useState<number>(
+  // Bottom sheet height callback for mobile (value consumed by BottomSheet)
+  const [, setBottomSheetHeight] = useState<number>(
     UI_CONFIG.DEFAULT_BOTTOM_SHEET_HEIGHT
   );
-
-  // Update to actual window height after mount (SSR hydration pattern)
-  // Using requestAnimationFrame to avoid synchronous setState in effect
-  useEffect(() => {
-    const updateHeight = () => {
-      setBottomSheetHeight(window.innerHeight * UI_CONFIG.BOTTOM_SHEET_HEIGHT_RATIO);
-    };
-    requestAnimationFrame(updateHeight);
-  }, []);
 
   const mapRef = useRef<MapContainerRef>(null);
   const { notification, showNotification } = useNotification();

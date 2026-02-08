@@ -12,9 +12,9 @@ import { Worker } from 'worker_threads';
 import * as os from 'os';
 import type { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/types';
 import { generateGrid, calculateAdaptiveGridSize } from '@/lib/geo/grid';
-import { SpatialIndex } from '@/lib/geo/haversine';
+import type { SpatialIndex } from '@/lib/geo/haversine';
 import { normalizeKValues, logKStats } from './calculator';
-import { PERFORMANCE_CONFIG, PARALLEL_CONFIG, POWER_MEAN_CONFIG } from '@/constants';
+import { PERFORMANCE_CONFIG, PARALLEL_CONFIG, POWER_MEAN_CONFIG, SPATIAL_INDEX_CONFIG } from '@/constants';
 import { createTimer } from '@/lib/profiling';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
@@ -55,11 +55,10 @@ function chunkArray<T>(array: T[], numChunks: number): T[][] {
  * -----------------------------------------------------
  * | Worker Function      | Source File                          | Source Function        |
  * |---------------------|--------------------------------------|------------------------|
- * | toRad()             | src/lib/geo/haversine.ts:8           | toRad()                |
- * | haversineDistance() | src/lib/geo/haversine.ts:15          | haversineDistance()    |
- * | SpatialIndex class  | src/lib/geo/haversine.ts:30-141      | SpatialIndex           |
- * | applyDistanceCurve()| src/lib/scoring/calculator.ts:125    | applyDistanceCurve()   |
- * | calculateK()        | src/lib/scoring/calculator.ts:203    | calculateK()           |
+ * | haversineDistance() | src/lib/geo/haversine.ts             | haversineDistance()    |
+ * | SpatialIndex class  | src/lib/geo/haversine.ts             | GenericSpatialIndex    |
+ * | applyDistanceCurve()| src/lib/scoring/calculator.ts        | applyDistanceCurve()   |
+ * | calculateK()        | src/lib/scoring/calculator.ts        | calculateK()           |
  * 
  * DUPLICATED CONSTANTS (must stay in sync with source):
  * -----------------------------------------------------
@@ -266,7 +265,7 @@ parentPort.postMessage(results);
 /**
  * Build spatial index and serialize it for worker transfer
  */
-function buildSpatialIndexData(pois: POI[], cellSize: number = 0.01): { cells: [string, POI[]][]; cellSize: number } {
+function buildSpatialIndexData(pois: POI[], cellSize: number = SPATIAL_INDEX_CONFIG.DEFAULT_CELL_SIZE_DEGREES): { cells: [string, POI[]][]; cellSize: number } {
   const cells = new Map<string, POI[]>();
   
   for (const poi of pois) {
@@ -352,7 +351,6 @@ export async function calculateHeatmapParallel(
   normalizeToViewport: boolean = false,
   prebuiltSpatialIndexes?: Map<string, SpatialIndex>
 ): Promise<HeatmapPoint[]> {
-  const startTime = performance.now();
   const stopTotalTimer = createTimer('calculator:total');
 
   // Calculate adaptive grid size if not provided
@@ -394,11 +392,6 @@ export async function calculateHeatmapParallel(
       lambda,
       normalizeToViewport,
       prebuiltSpatialIndexes
-    );
-    
-    const endTime = performance.now();
-    console.log(
-      `Calculated ${heatmapPoints.length} heatmap points in ${(endTime - startTime).toFixed(2)}ms (single-threaded, grid: ${effectiveGridSize}m)`
     );
     
     stopTotalTimer({ points: heatmapPoints.length, workers: 1, mode: 'single-threaded' });
@@ -449,11 +442,6 @@ export async function calculateHeatmapParallel(
       normalizeToViewport
     );
 
-    const endTime = performance.now();
-    console.log(
-      `Calculated ${heatmapPoints.length} heatmap points in ${(endTime - startTime).toFixed(2)}ms (fallback single-threaded, grid: ${effectiveGridSize}m)`
-    );
-
     stopTotalTimer({ points: heatmapPoints.length, workers: 1, mode: 'fallback-single-threaded' });
     return heatmapPoints;
   }
@@ -465,11 +453,6 @@ export async function calculateHeatmapParallel(
 
   // Log stats
   logKStats(heatmapPoints, `workers: ${numWorkers}`);
-
-  const endTime = performance.now();
-  console.log(
-    `Calculated ${heatmapPoints.length} heatmap points in ${(endTime - startTime).toFixed(2)}ms using ${numWorkers} workers (grid: ${effectiveGridSize}m)`
-  );
 
   stopTotalTimer({ points: heatmapPoints.length, workers: numWorkers, mode: 'parallel' });
   return heatmapPoints;

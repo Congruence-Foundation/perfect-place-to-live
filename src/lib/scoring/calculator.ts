@@ -2,6 +2,7 @@ import type { Point, POI, HeatmapPoint, Factor, Bounds, DistanceCurve } from '@/
 import { haversineDistance, SpatialIndex } from '@/lib/geo/haversine';
 import { generateGrid, calculateAdaptiveGridSize } from '@/lib/geo/grid';
 import { PERFORMANCE_CONFIG, DENSITY_BONUS, POWER_MEAN_CONFIG } from '@/constants';
+import { createTimer } from '@/lib/profiling';
 
 const { TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE } = PERFORMANCE_CONFIG;
 
@@ -345,10 +346,9 @@ export function calculateHeatmap(
   normalizeToViewport: boolean = false,
   prebuiltSpatialIndexes?: Map<string, SpatialIndex>
 ): HeatmapPoint[] {
-  const startTime = performance.now();
+  const stopTimer = createTimer('calculator:total');
 
   // Calculate adaptive grid size if not provided
-  // Use smaller grid for better resolution, but cap the number of points
   const effectiveGridSize = gridSize || calculateAdaptiveGridSize(bounds, TARGET_GRID_POINTS, MIN_CELL_SIZE, MAX_CELL_SIZE);
 
   // Generate grid points
@@ -372,10 +372,7 @@ export function calculateHeatmap(
   // Log K value distribution for debugging
   logKStats(heatmapPoints, `curve: ${distanceCurve}, sensitivity: ${sensitivity}, lambda: ${lambda}, normalized: ${normalizeToViewport}`);
 
-  const endTime = performance.now();
-  console.log(
-    `Calculated ${heatmapPoints.length} heatmap points in ${(endTime - startTime).toFixed(2)}ms (grid: ${effectiveGridSize}m)`
-  );
+  stopTimer({ points: heatmapPoints.length, gridSize: effectiveGridSize });
 
   return heatmapPoints;
 }

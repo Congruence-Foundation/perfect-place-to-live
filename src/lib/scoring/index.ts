@@ -12,9 +12,7 @@
 export {
   calculateHeatmap,
   calculateFactorBreakdown,
-  normalizeKValues,
-  logKStats,
   buildSpatialIndexes,
 } from './calculator';
 
-export type { FactorBreakdown } from './calculator';
+export type { FactorBreakdown, FactorBreakdownResult } from './calculator';

@@ -6,45 +6,29 @@ import type { POI } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { getTileKeyString, latLngToTile } from '@/lib/geo/tiles';
 
-/**
- * Validate that all tiles have the same zoom level
- * @throws Error if tiles have different zoom levels
- */
-export function validateTileZoomConsistency(tiles: TileCoord[]): number {
-  if (tiles.length === 0) {
-    throw new Error('Cannot validate zoom for empty tile array');
-  }
-  
+function validateTileZoomConsistency(tiles: TileCoord[]): number {
   const zoom = tiles[0].z;
   const invalidTile = tiles.find(t => t.z !== zoom);
-  
+
   if (invalidTile) {
-    throw new Error(`All tiles must have the same zoom level. Expected ${zoom}, found ${invalidTile.z}`);
+    throw new Error(
+      `All tiles must have the same zoom level. Expected ${zoom}, found ${invalidTile.z}`
+    );
   }
-  
+
   return zoom;
 }
 
-/**
- * Build a set of valid tile keys for O(1) lookup
- */
-export function buildTileKeySet(tiles: TileCoord[]): Set<string> {
-  const validTileKeys = new Set<string>();
-  for (const tile of tiles) {
-    validTileKeys.add(getTileKeyString(tile));
-  }
-  return validTileKeys;
+function buildTileKeySet(tiles: TileCoord[]): Set<string> {
+  return new Set(tiles.map(getTileKeyString));
 }
 
-/**
- * Initialize an empty result map with arrays for each tile and factor
- */
-export function initializeTileResultMap(
+function initializeTileResultMap(
   tiles: TileCoord[],
   factorIds: string[]
 ): Map<string, Record<string, POI[]>> {
   const result = new Map<string, Record<string, POI[]>>();
-  
+
   for (const tile of tiles) {
     const key = getTileKeyString(tile);
     const factorMap: Record<string, POI[]> = {};
@@ -53,21 +37,11 @@ export function initializeTileResultMap(
     }
     result.set(key, factorMap);
   }
-  
+
   return result;
 }
 
-/**
- * Find which tile contains a given point using direct coordinate calculation.
- * O(1) lookup instead of O(tiles) linear search.
- * 
- * @param lat - Latitude of the point
- * @param lng - Longitude of the point
- * @param zoom - Zoom level of the tiles
- * @param validTileKeys - Set of valid tile keys to check against
- * @returns The tile key or undefined if not in any valid tile
- */
-export function findTileForPointFast(
+function findTileKeyForPoint(
   lat: number,
   lng: number,
   zoom: number,
@@ -79,23 +53,8 @@ export function findTileForPointFast(
 }
 
 /**
- * Assign a POI to its corresponding tile in the result map
- */
-export function assignPOIToTile(
-  poi: POI,
-  factorId: string,
-  tileKey: string,
-  result: Map<string, Record<string, POI[]>>
-): void {
-  const tileData = result.get(tileKey);
-  if (tileData?.[factorId]) {
-    tileData[factorId].push(poi);
-  }
-}
-
-/**
- * Distribute POIs from a factor-keyed object to their respective tiles
- * Uses O(1) tile lookup for better performance with large POI sets
+ * Distribute POIs from a factor-keyed object to their respective tiles.
+ * Uses O(1) tile lookup via coordinate calculation.
  */
 export function distributePOIsByFactorToTiles(
   poisByFactor: Record<string, POI[]>,
@@ -112,10 +71,9 @@ export function distributePOIsByFactorToTiles(
 
   for (const [factorId, pois] of Object.entries(poisByFactor)) {
     for (const poi of pois) {
-      const tileKey = findTileForPointFast(poi.lat, poi.lng, zoom, validTileKeys);
-      
+      const tileKey = findTileKeyForPoint(poi.lat, poi.lng, zoom, validTileKeys);
       if (tileKey) {
-        assignPOIToTile(poi, factorId, tileKey, result);
+        result.get(tileKey)![factorId].push(poi);
       }
     }
   }

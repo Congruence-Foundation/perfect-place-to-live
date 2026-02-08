@@ -3,23 +3,14 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { UI_CONFIG } from '@/constants/performance';
 
-/**
- * Snap point configuration
- */
 interface SnapPointConfig {
   collapsedPercent: number;
   halfPercent: number;
   expandedPercent: number;
 }
 
-/**
- * Snap point names
- */
 type SnapPointName = 'collapsed' | 'half' | 'expanded';
 
-/**
- * Snap heights in pixels
- */
 interface SnapHeights {
   collapsed: number;
   half: number;
@@ -118,22 +109,15 @@ export function useSnapPoints(config: SnapPointConfig = DEFAULT_SNAP_CONFIG): Us
 
   /** Snap to the nearest snap point */
   const snapToNearest = useCallback((currentHeight: number): SnapPointName => {
-    const collapsedDist = Math.abs(currentHeight - snapHeights.collapsed);
-    const halfDist = Math.abs(currentHeight - snapHeights.half);
-    const expandedDist = Math.abs(currentHeight - snapHeights.expanded);
-    
-    const minDist = Math.min(collapsedDist, halfDist, expandedDist);
-    
-    if (minDist === collapsedDist) {
-      setHeight(snapHeights.collapsed);
-      return 'collapsed';
-    } else if (minDist === halfDist) {
-      setHeight(snapHeights.half);
-      return 'half';
-    } else {
-      setHeight(snapHeights.expanded);
-      return 'expanded';
-    }
+    const distances: [SnapPointName, number][] = [
+      ['collapsed', Math.abs(currentHeight - snapHeights.collapsed)],
+      ['half', Math.abs(currentHeight - snapHeights.half)],
+      ['expanded', Math.abs(currentHeight - snapHeights.expanded)],
+    ];
+
+    const nearest = distances.reduce((a, b) => (b[1] < a[1] ? b : a))[0];
+    setHeight(snapHeights[nearest]);
+    return nearest;
   }, [snapHeights]);
 
   /** Clamp height between collapsed and expanded */

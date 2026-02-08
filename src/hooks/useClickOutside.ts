@@ -20,7 +20,6 @@ export function useClickOutside(
   ref: RefObject<HTMLElement | null>,
   callback: () => void
 ): void {
-  // Use useLatestRef to keep callback up-to-date without re-subscribing
   const callbackRef = useLatestRef(callback);
 
   useEffect(() => {
@@ -32,5 +31,5 @@ export function useClickOutside(
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [ref, callbackRef]); // callbackRef is stable, so this won't cause re-subscriptions
+  }, [ref, callbackRef]);
 }

@@ -19,38 +19,33 @@ export function useNotification(): UseNotificationReturn {
   const [notification, setNotification] = useState<Notification | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const clearNotification = useCallback(() => {
+  /** Cancel any pending auto-dismiss timer */
+  const cancelTimer = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    setNotification(null);
   }, []);
 
+  const clearNotification = useCallback(() => {
+    cancelTimer();
+    setNotification(null);
+  }, [cancelTimer]);
+
   const showNotification = useCallback((message: string, duration: number = UI_CONFIG.NOTIFICATION_DURATION_MS) => {
-    // Clear any existing notification
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
+    cancelTimer();
 
     const id = Date.now().toString();
     setNotification({ id, message, duration });
 
-    // Auto-dismiss after duration
     timerRef.current = setTimeout(() => {
       setNotification(null);
       timerRef.current = null;
     }, duration);
-  }, []);
+  }, [cancelTimer]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    };
-  }, []);
+  // Cleanup timer on unmount
+  useEffect(() => cancelTimer, [cancelTimer]);
 
   return {
     notification,

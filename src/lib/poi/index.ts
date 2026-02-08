@@ -1,8 +1,3 @@
-/**
- * POI (Points of Interest) utilities
- * Re-exports all POI-related functions
- */
-
 // Overpass API
 export {
   fetchPOIsFromOverpass,

@@ -20,7 +20,7 @@ interface TransactionTypeButtonsProps {
  * Transaction Type Buttons Component
  * 
  * Shared component for selecting transaction type (None/Rent/Sell).
- * Used in both RealEstateSidebarPanel and mobile bottom sheet.
+ * Used in both sidebar and mobile bottom sheet.
  */
 export function TransactionTypeButtons({
   enabled,

@@ -12,14 +12,12 @@ import type { PriceCategory } from '../types';
 
 /**
  * Color for properties without price data (Gray-400)
- * Internal constant - use PRICE_CATEGORY_THEME.no_data.primary for external access
  */
 const NO_DATA_COLOR = '#9ca3af';
 
 /**
  * Price category theme configuration
  * Each category has a primary color (for icons/glow) and a background color (for badges)
- * Internal constant - used to derive PRICE_CATEGORY_COLORS and PRICE_BADGE_COLORS
  */
 const PRICE_CATEGORY_THEME: Record<PriceCategory, { primary: string; bg: string }> = {
   great_deal: { primary: '#16a34a', bg: '#f0fdf4' },  // Green-600 / Green-50
@@ -31,8 +29,7 @@ const PRICE_CATEGORY_THEME: Record<PriceCategory, { primary: string; bg: string 
 };
 
 /**
- * Legacy export for backward compatibility
- * Maps price category to primary color
+ * Maps price category to its primary color (for icons, glow effects, sliders)
  */
 export const PRICE_CATEGORY_COLORS: Record<PriceCategory, string> = Object.fromEntries(
   Object.entries(PRICE_CATEGORY_THEME).map(([key, value]) => [key, value.primary])

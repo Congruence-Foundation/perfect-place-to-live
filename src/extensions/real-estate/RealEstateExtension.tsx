@@ -1,7 +1,7 @@
 'use client';
 
 import type { MapExtension } from '@/extensions/types';
-import { RealEstateSidebarPanel, RealEstateFiltersContent, RealEstateDebugPanel, RealEstateSettingsPanel } from './components';
+import { RealEstateFiltersContent, RealEstateDebugPanel, RealEstateSettingsPanel } from './components';
 import { RealEstateController } from './RealEstateController';
 
 // Extension ID
@@ -16,7 +16,7 @@ export function createRealEstateExtension(): MapExtension {
     name: 'Real Estate',
     description: 'Display property listings from multiple sources (Otodom, Gratka)',
     Controller: RealEstateController,
-    SidebarPanel: RealEstateSidebarPanel,
+    SidebarPanel: RealEstateFiltersContent,
     BottomSheetContent: RealEstateFiltersContent,
     DebugPanel: RealEstateDebugPanel,
     SettingsPanel: RealEstateSettingsPanel,

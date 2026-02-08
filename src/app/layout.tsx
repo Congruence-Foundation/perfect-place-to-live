@@ -1,22 +1,22 @@
-import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { Providers } from "@/components/Providers";
-import { NextIntlClientProvider } from "next-intl";
-import { getMessages, getLocale } from "next-intl/server";
+import type { Metadata, Viewport } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
+import { Providers } from '@/components/Providers';
+import { NextIntlClientProvider } from 'next-intl';
+import { getMessages, getLocale } from 'next-intl/server';
 
 const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin", "latin-ext"],
+  variable: '--font-inter',
+  subsets: ['latin', 'latin-ext'],
 });
 
 export const metadata: Metadata = {
-  title: "Living Location Heatmap",
-  description: "Find the best places to live based on proximity to amenities",
+  title: 'Living Location Heatmap',
+  description: 'Find the best places to live based on proximity to amenities',
 };
 
 export const viewport: Viewport = {
-  width: "device-width",
+  width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,

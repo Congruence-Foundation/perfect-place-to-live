@@ -7,7 +7,7 @@ import { fromOtodomRoomCount } from '@/extensions/real-estate/lib/otodom';
 import { isValidBounds, tileToBounds } from '@/lib/geo';
 import { hashFilters } from '@/lib/geo/tiles';
 import { getCachedTile, setCachedTile, generateTileCacheKey, type TileCacheEntry } from '@/lib/tile-cache';
-import { errorResponse, handleApiError, isValidTileCoord } from '@/lib/api-utils';
+import { errorResponse, handleApiError, isValidTileCoord, parseJsonBody } from '@/lib/api-utils';
 import { createTimer } from '@/lib/profiling';
 import type { Bounds } from '@/types/poi';
 
@@ -86,18 +86,9 @@ function toUnifiedSearchParams(
 export async function POST(request: NextRequest) {
   const stopTotalTimer = createTimer('properties-api:total');
   try {
-    // Parse request body with error handling for empty/malformed JSON
-    let body: ExtendedPropertyRequest;
-    try {
-      const text = await request.text();
-      if (!text || text.trim() === '') {
-        return errorResponse(new Error('Request body is empty'), 400);
-      }
-      body = JSON.parse(text);
-    } catch {
-      // This can happen when the request is aborted mid-flight
-      return errorResponse(new Error('Invalid JSON in request body'), 400);
-    }
+    const parseResult = await parseJsonBody<ExtendedPropertyRequest>(request);
+    if (parseResult instanceof Response) return parseResult;
+    const body = parseResult;
     
     const { 
       bounds: requestBounds, 

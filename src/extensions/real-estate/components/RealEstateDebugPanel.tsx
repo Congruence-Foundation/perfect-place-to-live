@@ -2,12 +2,7 @@
 
 import { useRealEstateExtension } from '../hooks';
 import type { PropertyDataSource } from '../config/filters';
-
-/** Data sources to display in debug panel */
-const DATA_SOURCES: { id: PropertyDataSource; label: string }[] = [
-  { id: 'otodom', label: 'Otodom' },
-  { id: 'gratka', label: 'Gratka' },
-];
+import { DATA_SOURCE_OPTIONS } from '../config/constants';
 
 interface StatRowProps {
   label: string;
@@ -36,7 +31,7 @@ function StatGroup({ label, total, bySource }: StatGroupProps) {
   return (
     <>
       <StatRow label={label} value={total} isHeader />
-      {DATA_SOURCES.map(({ id, label }) => (
+      {DATA_SOURCE_OPTIONS.map(({ id, label }) => (
         <StatRow key={id} label={label} value={bySource[id]} />
       ))}
     </>

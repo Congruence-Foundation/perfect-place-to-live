@@ -3,25 +3,15 @@ import type { Bounds, POI } from '@/types';
 import { createTimer } from '@/lib/profiling';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { getCombinedBounds } from '@/lib/geo/bounds';
-import {
-  initializeTileResultMap,
-  assignPOIToTile,
-  findTileForPointFast,
-  validateTileZoomConsistency,
-  buildTileKeySet,
-} from './tile-utils';
+import { distributePOIsByFactorToTiles } from './tile-utils';
 
-/**
- * Create a Neon SQL client
- * Uses connection pooling for serverless environments
- */
 const sql = neon(process.env.DATABASE_URL!);
 
 /**
  * Database row type for POI queries
  */
 interface POIRow {
-  id: number | string;  // Can be string for bigint IDs from PostgreSQL
+  id: number | string;
   factor_id: string;
   lat: number;
   lng: number;
@@ -31,12 +21,10 @@ interface POIRow {
 
 /**
  * Validate that a row has the required POI fields
- * Returns true if the row is a valid POIRow
  */
 function isValidPOIRow(row: unknown): row is POIRow {
   if (!row || typeof row !== 'object') return false;
   const r = row as Record<string, unknown>;
-  // id can be number or string (bigint from PostgreSQL)
   const hasValidId = typeof r.id === 'number' || typeof r.id === 'string';
   return (
     hasValidId &&
@@ -49,8 +37,8 @@ function isValidPOIRow(row: unknown): row is POIRow {
 }
 
 /**
- * Filter and validate POI rows from database result
- * Logs warnings for invalid rows but doesn't throw
+ * Filter and validate POI rows from database result.
+ * Logs warnings for invalid rows but doesn't throw.
  */
 function validatePOIRows(result: unknown[]): POIRow[] {
   const validRows: POIRow[] = [];
@@ -72,10 +60,9 @@ function validatePOIRows(result: unknown[]): POIRow[] {
 }
 
 /**
- * Convert a database row to a POI object
- * Note: For very large bigint IDs from PostgreSQL, parseInt may lose precision
- * beyond Number.MAX_SAFE_INTEGER (9007199254740991). This is acceptable for
- * display purposes but should not be used for database lookups.
+ * Convert a database row to a POI object.
+ * For very large bigint IDs from PostgreSQL, parseInt may lose precision
+ * beyond Number.MAX_SAFE_INTEGER. Acceptable for display, not for DB lookups.
  */
 function rowToPOI(row: POIRow): POI {
   let id: number;
@@ -96,18 +83,13 @@ function rowToPOI(row: POIRow): POI {
   };
 }
 
-/**
- * Group POI rows by factor_id
- */
 function groupByFactor(rows: POIRow[], factorIds: string[]): Record<string, POI[]> {
   const grouped: Record<string, POI[]> = {};
   
-  // Initialize empty arrays for all requested factors
   for (const factorId of factorIds) {
     grouped[factorId] = [];
   }
 
-  // Group results by factor_id
   for (const row of rows) {
     if (grouped[row.factor_id]) {
       grouped[row.factor_id].push(rowToPOI(row));
@@ -118,11 +100,7 @@ function groupByFactor(rows: POIRow[], factorIds: string[]): Record<string, POI[
 }
 
 /**
- * Fetch POIs for a single bounding box
- * 
- * @param factorIds - Array of factor IDs to fetch
- * @param bounds - Geographic bounding box
- * @returns POIs grouped by factor ID
+ * Fetch POIs for a single bounding box, grouped by factor ID
  */
 export async function getPOIsFromDB(
   factorIds: string[],
@@ -145,16 +123,8 @@ export async function getPOIsFromDB(
 }
 
 /**
- * Fetch POIs for multiple tiles in a single database query
- * 
- * This is much more efficient than fetching each tile separately because:
- * 1. Single database round-trip instead of N round-trips
- * 2. PostGIS can optimize the spatial query across the combined region
- * 3. Reduces connection overhead
- * 
- * @param tiles - Array of tile coordinates to fetch
- * @param factorIds - Array of factor IDs to fetch
- * @returns Map of tile key to POIs grouped by factor ID
+ * Fetch POIs for multiple tiles in a single database query.
+ * Uses a combined bounding box, then distributes results to individual tiles.
  */
 export async function getPOIsForTilesBatched(
   tiles: TileCoord[],
@@ -164,7 +134,6 @@ export async function getPOIsForTilesBatched(
     return new Map();
   }
 
-  // Calculate combined bounds for all tiles
   const combinedBounds = getCombinedBounds(tiles);
   
   const stopQueryTimer = createTimer('poi-db:batch-query');
@@ -190,35 +159,6 @@ export async function getPOIsForTilesBatched(
   });
 
   // Distribute POIs to their respective tiles
-  return distributePOIsToTiles(validatePOIRows(result), tiles, factorIds);
-}
-
-/**
- * Distribute POIs from a combined query to their respective tiles
- * Each POI is assigned to the tile that contains its coordinates
- * Uses O(1) tile lookup for better performance
- */
-function distributePOIsToTiles(
-  rows: POIRow[],
-  tiles: TileCoord[],
-  factorIds: string[]
-): Map<string, Record<string, POI[]>> {
-  if (tiles.length === 0) {
-    return new Map();
-  }
-
-  const zoom = validateTileZoomConsistency(tiles);
-  const validTileKeys = buildTileKeySet(tiles);
-  const result = initializeTileResultMap(tiles, factorIds);
-
-  for (const row of rows) {
-    const poi = rowToPOI(row);
-    const tileKey = findTileForPointFast(poi.lat, poi.lng, zoom, validTileKeys);
-    
-    if (tileKey) {
-      assignPOIToTile(poi, row.factor_id, tileKey, result);
-    }
-  }
-
-  return result;
+  const poisByFactor = groupByFactor(validatePOIRows(result), factorIds);
+  return distributePOIsByFactorToTiles(poisByFactor, tiles, factorIds);
 }

@@ -28,8 +28,3 @@ export const POLAND_CENTER = {
   lat: 52.0,
   lng: 19.0,
 } as const;
-
-/**
- * Overpass API endpoint URL
- */
-export const OVERPASS_API_URL = 'https://overpass-api.de/api/interpreter';

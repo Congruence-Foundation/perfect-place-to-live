@@ -42,6 +42,10 @@ import {
   GRATKA_DEFAULT_PAGE_SIZE,
   GRATKA_CLUSTER_RADIUS_METERS,
 } from '../../config/constants';
+import { createTimer, logPerf } from '@/lib/profiling';
+import { cacheGet, cacheSet } from '@/lib/cache';
+import { CACHE_CONFIG } from '@/constants/performance';
+import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '@/lib/geo';
 
 // ============================================
 // TYPES
@@ -59,10 +63,6 @@ interface CacheKeyFilters {
   areaMax?: number;
   rooms?: number[];
 }
-import { createTimer, logPerf } from '@/lib/profiling';
-import { cacheGet, cacheSet } from '@/lib/cache';
-import { CACHE_CONFIG } from '@/constants/performance';
-import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from '@/lib/geo';
 
 const GRATKA_HEADERS: Record<string, string> = {
   accept: 'application/json',
@@ -410,9 +410,6 @@ query getLocationSuggestions(
 export function formatGratkaDecimal(value: number): string {
   return value.toFixed(2);
 }
-
-// Alias for backward compatibility and semantic clarity
-export const formatGratkaPrice = formatGratkaDecimal;
 
 /**
  * Build default search parameters with map bounds

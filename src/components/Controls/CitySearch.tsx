@@ -8,11 +8,8 @@ import { Search, Loader2, X, LocateFixed } from 'lucide-react';
 import { useClickOutside } from '@/hooks';
 import { UI_CONFIG } from '@/constants/performance';
 
-const SEARCH_DEBOUNCE_MS = UI_CONFIG.FACTORS_DEBOUNCE_MS;
 const MIN_SEARCH_LENGTH = 2;
 const BLUR_FOCUS_DELAY_MS = 150;
-// Use centralized geolocation constants from UI_CONFIG
-const { GEOLOCATION_TIMEOUT_MS, GEOLOCATION_MAX_AGE_MS } = UI_CONFIG;
 
 /** Extract the primary city/place name from a Nominatim display_name */
 function extractCityName(displayName: string): string {
@@ -137,7 +134,7 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
 
     debounceRef.current = setTimeout(() => {
       searchCity(value);
-    }, SEARCH_DEBOUNCE_MS);
+    }, UI_CONFIG.FACTORS_DEBOUNCE_MS);
   };
 
   const handleSelectResult = (result: SearchResult) => {
@@ -203,8 +200,8 @@ export default function CitySearch({ onCitySelect, isMobile = false }: CitySearc
       },
       {
         enableHighAccuracy: true,
-        timeout: GEOLOCATION_TIMEOUT_MS,
-        maximumAge: GEOLOCATION_MAX_AGE_MS,
+        timeout: UI_CONFIG.GEOLOCATION_TIMEOUT_MS,
+        maximumAge: UI_CONFIG.GEOLOCATION_MAX_AGE_MS,
       }
     );
   }, [onCitySelect, t]);

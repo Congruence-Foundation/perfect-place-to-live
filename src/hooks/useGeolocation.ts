@@ -1,5 +1,6 @@
-import { useEffect, useRef, useLayoutEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { UI_CONFIG } from '@/constants/performance';
+import { useLatestRef } from './useLatestRef';
 
 interface GeolocationOptions {
   /** Callback when position is successfully obtained */
@@ -13,9 +14,6 @@ interface GeolocationOptions {
 /**
  * Hook to request user's geolocation on mount.
  * Only attempts geolocation once per component lifecycle.
- * 
- * Note: Callbacks are captured in refs to avoid re-triggering the effect
- * when the consumer doesn't memoize them.
  */
 export function useGeolocation({
   onSuccess,
@@ -23,14 +21,8 @@ export function useGeolocation({
   enabled = true,
 }: GeolocationOptions): void {
   const attemptedRef = useRef(false);
-  const onSuccessRef = useRef(onSuccess);
-  const onErrorRef = useRef(onError);
-
-  // Keep refs up to date (must be in effect to avoid updating during render)
-  useLayoutEffect(() => {
-    onSuccessRef.current = onSuccess;
-    onErrorRef.current = onError;
-  });
+  const onSuccessRef = useLatestRef(onSuccess);
+  const onErrorRef = useLatestRef(onError);
 
   useEffect(() => {
     if (!enabled || attemptedRef.current) return;
@@ -47,7 +39,6 @@ export function useGeolocation({
         onSuccessRef.current(latitude, longitude);
       },
       () => {
-        // Geolocation not available or denied
         onErrorRef.current?.();
       },
       {

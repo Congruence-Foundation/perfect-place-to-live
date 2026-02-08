@@ -114,6 +114,32 @@ const K_VALUE_GRADIENT: ColorStop[] = [
 ];
 
 /**
+ * Interpolate RGB values for a clamped K value (0-1) along the gradient.
+ * Shared by both getColorForK (string output) and the pre-computed LUT.
+ */
+function interpolateGradient(k: number): { r: number; g: number; b: number } {
+  let lower = K_VALUE_GRADIENT[0];
+  let upper = K_VALUE_GRADIENT[K_VALUE_GRADIENT.length - 1];
+
+  for (let i = 0; i < K_VALUE_GRADIENT.length - 1; i++) {
+    if (k >= K_VALUE_GRADIENT[i].pos && k <= K_VALUE_GRADIENT[i + 1].pos) {
+      lower = K_VALUE_GRADIENT[i];
+      upper = K_VALUE_GRADIENT[i + 1];
+      break;
+    }
+  }
+
+  const range = upper.pos - lower.pos;
+  const t = range > 0 ? (k - lower.pos) / range : 0;
+
+  return {
+    r: Math.round(lower.r + (upper.r - lower.r) * t),
+    g: Math.round(lower.g + (upper.g - lower.g) * t),
+    b: Math.round(lower.b + (upper.b - lower.b) * t),
+  };
+}
+
+/**
  * Color interpolation for K values
  * Uses ABSOLUTE K values (not normalized) so colors are consistent
  * K is 0-1 where 0 = excellent, 1 = poor
@@ -123,29 +149,7 @@ export function getColorForK(k: number): string {
     return DEFAULT_FALLBACK_COLOR;
   }
   
-  // Clamp K to 0-1 range
-  const clamped = Math.max(0, Math.min(1, k));
-  
-  // Find the two color stops to interpolate between
-  let lower = K_VALUE_GRADIENT[0];
-  let upper = K_VALUE_GRADIENT[K_VALUE_GRADIENT.length - 1];
-  
-  for (let i = 0; i < K_VALUE_GRADIENT.length - 1; i++) {
-    if (clamped >= K_VALUE_GRADIENT[i].pos && clamped <= K_VALUE_GRADIENT[i + 1].pos) {
-      lower = K_VALUE_GRADIENT[i];
-      upper = K_VALUE_GRADIENT[i + 1];
-      break;
-    }
-  }
-  
-  // Interpolate between the two stops
-  const range = upper.pos - lower.pos;
-  const t = range > 0 ? (clamped - lower.pos) / range : 0;
-  
-  const r = Math.round(lower.r + (upper.r - lower.r) * t);
-  const g = Math.round(lower.g + (upper.g - lower.g) * t);
-  const b = Math.round(lower.b + (upper.b - lower.b) * t);
-  
+  const { r, g, b } = interpolateGradient(Math.max(0, Math.min(1, k)));
   return `rgb(${r},${g},${b})`;
 }
 
@@ -162,24 +166,11 @@ function buildColorLut(): Uint8Array {
   // 3 bytes per entry: [r, g, b, r, g, b, ...]
   const lut = new Uint8Array(COLOR_LUT_SIZE * 3);
   for (let i = 0; i < COLOR_LUT_SIZE; i++) {
-    const k = i / (COLOR_LUT_SIZE - 1);
-    
-    let lower = K_VALUE_GRADIENT[0];
-    let upper = K_VALUE_GRADIENT[K_VALUE_GRADIENT.length - 1];
-    for (let j = 0; j < K_VALUE_GRADIENT.length - 1; j++) {
-      if (k >= K_VALUE_GRADIENT[j].pos && k <= K_VALUE_GRADIENT[j + 1].pos) {
-        lower = K_VALUE_GRADIENT[j];
-        upper = K_VALUE_GRADIENT[j + 1];
-        break;
-      }
-    }
-    const range = upper.pos - lower.pos;
-    const t = range > 0 ? (k - lower.pos) / range : 0;
-    
+    const { r, g, b } = interpolateGradient(i / (COLOR_LUT_SIZE - 1));
     const idx = i * 3;
-    lut[idx]     = Math.round(lower.r + (upper.r - lower.r) * t);
-    lut[idx + 1] = Math.round(lower.g + (upper.g - lower.g) * t);
-    lut[idx + 2] = Math.round(lower.b + (upper.b - lower.b) * t);
+    lut[idx]     = r;
+    lut[idx + 1] = g;
+    lut[idx + 2] = b;
   }
   return lut;
 }

@@ -24,10 +24,8 @@ export interface GeoLocated {
   lng: number;
 }
 
-/**
- * Distance function type for spatial index
- */
-export type DistanceFunction<T extends GeoLocated> = (p1: Point, p2: T) => number;
+/** Distance function type for spatial index */
+type DistanceFunction<T extends GeoLocated> = (p1: Point, p2: T) => number;
 
 /**
  * Generic grid-based spatial index for faster nearest neighbor queries.

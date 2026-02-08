@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 
 import type { HeatmapPoint, POI, Factor, Bounds } from '@/types';
-import { Z_INDEX } from '@/constants';
 import { useLatestRef } from '@/hooks';
 import { calculateFactorBreakdown } from '@/lib/scoring';
 import { useMapStore } from '@/stores/mapStore';
@@ -27,9 +26,6 @@ import {
   OSM_TILE_URL,
   OSM_ATTRIBUTION,
 } from './constants';
-
-// Re-export types for backward compatibility
-export type { PopupTranslations, FactorTranslations };
 
 export interface MapViewRef {
   flyTo: (lat: number, lng: number, zoom?: number) => void;
@@ -209,12 +205,6 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
         }).addTo(map);
 
         extensionLayerGroupRef.current = L.layerGroup().addTo(map);
-        
-        map.createPane('heatmapPane');
-        const heatmapPane = map.getPane('heatmapPane');
-        if (heatmapPane) {
-          heatmapPane.style.zIndex = String(Z_INDEX.MAP_HEATMAP_PANE);
-        }
 
         mapInstanceRef.current = map;
 

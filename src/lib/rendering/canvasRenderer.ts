@@ -5,7 +5,7 @@
  * changes per point), this renderer:
  * 1. Maps each heatmap point to a cell in the pixel buffer
  * 2. Writes RGBA values directly into an ImageData Uint8ClampedArray
- * 3. Applies a fast box blur (3 passes ≈ Gaussian) for smooth blending
+ * 3. Applies a fast box blur (2 passes ≈ Gaussian) for smooth blending
  * 4. Writes the result in a single putImageData call
  *
  * This reduces render time from ~200ms+ to ~10-20ms for 72k points.
@@ -39,7 +39,6 @@ function blurH(src: Uint8ClampedArray, dst: Uint8ClampedArray, w: number, h: num
     const rowOffset = y * w * 4;
 
     // Seed the accumulator with the left-edge pixel × radius
-    const firstIdx = rowOffset;
     for (let x = -radius; x <= radius; x++) {
       const idx = rowOffset + Math.max(0, Math.min(x, w - 1)) * 4;
       ri += src[idx];
@@ -213,7 +212,7 @@ export function renderHeatmapToCanvas(
 
   // --- Box blur for smooth blending ---
   // Blur radius is proportional to cell size (just enough to smooth cell edges)
-  // 3-pass box blur at radius r ≈ Gaussian at sigma ≈ r*0.65, so r=3 ≈ 2px Gaussian
+  // 2-pass box blur at radius r ≈ Gaussian at sigma ≈ r*0.65, so r=3 ≈ 2px Gaussian
   const blurRadius = Math.max(2, Math.min(4, (cellPx / 3) | 0));
   boxBlur(pixels, canvasWidth, canvasHeight, blurRadius);
 

@@ -107,12 +107,8 @@ export const useMapStore = create<MapStore>()(
       // Initial state
       ...initialState,
       
-      // Bulk update action
-      setMapContext: (context) => set(
-        (state) => ({ ...state, ...context }),
-        false,
-        'setMapContext'
-      ),
+      // Bulk update action (Zustand's set() shallow-merges by default)
+      setMapContext: (context) => set(context, false, 'setMapContext'),
       
       // Set map as ready with all instances
       setMapReady: (map, L, layerGroup) => set(
@@ -126,7 +122,6 @@ export const useMapStore = create<MapStore>()(
         'setMapReady'
       ),
       
-      // Individual setters (only those actually used)
       setHeatmapTileRadius: (heatmapTileRadius) => set({ heatmapTileRadius }, false, 'setHeatmapTileRadius'),
       setPoiBufferScale: (poiBufferScale) => set({ poiBufferScale }, false, 'setPoiBufferScale'),
       setUsePrefetchMode: (usePrefetchMode) => set({ usePrefetchMode }, false, 'setUsePrefetchMode'),

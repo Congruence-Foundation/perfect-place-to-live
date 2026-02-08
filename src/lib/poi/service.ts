@@ -1,18 +1,3 @@
-/**
- * Unified POI fetching service
- * 
- * Provides a single interface for fetching POIs from either:
- * - Neon PostgreSQL database (fast, pre-cached)
- * - Overpass API (real-time, slower)
- * 
- * Both sources return POIs with consistent interface:
- * - id: number
- * - lat: number
- * - lng: number
- * - tags: Record<string, string>
- * - name?: string
- */
-
 import type { Bounds, POI, FactorDef, POIDataSource } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
 import { getPOIsFromDB, getPOIsForTilesBatched as getPOIsForTilesBatchedDB } from './db';
@@ -83,18 +68,7 @@ async function fetchFromOverpassFallback(
 
 /**
  * Fetches POIs with automatic fallback from Neon to Overpass.
- * 
- * This function handles:
- * 1. Checking cache for Neon source
- * 2. Fetching uncached POIs
- * 3. Falling back to Overpass if Neon returns empty or errors
- * 4. Caching results
- * 
- * @param factors - Array of factor definitions with IDs and OSM tags
- * @param bounds - Geographic bounding box for POI fetching
- * @param preferredSource - Preferred data source (default: 'neon')
- * @param existingPoiData - Optional existing POI data to merge with
- * @returns POI data map and the actual data source used
+ * Checks cache, fetches uncached, falls back on empty/error, and caches results.
  */
 export async function fetchPOIsWithFallback(
   factors: FactorDef[],
@@ -162,14 +136,8 @@ export async function fetchPOIsWithFallback(
 }
 
 /**
- * Fetches POIs from the specified data source within the given bounds.
- * 
- * @param factorTags - Array of factor definitions with IDs and OSM tags
- * @param bounds - Geographic bounding box
- * @param source - Data source: 'neon' (fast, cached) or 'overpass' (real-time)
- * @param signal - Optional AbortSignal for cancellation (only used with Overpass)
- * @returns POIs grouped by factor ID
- * @throws {POIFetchError} If the fetch operation fails
+ * Fetches POIs from the specified data source.
+ * @throws {POIFetchError}
  */
 export async function fetchPOIs(
   factorTags: FactorDef[],
@@ -198,19 +166,8 @@ export async function fetchPOIs(
 }
 
 /**
- * Fetches POIs for multiple tiles in a single batched operation.
- * 
- * This is significantly more efficient than fetching tiles individually:
- * - Single database/API call instead of N calls
- * - Avoids rate limiting issues with Overpass
- * - Reduces network overhead
- * 
- * @param tiles - Array of tile coordinates to fetch
- * @param factorTags - Array of factor definitions with IDs and OSM tags
- * @param source - Data source: 'neon' (fast, cached) or 'overpass' (real-time)
- * @param signal - Optional AbortSignal for cancellation
- * @returns Map of tile key (z:x:y) to POIs grouped by factor ID
- * @throws {POIFetchError} If the fetch operation fails
+ * Fetches POIs for multiple tiles in a single batched query.
+ * @throws {POIFetchError}
  */
 export async function fetchPOIsBatched(
   tiles: TileCoord[],

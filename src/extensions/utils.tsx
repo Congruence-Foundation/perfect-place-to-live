@@ -43,4 +43,3 @@ export function renderExtensionComponents<K extends ExtensionComponentKey>(
 
   return <>{components}</>;
 }
-

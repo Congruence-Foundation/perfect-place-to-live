@@ -9,7 +9,7 @@ import type { FactorBreakdown } from '@/lib/scoring';
 /**
  * Translations for heatmap/location analysis popups
  */
-export interface HeatmapPopupTranslations {
+export interface PopupTranslations {
   excellent: string;
   good: string;
   average: string;
@@ -21,14 +21,11 @@ export interface HeatmapPopupTranslations {
   noData: string;
 }
 
-// Type alias used throughout the codebase
-export type PopupTranslations = HeatmapPopupTranslations;
-
 // Factor name translations type
 export type FactorTranslations = Record<string, string>;
 
 // Default translations (English)
-export const defaultPopupTranslations: HeatmapPopupTranslations = {
+export const defaultPopupTranslations: PopupTranslations = {
   excellent: 'Excellent',
   good: 'Good',
   average: 'Average',
@@ -41,7 +38,7 @@ export const defaultPopupTranslations: HeatmapPopupTranslations = {
 };
 
 // Get rating label for K value
-function getRatingLabel(k: number, translations: HeatmapPopupTranslations): { label: string; emoji: string } {
+function getRatingLabel(k: number, translations: PopupTranslations): { label: string; emoji: string } {
   if (k < SCORE_THRESHOLDS.EXCELLENT) return { label: translations.excellent, emoji: '🌟' };
   if (k < SCORE_THRESHOLDS.GOOD) return { label: translations.good, emoji: '👍' };
   if (k < SCORE_THRESHOLDS.AVERAGE) return { label: translations.average, emoji: '😐' };
@@ -55,7 +52,7 @@ function getRatingLabel(k: number, translations: HeatmapPopupTranslations): { la
 export function generatePopupContent(
   k: number,
   breakdown: FactorBreakdown[],
-  translations: HeatmapPopupTranslations,
+  translations: PopupTranslations,
   factorTranslations: FactorTranslations
 ): string {
   const allNoPOIs = breakdown.length > 0 && breakdown.every(item => item.noPOIs);

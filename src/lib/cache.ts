@@ -4,38 +4,25 @@ import { CACHE_CONFIG } from '@/constants/performance';
 // In-memory cache for development/fallback
 const memoryCache = new Map<string, { data: unknown; expiresAt: number }>();
 
-// Lazy-initialize Redis client with proper singleton pattern
+// Lazy-initialize Redis client with singleton pattern
 let redis: Redis | null = null;
 let redisInitPromise: Promise<Redis | null> | null = null;
 
-/**
- * Check if Upstash Redis is available
- */
 function isRedisAvailable(): boolean {
   return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
 }
 
 /**
- * Get Redis client (lazy initialization with proper race condition protection)
- * Uses promise-based synchronization to ensure only one initialization occurs
+ * Get Redis client (lazy initialization with race-condition protection).
+ * Uses promise-based synchronization to ensure only one initialization occurs.
  */
 async function getRedisAsync(): Promise<Redis | null> {
   if (!isRedisAvailable()) return null;
-  
-  // Return existing client if already initialized
   if (redis) return redis;
+  if (redisInitPromise) return redisInitPromise;
   
-  // If initialization is in progress, wait for it
-  if (redisInitPromise) {
-    return redisInitPromise;
-  }
-  
-  // Start initialization and store the promise
-  // Note: We intentionally don't clear redisInitPromise on success since
-  // the redis client is cached. We only clear on error to allow retry.
   redisInitPromise = (async () => {
     try {
-      // Double-check after acquiring the "lock"
       if (!redis) {
         redis = new Redis({
           url: process.env.UPSTASH_REDIS_REST_URL!,
@@ -45,8 +32,7 @@ async function getRedisAsync(): Promise<Redis | null> {
       return redis;
     } catch (error) {
       console.error('Redis initialization error:', error);
-      // Clear promise only on error to allow retry
-      redisInitPromise = null;
+      redisInitPromise = null; // Allow retry on failure
       return null;
     }
   })();
@@ -54,9 +40,7 @@ async function getRedisAsync(): Promise<Redis | null> {
   return redisInitPromise;
 }
 
-/**
- * Get a value from cache
- */
+/** Get a value from cache (Redis with in-memory fallback) */
 export async function cacheGet<T>(key: string): Promise<T | null> {
   try {
     const client = await getRedisAsync();
@@ -69,8 +53,6 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data as T;
     }
-
-    // Clean up expired entry
     if (cached) {
       memoryCache.delete(key);
     }
@@ -82,9 +64,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
   }
 }
 
-/**
- * Set a value in cache
- */
+/** Set a value in cache with TTL (Redis with in-memory fallback) */
 export async function cacheSet<T>(key: string, value: T, ttl: number = CACHE_CONFIG.DEFAULT_TTL_SECONDS): Promise<void> {
   try {
     const client = await getRedisAsync();
@@ -95,7 +75,7 @@ export async function cacheSet<T>(key: string, value: T, ttl: number = CACHE_CON
 
     // Fallback to memory cache with size limit
     if (memoryCache.size >= CACHE_CONFIG.MEMORY_CACHE_MAX_SIZE) {
-      // First, evict expired entries
+      // Evict expired entries first
       const now = Date.now();
       for (const [k, v] of memoryCache) {
         if (v.expiresAt <= now) {
@@ -124,9 +104,6 @@ export async function cacheSet<T>(key: string, value: T, ttl: number = CACHE_CON
   }
 }
 
-/**
- * Cache status information for debugging
- */
 export interface CacheStatus {
   type: 'redis' | 'memory';
   available: boolean;
@@ -134,25 +111,18 @@ export interface CacheStatus {
   memoryCacheSize: number;
 }
 
-/**
- * Get cache status for debugging and monitoring
- * Useful for verifying Redis connection locally or in production
- */
+/** Get cache status for debugging and monitoring */
 export function getCacheStatus(): CacheStatus {
   const available = isRedisAvailable();
   return {
     type: available ? 'redis' : 'memory',
     available,
-    // Upstash REST URLs don't contain credentials, safe to expose
     url: available ? process.env.UPSTASH_REDIS_REST_URL : undefined,
     memoryCacheSize: memoryCache.size,
   };
 }
 
-/**
- * Test Redis connection by performing a ping
- * Returns latency in milliseconds or null if unavailable/failed
- */
+/** Test Redis connection by performing a ping. Returns latency in ms or error. */
 export async function testCacheConnection(): Promise<{ success: boolean; latencyMs?: number; error?: string }> {
   const client = await getRedisAsync();
   if (!client) {
@@ -162,8 +132,7 @@ export async function testCacheConnection(): Promise<{ success: boolean; latency
   try {
     const start = Date.now();
     await client.ping();
-    const latencyMs = Date.now() - start;
-    return { success: true, latencyMs };
+    return { success: true, latencyMs: Date.now() - start };
   } catch (error) {
     return { 
       success: false, 
@@ -172,15 +141,10 @@ export async function testCacheConnection(): Promise<{ success: boolean; latency
   }
 }
 
-/**
- * Get Redis database stats (key count)
- * Note: DBSIZE may return 0 with some Upstash configurations due to REST API limitations.
- */
+/** Get Redis database stats (key count). Returns null if Redis is unavailable. */
 export async function getRedisStats(): Promise<{ keyCount: number } | null> {
   const client = await getRedisAsync();
-  if (!client) {
-    return null;
-  }
+  if (!client) return null;
 
   try {
     const keyCount = await client.dbsize();

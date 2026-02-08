@@ -7,7 +7,8 @@ import { useTranslations } from 'next-intl';
 
 import type { HeatmapPoint, POI, Factor, Bounds } from '@/types';
 import { POLAND_CENTER } from '@/lib/geo';
-import type { PopupTranslations, FactorTranslations, MapViewRef } from './MapView';
+import type { PopupTranslations, FactorTranslations } from './utils/popupContent';
+import type { MapViewRef } from './MapView';
 
 /**
  * Loading placeholder shown while map is initializing
@@ -26,14 +27,7 @@ const MapWithNoSSR = dynamic(() => import('./MapView'), {
   loading: MapLoadingPlaceholder,
 });
 
-export interface MapContainerRef {
-  flyTo: (lat: number, lng: number, zoom?: number) => void;
-  fitBounds: (bounds: Bounds) => void;
-  invalidateSize: () => void;
-  getMap: () => L.Map | null;
-  getExtensionLayerGroup: () => L.LayerGroup | null;
-  getLeaflet: () => typeof import('leaflet') | null;
-}
+export type MapContainerRef = MapViewRef;
 
 interface MapContainerProps {
   onBoundsChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;

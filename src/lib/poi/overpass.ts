@@ -1,22 +1,21 @@
 import type { Bounds, POI, FactorDef } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
-import { getCombinedBounds, OVERPASS_API_URL, snapBoundsForCacheKey } from '@/lib/geo';
+import { getCombinedBounds, snapBoundsForCacheKey } from '@/lib/geo';
 import { OVERPASS_CONFIG, POI_CACHE_KEY_CONFIG } from '@/constants/performance';
 import { createTimer } from '@/lib/profiling';
-import {
-  distributePOIsByFactorToTiles,
-} from './tile-utils';
+import { distributePOIsByFactorToTiles } from './tile-utils';
+
+const OVERPASS_API_URL = 'https://overpass-api.de/api/interpreter';
 
 // Rate limiting: track last request time and use a mutex for proper synchronization
 let lastRequestTime = 0;
 let rateLimitMutex: Promise<void> = Promise.resolve();
 
 /**
- * Wait for rate limit with proper mutex pattern to prevent race conditions
- * Multiple concurrent calls will queue up properly using promise chaining
+ * Wait for rate limit using a mutex to prevent race conditions.
+ * Concurrent calls queue up via promise chaining.
  */
 async function waitForRateLimit(): Promise<void> {
-  // Chain onto the existing mutex to ensure sequential execution
   const previousMutex = rateLimitMutex;
   
   let resolveMutex: () => void;
@@ -24,7 +23,6 @@ async function waitForRateLimit(): Promise<void> {
     resolveMutex = resolve;
   });
   
-  // Wait for previous rate limit check to complete
   await previousMutex;
   
   try {
@@ -38,14 +36,10 @@ async function waitForRateLimit(): Promise<void> {
     
     lastRequestTime = Date.now();
   } finally {
-    // Release the mutex
     resolveMutex!();
   }
 }
 
-/**
- * Options for fetchWithRetry
- */
 interface RetryOptions {
   retries: number;
   baseDelayMs: number;
@@ -110,10 +104,6 @@ async function fetchWithRetry(
   throw new Error('Unexpected end of retry loop');
 }
 
-// ============================================================================
-// Overpass Response Types
-// ============================================================================
-
 interface OverpassElement {
   type: 'node' | 'way' | 'relation';
   id: number;
@@ -128,10 +118,6 @@ interface OverpassResponse {
   generator: string;
   elements: OverpassElement[];
 }
-
-// ============================================================================
-// Query Builders
-// ============================================================================
 
 /**
  * Build an Overpass QL query for fetching POIs within bounds
@@ -156,7 +142,7 @@ function buildCombinedOverpassQuery(
 ): string {
   const bbox = formatBbox(bounds);
   const allTagQueries = factorTags
-    .flatMap(factor => buildTagQueries(factor.osmTags, bbox))
+    .map(factor => buildTagQueries(factor.osmTags, bbox))
     .join('');
 
   return `
@@ -174,8 +160,7 @@ function formatBbox(bounds: Bounds): string {
 }
 
 /**
- * Parse an OSM tag string into key and value
- * Handles tags that may contain '=' in the value (e.g., "name=Café=Bar")
+ * Parse an OSM tag string (e.g. "amenity=cafe") into key and value.
  */
 function parseOsmTag(tag: string): { key: string; value: string } {
   const eqIndex = tag.indexOf('=');
@@ -203,10 +188,6 @@ function buildTagQueries(osmTags: string[], bbox: string): string {
     .join('');
 }
 
-// ============================================================================
-// Response Parsing
-// ============================================================================
-
 /**
  * Parse Overpass API response into POI array
  */
@@ -229,12 +210,10 @@ function categorizePOIsByFactor(
 ): Record<string, POI[]> {
   const result: Record<string, POI[]> = {};
   
-  // Initialize empty arrays for each factor
   for (const factor of factorTags) {
     result[factor.id] = [];
   }
 
-  // Categorize each POI
   for (const poi of pois) {
     for (const factor of factorTags) {
       if (matchesAnyTag(poi.tags, factor.osmTags)) {
@@ -257,9 +236,13 @@ function matchesAnyTag(poiTags: Record<string, string>, osmTags: string[]): bool
   });
 }
 
-// ============================================================================
-// Public API
-// ============================================================================
+function buildOverpassRequestInit(query: string): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `data=${encodeURIComponent(query)}`,
+  };
+}
 
 /**
  * Fetch POIs from Overpass API for a single factor
@@ -274,11 +257,7 @@ export async function fetchPOIsFromOverpass(
 
   const response = await fetchWithRetry(
     OVERPASS_API_URL,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(query)}`,
-    },
+    buildOverpassRequestInit(query),
     { retries, signal }
   );
 
@@ -300,11 +279,7 @@ export async function fetchAllPOIsCombined(
   const stopTimer = createTimer('overpass:combined-query');
   const response = await fetchWithRetry(
     OVERPASS_API_URL,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(query)}`,
-    },
+    buildOverpassRequestInit(query),
     { retries, signal, baseDelayMs: OVERPASS_CONFIG.COMBINED_BASE_DELAY_MS }
   );
 
@@ -316,16 +291,8 @@ export async function fetchAllPOIsCombined(
 }
 
 /**
- * Fetch POIs for multiple tiles in a single Overpass query
- * 
- * This is more efficient than fetching each tile separately because:
- * 1. Single API call instead of N calls (avoids rate limiting)
- * 2. Overpass can optimize the query internally
- * 
- * @param tiles - Array of tile coordinates to fetch
- * @param factorTags - Array of factor definitions
- * @param signal - Optional AbortSignal for cancellation
- * @returns Map of tile key to POIs grouped by factor ID
+ * Fetch POIs for multiple tiles in a single Overpass query.
+ * Uses a combined bounding box, then distributes results to individual tiles.
  */
 export async function fetchPOIsForTilesBatched(
   tiles: TileCoord[],
@@ -336,15 +303,12 @@ export async function fetchPOIsForTilesBatched(
     return new Map();
   }
 
-  // Calculate combined bounds for all tiles
   const combinedBounds = getCombinedBounds(tiles);
   
-  // Fetch all POIs in the combined region
   const stopTimer = createTimer('overpass:batch-query');
   const allPOIsByFactor = await fetchAllPOIsCombined(factorTags, combinedBounds, signal);
   stopTimer({ tiles: tiles.length, factors: factorTags.length });
 
-  // Distribute POIs to their respective tiles
   const factorIds = factorTags.map(f => f.id);
   return distributePOIsByFactorToTiles(allPOIsByFactor, tiles, factorIds);
 }
@@ -353,7 +317,6 @@ export async function fetchPOIsForTilesBatched(
  * Generate a cache key for POI queries
  */
 export function generatePOICacheKey(factorId: string, bounds: Bounds): string {
-  // Use shared bounds snapping utility
   const snapped = snapBoundsForCacheKey(bounds, POI_CACHE_KEY_CONFIG.BOUNDS_PRECISION);
   return `poi:${factorId}:${snapped.south},${snapped.west},${snapped.north},${snapped.east}`;
 }

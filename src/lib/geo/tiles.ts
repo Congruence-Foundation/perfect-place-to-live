@@ -247,12 +247,8 @@ export function calculateTileDelta(
   largerSet: TileCoord[],
   smallerSet: TileCoord[]
 ): TileCoord[] {
-  const smallerKeys = new Set(
-    smallerSet.map(t => `${t.z}:${t.x}:${t.y}`)
-  );
-  return largerSet.filter(
-    t => !smallerKeys.has(`${t.z}:${t.x}:${t.y}`)
-  );
+  const smallerKeys = new Set(smallerSet.map(getTileKeyString));
+  return largerSet.filter(t => !smallerKeys.has(getTileKeyString(t)));
 }
 
 /**

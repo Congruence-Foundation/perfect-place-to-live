@@ -8,7 +8,6 @@ export {
   METERS_PER_DEGREE_LAT,
   POLAND_BOUNDS,
   POLAND_CENTER,
-  OVERPASS_API_URL,
 } from './constants';
 
 // Distance calculations
@@ -46,6 +45,7 @@ export {
   hashFilters,
   // Heatmap tile utilities
   HEATMAP_TILE_ZOOM,
+  calculateTileDelta,
   hashHeatmapConfig,
   getHeatmapTileKey,
   // POI tile utilities

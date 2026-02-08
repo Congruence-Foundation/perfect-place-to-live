@@ -5,16 +5,12 @@ import { useTranslations } from 'next-intl';
 import { Database, ChevronDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { PropertyDataSource } from '../config/filters';
+import { DATA_SOURCE_OPTIONS } from '../config/constants';
 
 interface DataSourcesPanelProps {
   enabledSources: PropertyDataSource[];
   onSourcesChange: (sources: PropertyDataSource[]) => void;
 }
-
-const DATA_SOURCES: { id: PropertyDataSource; name: string; available: boolean }[] = [
-  { id: 'otodom', name: 'Otodom', available: true },
-  { id: 'gratka', name: 'Gratka', available: true },
-];
 
 export function DataSourcesPanel({
   enabledSources,
@@ -80,31 +76,21 @@ export function DataSourcesPanel({
       {isExpanded && (
         <div className="px-3 pb-3 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="border-t border-background/50 pt-3 space-y-2">
-            {DATA_SOURCES.map((source) => {
+            {DATA_SOURCE_OPTIONS.map((source) => {
               const isEnabled = enabledSources.includes(source.id);
-              const isDisabled = !source.available;
               
               return (
                 <label
                   key={source.id}
-                  className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
-                    isDisabled 
-                      ? 'opacity-50 cursor-not-allowed' 
-                      : 'cursor-pointer hover:bg-background/50'
-                  }`}
+                  className="flex items-center gap-3 p-2 rounded-lg transition-colors cursor-pointer hover:bg-background/50"
                 >
                   <Checkbox
                     checked={isEnabled}
-                    onCheckedChange={(checked) => !isDisabled && handleSourceToggle(source.id, checked === true)}
-                    disabled={isDisabled || (isEnabled && enabledSources.length === 1)}
+                    onCheckedChange={(checked) => handleSourceToggle(source.id, checked === true)}
+                    disabled={isEnabled && enabledSources.length === 1}
                     className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                   />
-                  <span className="text-sm flex-1">{source.name}</span>
-                  {!source.available && (
-                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                      {t('comingSoon')}
-                    </span>
-                  )}
+                  <span className="text-sm flex-1">{source.label}</span>
                 </label>
               );
             })}

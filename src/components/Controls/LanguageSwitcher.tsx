@@ -2,7 +2,7 @@
 
 import { useLocale } from 'next-intl';
 import { Globe } from 'lucide-react';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
 import { useClickOutside } from '@/hooks';
 import { TIME_CONSTANTS } from '@/constants/performance';
 import { SUPPORTED_LOCALES, LOCALE_METADATA } from '@/i18n/routing';
@@ -10,7 +10,7 @@ import { PanelToggleButton } from './PanelToggleButton';
 import { FloatingPanel } from './FloatingPanel';
 
 /** Sets a cookie and reloads the page to apply the new locale */
-function setLocaleCookie(newLocale: string): void {
+function switchLocale(newLocale: string): void {
   document.cookie = `locale=${newLocale};path=/;max-age=${TIME_CONSTANTS.LOCALE_COOKIE_MAX_AGE}`;
   window.location.reload();
 }
@@ -22,10 +22,6 @@ export default function LanguageSwitcher() {
 
   // Close dropdown when clicking outside
   useClickOutside(containerRef, () => setIsOpen(false));
-
-  const switchLocale = useCallback((newLocale: string) => {
-    setLocaleCookie(newLocale);
-  }, []);
 
   const currentLocaleMetadata = LOCALE_METADATA[locale as typeof SUPPORTED_LOCALES[number]];
 

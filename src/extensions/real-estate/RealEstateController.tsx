@@ -23,21 +23,13 @@ import {
 import { useRealEstateMarkers } from './hooks/useRealEstateMarkers';
 import { useTileQueries } from './hooks/useTileQueries';
 import { useRealEstateStore, useRealEstateHydrated } from './store';
-
-/** Maximum properties to fetch per cluster in detailed mode */
-const DETAILED_MODE_CLUSTER_FETCH_LIMIT = 50;
-
-/** Batch size for concurrent cluster fetches */
-const CLUSTER_FETCH_BATCH_SIZE = 5;
-
-/** Delay between batch fetches in milliseconds */
-const CLUSTER_FETCH_BATCH_DELAY_MS = 100;
-
-/** Number of API batches before flushing to cache (5 batches = 25 clusters) */
-const CACHE_FLUSH_INTERVAL = 5;
-
-/** Threshold for significant cluster count change (triggers cache clear) */
-const CLUSTER_CHANGE_THRESHOLD = 50;
+import {
+  DETAILED_MODE_CLUSTER_FETCH_LIMIT,
+  CLUSTER_FETCH_BATCH_SIZE,
+  CLUSTER_FETCH_BATCH_DELAY_MS,
+  CACHE_FLUSH_INTERVAL,
+  CLUSTER_CHANGE_THRESHOLD,
+} from './config/constants';
 
 /**
  * RealEstateController - Self-contained controller for the real estate extension

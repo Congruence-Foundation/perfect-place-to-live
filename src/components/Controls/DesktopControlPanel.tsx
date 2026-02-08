@@ -1,7 +1,9 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { WeightSliders, ProfileSelector, ExtensionsSidebar } from '@/components/Controls';
+import WeightSliders from './WeightSliders';
+import ProfileSelector from './ProfileSelector';
+import ExtensionsSidebar from './ExtensionsSidebar';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import type { Factor } from '@/types';
 import { Z_INDEX } from '@/constants/z-index';

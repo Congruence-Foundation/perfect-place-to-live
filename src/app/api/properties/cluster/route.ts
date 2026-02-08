@@ -4,7 +4,7 @@ import { fetchGratkaClusterProperties, toUnifiedGratkaProperty } from '@/extensi
 import { PropertyFilters, DEFAULT_PROPERTY_FILTERS } from '@/extensions/real-estate/types';
 import type { PropertyDataSource } from '@/extensions/real-estate/config';
 import type { UnifiedProperty, UnifiedEstateType, UnifiedTransactionType } from '@/extensions/real-estate/lib/shared';
-import { errorResponse, handleApiError } from '@/lib/api-utils';
+import { errorResponse, handleApiError, parseJsonBody } from '@/lib/api-utils';
 import { CLUSTER_CONFIG } from '@/constants/performance';
 
 export const runtime = 'nodejs';
@@ -38,18 +38,9 @@ interface ClusterRequest {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Parse request body with error handling for empty/malformed JSON
-    let body: ClusterRequest;
-    try {
-      const text = await request.text();
-      if (!text || text.trim() === '') {
-        return errorResponse(new Error('Request body is empty'), 400);
-      }
-      body = JSON.parse(text);
-    } catch {
-      // This can happen when the request is aborted mid-flight
-      return errorResponse(new Error('Invalid JSON in request body'), 400);
-    }
+    const parseResult = await parseJsonBody<ClusterRequest>(request);
+    if (parseResult instanceof Response) return parseResult;
+    const body = parseResult;
     
     const { 
       lat, 

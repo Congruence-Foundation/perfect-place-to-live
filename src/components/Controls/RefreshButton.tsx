@@ -37,7 +37,7 @@ export function RefreshButton({
     return tControls('refresh');
   };
 
-  const showProgress = analyticsProgress !== null && analyticsProgress !== undefined;
+  const showProgress = analyticsProgress != null;
 
   return (
     <div className="flex flex-col items-center">

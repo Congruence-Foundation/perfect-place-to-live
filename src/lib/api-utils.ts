@@ -1,69 +1,33 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { encode } from '@msgpack/msgpack';
-import { TIME_CONSTANTS } from '@/constants/performance';
 import { DEFAULT_FACTORS, getEnabledFactors } from '@/config/factors';
 import type { Factor } from '@/types';
 import type { TileCoord } from '@/lib/geo/tiles';
 
-const { SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE } = TIME_CONSTANTS;
+const SECONDS_PER_MINUTE = 60;
+const SECONDS_PER_HOUR = 3600;
+const SECONDS_PER_DAY = 86400;
 
-/**
- * Error mapping configuration for API error handling
- * Maps error message patterns to HTTP status codes
- */
-export interface ErrorMapping {
-  /** Pattern to match in error message */
+interface ErrorMapping {
   pattern: string;
-  /** HTTP status code to return */
   status: number;
 }
 
-/**
- * Options for handleApiError
- */
-export interface HandleApiErrorOptions {
-  /** Context string for logging (e.g., 'Heatmap API', 'POI API') */
+interface HandleApiErrorOptions {
   context: string;
-  /** Optional error mappings to determine status code based on error message */
   errorMappings?: ErrorMapping[];
-  /** Default status code if no mapping matches (default: 500) */
   defaultStatus?: number;
 }
 
 /**
- * Standardized API error handler
- * Logs the error and returns a consistent error response
- * 
- * @param error - The error object or unknown value
- * @param options - Error handling options
- * @returns NextResponse with error message and appropriate status code
- * 
- * @example
- * ```ts
- * // Simple usage
- * catch (error) {
- *   return handleApiError(error, { context: 'Heatmap API' });
- * }
- * 
- * // With error mappings
- * catch (error) {
- *   return handleApiError(error, {
- *     context: 'Properties API',
- *     errorMappings: [
- *       { pattern: 'Otodom API error', status: 502 },
- *       { pattern: 'Invalid bounds', status: 400 },
- *     ],
- *   });
- * }
- * ```
+ * Standardized API error handler.
+ * Logs the error and returns a consistent JSON error response.
  */
 export function handleApiError(error: unknown, options: HandleApiErrorOptions): NextResponse {
   const { context, errorMappings = [], defaultStatus = 500 } = options;
   
-  // Log the error with context
   console.error(`${context} error:`, error);
   
-  // Determine status code based on error mappings
   let status = defaultStatus;
   if (error instanceof Error && errorMappings.length > 0) {
     for (const mapping of errorMappings) {
@@ -77,25 +41,13 @@ export function handleApiError(error: unknown, options: HandleApiErrorOptions): 
   return errorResponse(error, status);
 }
 
-/**
- * Create a standardized error response for API routes
- * 
- * @param error - The error object or unknown value
- * @param status - HTTP status code (default: 500)
- * @returns NextResponse with error message
- */
+/** Create a JSON error response from an error value */
 export function errorResponse(error: unknown, status: number = 500): NextResponse {
   const message = error instanceof Error ? error.message : 'Internal server error';
   return NextResponse.json({ error: message }, { status });
 }
 
-/**
- * Create a response with optional MessagePack encoding
- * 
- * @param data - The data to encode
- * @param useMsgpack - Whether to use MessagePack encoding
- * @returns Response with appropriate content type
- */
+/** Create a response with optional MessagePack encoding */
 export function createResponse<T>(data: T, useMsgpack: boolean): Response {
   if (useMsgpack) {
     const encoded = encode(data);
@@ -106,30 +58,15 @@ export function createResponse<T>(data: T, useMsgpack: boolean): Response {
   return NextResponse.json(data);
 }
 
-/**
- * Check if the request accepts MessagePack format
- * 
- * @param request - The incoming request
- * @returns Whether the client accepts MessagePack
- */
+/** Check if the request accepts MessagePack format */
 export function acceptsMsgpack(request: Request): boolean {
   return request.headers.get('Accept') === 'application/msgpack';
 }
 
-/**
- * Format TTL seconds to human-readable string
- * 
- * @param seconds - TTL in seconds (must be non-negative)
- * @returns Human-readable duration string (e.g., "2 days", "1 hour", "30 minutes")
- */
+/** Format TTL seconds to human-readable string (e.g., "2 days", "30 minutes") */
 export function formatTTL(seconds: number): string {
-  // Handle edge cases
-  if (!Number.isFinite(seconds) || seconds < 0) {
-    return 'invalid';
-  }
-  if (seconds === 0) {
-    return '0 seconds';
-  }
+  if (!Number.isFinite(seconds) || seconds < 0) return 'invalid';
+  if (seconds === 0) return '0 seconds';
   if (seconds >= SECONDS_PER_DAY) {
     const days = Math.floor(seconds / SECONDS_PER_DAY);
     return `${days} day${days > 1 ? 's' : ''}`;
@@ -146,11 +83,8 @@ export function formatTTL(seconds: number): string {
 }
 
 /**
- * Validate and get enabled factors from request
- * Returns either the validated factors or an error response
- * 
- * @param requestFactors - Factors from request body (optional)
- * @returns Object with factors and enabledFactors, or an error Response
+ * Validate and get enabled factors from request.
+ * Returns the validated factors or an error Response if none are enabled.
  */
 export function getValidatedFactors(
   requestFactors?: Factor[]
@@ -166,35 +100,38 @@ export function getValidatedFactors(
 }
 
 /**
- * Type guard to validate tile coordinates
+ * Safely parse a JSON request body, returning the parsed value or an error Response
+ * for empty/malformed bodies (e.g. aborted requests).
+ */
+export async function parseJsonBody<T>(request: NextRequest): Promise<T | Response> {
+  try {
+    const text = await request.text();
+    if (!text || text.trim() === '') {
+      return errorResponse(new Error('Request body is empty'), 400);
+    }
+    return JSON.parse(text) as T;
+  } catch {
+    return errorResponse(new Error('Invalid JSON in request body'), 400);
+  }
+}
+
+/**
+ * Type guard to validate tile coordinates.
  * 
- * Validates that:
- * - All coordinates are finite numbers (not NaN, not Infinity)
- * - All coordinates are non-negative integers
- * - Zoom level is within reasonable bounds (0-22)
- * - x and y are within valid range for the zoom level
- * 
- * @param tile - The value to check
- * @returns Whether the value is a valid TileCoord
+ * Checks that all coordinates are finite non-negative integers,
+ * zoom is 0-22, and x/y are within range for the zoom level.
  */
 export function isValidTileCoord(tile: unknown): tile is TileCoord {
   if (tile == null || typeof tile !== 'object') return false;
   const { z, x, y } = tile as TileCoord;
   
-  // Check all are finite numbers
   if (typeof z !== 'number' || typeof x !== 'number' || typeof y !== 'number') return false;
   if (!Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) return false;
-  
-  // Check all are non-negative integers
   if (z < 0 || x < 0 || y < 0) return false;
   if (!Number.isInteger(z) || !Number.isInteger(x) || !Number.isInteger(y)) return false;
-  
-  // Check zoom is within reasonable bounds (standard web map zoom levels)
   if (z > 22) return false;
   
-  // Check x and y are within valid range for the zoom level
-  // At zoom z, there are 2^z tiles in each dimension
-  const maxTileIndex = Math.pow(2, z) - 1;
+  const maxTileIndex = (1 << z) - 1;
   if (x > maxTileIndex || y > maxTileIndex) return false;
   
   return true;

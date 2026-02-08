@@ -1,12 +1,12 @@
+export { useClickOutside } from './useClickOutside';
 export { useDebounce } from './useDebounce';
 export { useFactors } from './useFactors';
 export { useGeolocation } from './useGeolocation';
 export { useHeatmapSettings } from './useHeatmapSettings';
 export { useHeatmapTiles } from './useHeatmapTiles';
-export { useIsMobile, useMediaQuery } from './useMediaQuery';
+export { useLatestRef } from './useLatestRef';
 export { useMapStoreSync } from './useMapStoreSync';
-export { useSnapPoints } from './useSnapPoints';
+export { useIsMobile, useMediaQuery } from './useMediaQuery';
 export { useNotification } from './useNotification';
 export type { Notification } from './useNotification';
-export { useClickOutside } from './useClickOutside';
-export { useLatestRef } from './useLatestRef';
+export { useSnapPoints } from './useSnapPoints';

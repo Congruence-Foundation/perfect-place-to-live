@@ -17,23 +17,15 @@ export function useMediaQuery(query: string, defaultValue = false): boolean {
   useEffect(() => {
     const mediaQuery = window.matchMedia(query);
     
-    // Set initial value - this is a legitimate SSR hydration pattern
-    // We use a default value during SSR and update to the actual value after mount
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMatches(mediaQuery.matches);
 
-    // Create event listener
     const handler = (event: MediaQueryListEvent) => {
       setMatches(event.matches);
     };
 
-    // Add listener
     mediaQuery.addEventListener('change', handler);
-
-    // Cleanup
-    return () => {
-      mediaQuery.removeEventListener('change', handler);
-    };
+    return () => mediaQuery.removeEventListener('change', handler);
   }, [query]);
 
   return matches;

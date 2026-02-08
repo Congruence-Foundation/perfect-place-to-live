@@ -31,13 +31,10 @@ import {
   type TileCoord,
   HEATMAP_TILE_ZOOM,
 } from '@/lib/geo/tiles';
-import { tileToBounds, createCoordinateKey } from '@/lib/geo';
+import { getCombinedBounds, createCoordinateKey } from '@/lib/geo';
 import { createTimer } from '@/lib/profiling';
 import { useMapStore } from '@/stores/mapStore';
 
-// ============================================================================
-// Types
-// ============================================================================
 interface BatchHeatmapResponse {
   tiles: Record<string, {
     points: HeatmapPoint[];
@@ -60,19 +57,6 @@ interface BatchHeatmapResponse {
   };
 }
 
-/**
- * Combined bounds from multiple tiles
- */
-interface CombinedBounds {
-  minLat: number;
-  maxLat: number;
-  minLng: number;
-  maxLng: number;
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
 function getTilesKey(tiles: TileCoord[]): string {
   return tiles.map(getTileKeyString).sort().join(',');
 }
@@ -82,33 +66,16 @@ function toTileKeySet(tiles: TileCoord[]): Set<string> {
   return new Set(tiles.map(getTileKeyString));
 }
 
-function calculateCombinedBounds(tiles: TileCoord[]): CombinedBounds | null {
-  if (tiles.length === 0) return null;
-  
-  let minLat = Infinity, maxLat = -Infinity;
-  let minLng = Infinity, maxLng = -Infinity;
-  
-  for (const tile of tiles) {
-    const tb = tileToBounds(tile.z, tile.x, tile.y);
-    if (tb.south < minLat) minLat = tb.south;
-    if (tb.north > maxLat) maxLat = tb.north;
-    if (tb.west < minLng) minLng = tb.west;
-    if (tb.east > maxLng) maxLng = tb.east;
-  }
-  
-  return { minLat, maxLat, minLng, maxLng };
-}
-
-function isPointInBounds(point: { lat: number; lng: number }, bounds: CombinedBounds): boolean {
-  return point.lat >= bounds.minLat && 
-         point.lat <= bounds.maxLat && 
-         point.lng >= bounds.minLng && 
-         point.lng <= bounds.maxLng;
+function isPointInBounds(point: { lat: number; lng: number }, bounds: Bounds): boolean {
+  return point.lat >= bounds.south && 
+         point.lat <= bounds.north && 
+         point.lng >= bounds.west && 
+         point.lng <= bounds.east;
 }
 
 function prunePointsOutsideBounds(
   pointsMap: Map<string, HeatmapPoint>,
-  bounds: CombinedBounds
+  bounds: Bounds
 ): void {
   for (const [key, point] of pointsMap) {
     if (!isPointInBounds(point, bounds)) {
@@ -119,7 +86,7 @@ function prunePointsOutsideBounds(
 
 function prunePoisOutsideBounds(
   poisByFactor: Record<string, POI[]>,
-  bounds: CombinedBounds
+  bounds: Bounds
 ): void {
   for (const factorId of Object.keys(poisByFactor)) {
     poisByFactor[factorId] = poisByFactor[factorId].filter(
@@ -158,9 +125,6 @@ function calculateTileOverlapRatio(
   return overlap / Math.max(previousTiles.size, currentTiles.size);
 }
 
-// ============================================================================
-// Hook Types
-// ============================================================================
 interface UseHeatmapTilesOptions {
   bounds: Bounds | null;
   factors: Factor[];
@@ -208,10 +172,6 @@ interface UseHeatmapTilesResult {
   isDataReady: boolean;
   prefetchPhase: number | null;
 }
-
-// ============================================================================
-// API
-// ============================================================================
 
 /** Fetch heatmap data for multiple tiles via the batch endpoint */
 async function fetchHeatmapBatch(
@@ -477,17 +437,14 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
     abortControllerRef.current = controller;
     const currentFetchId = ++fetchIdRef.current;
     
-    // Snapshot viewportTiles for this effect run (stable reference)
-    const currentViewportTiles = viewportTiles;
-    
+    const isAborted = () => controller.signal.aborted || currentFetchId !== fetchIdRef.current;
+
     // Build phase list:
     // - Prefetch mode: [0, 1, 2, ...tileRadius] (progressive rings)
     // - Batch mode:    [tileRadius]              (single fetch at full radius)
     const phases = (usePrefetchMode && tileRadius > 0)
       ? Array.from({ length: tileRadius + 1 }, (_, i) => i)
       : [tileRadius];
-
-    const isAborted = () => controller.signal.aborted || currentFetchId !== fetchIdRef.current;
 
     /** Merge a batch result into accumulated state */
     const mergeResult = (result: BatchHeatmapResponse) => {
@@ -517,9 +474,6 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
       setError(null);
       setUsedFallback(false);
       
-      // Read latest bounds from optionsRef (already destructured above)
-      if (!bounds) return;
-      
       // Read from ref to get the latest rendered tiles (avoids stale closure capture)
       const currentRendered = renderedTilesRef.current;
       
@@ -528,7 +482,7 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
       
       // Check if viewport tiles are already covered by pre-fetched data
       const renderedTileKeys = toTileKeySet(currentRendered);
-      const viewportCovered = currentViewportTiles.length > 0 && currentViewportTiles.every(
+      const viewportCovered = viewportTiles.length > 0 && viewportTiles.every(
         t => renderedTileKeys.has(getTileKeyString(t))
       );
       
@@ -593,8 +547,8 @@ export function useHeatmapTiles(options: UseHeatmapTilesOptions): UseHeatmapTile
         updatePhase(null);
         
         // Prune points and POIs outside final tile bounds to prevent unbounded growth
-        const combinedBounds = calculateCombinedBounds(fetchedTiles);
-        if (combinedBounds) {
+        if (fetchedTiles.length > 0) {
+          const combinedBounds = getCombinedBounds(fetchedTiles);
           prunePointsOutsideBounds(accumulatedPointsRef.current, combinedBounds);
           prunePoisOutsideBounds(lastValidPoisRef.current, combinedBounds);
         }
