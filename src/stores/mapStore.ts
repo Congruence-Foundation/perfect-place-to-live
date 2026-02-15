@@ -6,6 +6,15 @@ import type { Bounds, HeatmapPoint, Factor, ClusterPriceAnalysisMode, TileCoordi
 import { HEATMAP_TILE_CONFIG, POI_TILE_CONFIG, UI_CONFIG } from '@/constants/performance';
 
 /**
+ * User location with accuracy
+ */
+export interface UserLocation {
+  lat: number;
+  lng: number;
+  accuracy: number;
+}
+
+/**
  * Core map store state interface
  */
 export interface MapState {
@@ -22,6 +31,10 @@ export interface MapState {
   poiBufferScale: number;
   /** Whether to use progressive prefetch (true) or batch mode (false) */
   usePrefetchMode: boolean;
+  
+  // User location tracking
+  userLocation: UserLocation | null;
+  isLocationEnabled: boolean;
   
   // Debug options
   showHeatmapTileBorders: boolean;
@@ -58,6 +71,10 @@ export interface MapActions {
   setHeatmapDebugTiles: (tiles: TileCoordinates[]) => void;
   setExtensionDebugTiles: (tiles: TileCoordinates[]) => void;
   setAnalyticsProgress: (progress: number | null) => void;
+  
+  // User location actions
+  setUserLocation: (location: UserLocation | null) => void;
+  setLocationEnabled: (enabled: boolean) => void;
 }
 
 /**
@@ -80,6 +97,8 @@ const initialState: MapState = {
   heatmapTileRadius: HEATMAP_TILE_CONFIG.DEFAULT_TILE_RADIUS,
   poiBufferScale: POI_TILE_CONFIG.DEFAULT_POI_BUFFER_SCALE,
   usePrefetchMode: true,
+  userLocation: null,
+  isLocationEnabled: false,
   showHeatmapTileBorders: false,
   showPropertyTileBorders: false,
   heatmapDebugTiles: [],
@@ -130,6 +149,8 @@ export const useMapStore = create<MapStore>()(
       setHeatmapDebugTiles: (heatmapDebugTiles) => set({ heatmapDebugTiles }, false, 'setHeatmapDebugTiles'),
       setExtensionDebugTiles: (extensionDebugTiles) => set({ extensionDebugTiles }, false, 'setExtensionDebugTiles'),
       setAnalyticsProgress: (analyticsProgress) => set({ analyticsProgress }, false, 'setAnalyticsProgress'),
+      setUserLocation: (userLocation) => set({ userLocation }, false, 'setUserLocation'),
+      setLocationEnabled: (isLocationEnabled) => set({ isLocationEnabled }, false, 'setLocationEnabled'),
     })),
     { name: 'map-store' }
   )

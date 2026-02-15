@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { UI_CONFIG } from '@/constants/performance';
 import { useLatestRef } from './useLatestRef';
+import { useMapStore } from '@/stores/mapStore';
 
 interface GeolocationOptions {
   /** Callback when position is successfully obtained */
@@ -9,20 +10,25 @@ interface GeolocationOptions {
   onError?: () => void;
   /** Whether geolocation should be enabled (default: true) */
   enabled?: boolean;
+  /** Whether to enable continuous location tracking (default: true) */
+  enableTracking?: boolean;
 }
 
 /**
  * Hook to request user's geolocation on mount.
  * Only attempts geolocation once per component lifecycle.
+ * Optionally enables continuous location tracking via the map store.
  */
 export function useGeolocation({
   onSuccess,
   onError,
   enabled = true,
+  enableTracking = true,
 }: GeolocationOptions): void {
   const attemptedRef = useRef(false);
   const onSuccessRef = useLatestRef(onSuccess);
   const onErrorRef = useLatestRef(onError);
+  const setLocationEnabled = useMapStore((s) => s.setLocationEnabled);
 
   useEffect(() => {
     if (!enabled || attemptedRef.current) return;
@@ -37,6 +43,11 @@ export function useGeolocation({
       (position) => {
         const { latitude, longitude } = position.coords;
         onSuccessRef.current(latitude, longitude);
+        
+        // Enable location tracking after successful initial position
+        if (enableTracking) {
+          setLocationEnabled(true);
+        }
       },
       () => {
         onErrorRef.current?.();
@@ -47,5 +58,5 @@ export function useGeolocation({
         maximumAge: UI_CONFIG.GEOLOCATION_MAX_AGE_MS,
       }
     );
-  }, [enabled]);
+  }, [enabled, enableTracking, setLocationEnabled]);
 }

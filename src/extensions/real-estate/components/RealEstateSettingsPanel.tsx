@@ -9,11 +9,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { LabelWithTooltip } from '@/components/ui/label-with-tooltip';
 import type { HeatmapSettings, ClusterPriceAnalysisMode } from '@/types';
 import type { ClusterPriceDisplay } from '../types';
 import { useRealEstateExtension } from '../hooks';
 import { useRealEstateStore } from '../store';
+import { usePropertyInteractionsStore } from '../stores/propertyInteractionsStore';
 import { Z_INDEX } from '@/constants/z-index';
 import {
   DETAILED_THRESHOLD_MIN,
@@ -78,6 +80,11 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
   const priceAnalysisRadius = useRealEstateStore((s) => s.priceAnalysisRadius);
   const setPriceAnalysisRadius = useRealEstateStore((s) => s.setPriceAnalysisRadius);
   
+  const visitedCount = usePropertyInteractionsStore((s) => s.visitedIds.length);
+  const likedCount = usePropertyInteractionsStore((s) => Object.keys(s.likedProperties).length);
+  const clearVisited = usePropertyInteractionsStore((s) => s.clearVisited);
+  const clearLiked = usePropertyInteractionsStore((s) => s.clearLiked);
+  
   if (!realEstate.enabled) return null;
   
   return (
@@ -130,6 +137,32 @@ export function RealEstateSettingsPanel({ settings, onSettingsChange }: RealEsta
             <span>{t('fewClusters')}</span>
             <span>{t('manyClusters')}</span>
           </div>
+        </div>
+      )}
+
+      {/* Clear visited/liked property history */}
+      {(visitedCount > 0 || likedCount > 0) && (
+        <div className="flex items-center gap-2 pt-1">
+          {visitedCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs flex-1"
+              onClick={clearVisited}
+            >
+              Clear visited ({visitedCount})
+            </Button>
+          )}
+          {likedCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs flex-1"
+              onClick={clearLiked}
+            >
+              Clear liked ({likedCount})
+            </Button>
+          )}
         </div>
       )}
     </>

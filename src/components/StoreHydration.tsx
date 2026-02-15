@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePreferencesStore } from '@/stores/preferencesStore';
 import { useRealEstateStore } from '@/extensions/real-estate/store';
+import { usePropertyInteractionsStore } from '@/extensions/real-estate/stores/propertyInteractionsStore';
 
 /**
  * Component that handles store hydration from localStorage.
@@ -20,32 +21,38 @@ export function StoreHydration({ children }: { children: React.ReactNode }) {
     // Check if already hydrated (e.g., from a previous mount)
     const prefsHydrated = usePreferencesStore.persist.hasHydrated();
     const realEstateHydrated = useRealEstateStore.persist.hasHydrated();
+    const interactionsHydrated = usePropertyInteractionsStore.persist.hasHydrated();
     
-    if (prefsHydrated && realEstateHydrated) {
+    if (prefsHydrated && realEstateHydrated && interactionsHydrated) {
       setIsHydrated(true);
       return;
     }
 
-    // Set up listeners for hydration completion
-    const unsubPrefs = usePreferencesStore.persist.onFinishHydration(() => {
-      if (useRealEstateStore.persist.hasHydrated()) {
+    // Track hydration status for all stores
+    let hydratedCount = 0;
+    const totalStores = 3;
+    
+    const checkAllHydrated = () => {
+      hydratedCount++;
+      if (hydratedCount >= totalStores) {
         setIsHydrated(true);
       }
-    });
+    };
 
-    const unsubRealEstate = useRealEstateStore.persist.onFinishHydration(() => {
-      if (usePreferencesStore.persist.hasHydrated()) {
-        setIsHydrated(true);
-      }
-    });
+    // Set up listeners for hydration completion
+    const unsubPrefs = usePreferencesStore.persist.onFinishHydration(checkAllHydrated);
+    const unsubRealEstate = useRealEstateStore.persist.onFinishHydration(checkAllHydrated);
+    const unsubInteractions = usePropertyInteractionsStore.persist.onFinishHydration(checkAllHydrated);
 
     // Trigger rehydration
     usePreferencesStore.persist.rehydrate();
     useRealEstateStore.persist.rehydrate();
+    usePropertyInteractionsStore.persist.rehydrate();
 
     return () => {
       unsubPrefs();
       unsubRealEstate();
+      unsubInteractions();
     };
   }, []);
 

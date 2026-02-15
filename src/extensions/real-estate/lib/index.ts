@@ -141,6 +141,7 @@ export {
   getPropertyMarkerClassName,
   PROPERTY_MARKER_COLORS,
 } from './property-markers';
+export type { MarkerInteractionOptions } from './property-markers';
 
 // ============================================================================
 // Score Lookup

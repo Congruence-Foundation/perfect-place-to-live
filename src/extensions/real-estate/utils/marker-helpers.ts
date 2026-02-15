@@ -5,6 +5,7 @@
  */
 
 import type { EnrichedUnifiedProperty, PriceCategory, UnifiedEstateType } from '../lib/shared';
+import type { MarkerInteractionOptions } from '../lib/property-markers';
 import type { PropertyFilters, ClusterPriceDisplay } from '../types';
 import type { HeatmapPoint, ClusterPriceAnalysisMode } from '@/types';
 import type { ClusterAnalysisMap } from '../lib/price-analysis';
@@ -42,7 +43,8 @@ export interface PropertyMarkerOptions {
   createPropertyIcon: (
     estateType: UnifiedEstateType,
     priceCategory?: PriceCategory,
-    price?: number | null
+    price?: number | null,
+    interactionOptions?: MarkerInteractionOptions
   ) => L.DivIcon | null;
   popupTranslations?: import('./popups').PropertyPopupTranslations;
 }

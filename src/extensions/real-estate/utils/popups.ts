@@ -28,7 +28,7 @@ const POPUP_DIMENSIONS = {
 } as const;
 
 /** Popup color palette - Tailwind-based colors */
-const POPUP_COLORS = {
+export const POPUP_COLORS = {
   // Text colors
   TEXT_PRIMARY: '#1f2937',    // Gray-800
   TEXT_SECONDARY: '#4b5563',  // Gray-600
@@ -43,6 +43,7 @@ const POPUP_COLORS = {
   PRICE_GREEN: '#16a34a',     // Green-600
   LINK_BLUE: '#3b82f6',       // Blue-500
   ERROR_RED: '#ef4444',       // Red-500
+  LIKED_PINK: '#ec4899',      // Pink-500 (for liked state)
   
   // Border colors
   BORDER_LIGHT: '#f3f4f6',    // Gray-100
@@ -107,12 +108,55 @@ export const DEFAULT_POPUP_TRANSLATIONS: PropertyPopupTranslations = {
 /**
  * Generate the external link SVG icon
  */
-function getExternalLinkIcon(): string {
+export function getExternalLinkIcon(): string {
   return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${POPUP_COLORS.TEXT_MUTED}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
     <polyline points="15 3 21 3 21 9"></polyline>
     <line x1="10" y1="14" x2="21" y2="3"></line>
   </svg>`;
+}
+
+/**
+ * Generate the like button HTML with heart icon
+ */
+export function generateLikeButtonHtml(propertyId: string, isLiked: boolean): string {
+  const heartColor = isLiked ? POPUP_COLORS.LIKED_PINK : POPUP_COLORS.TEXT_LIGHT;
+  const fillColor = isLiked ? POPUP_COLORS.LIKED_PINK : 'none';
+  
+  return `
+    <button 
+      class="property-like-btn"
+      data-property-id="${propertyId}"
+      data-liked="${isLiked}"
+      style="
+        background: none;
+        border: none;
+        padding: 2px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: transform 0.15s ease;
+        flex-shrink: 0;
+      "
+      onmouseover="this.style.transform='scale(1.1)'"
+      onmouseout="this.style.transform='scale(1)'"
+    >
+      <svg 
+        width="18" 
+        height="18" 
+        viewBox="0 0 24 24" 
+        fill="${fillColor}" 
+        stroke="${heartColor}" 
+        stroke-width="2" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"
+      >
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+      </svg>
+    </button>
+  `;
 }
 
 /**
@@ -156,7 +200,7 @@ function generateTypeBadgeHtml(
  * Generate data source badge HTML
  * Shows which source (Otodom, Gratka) the property came from
  */
-function generateSourceBadgeHtml(source: string): string {
+export function generateSourceBadgeHtml(source: string): string {
   const color = SOURCE_BADGE_COLORS[source] ?? POPUP_COLORS.TEXT_MUTED;
   const name = SOURCE_BADGE_NAMES[source] ?? source;
   return `<span style="background: ${color}; color: white; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px;">${name}</span>`;
@@ -228,6 +272,7 @@ function generateImageCounterHtml(
 export function generatePropertyPopupHtml(
   property: EnrichedUnifiedProperty,
   galleryId: string,
+  isLiked: boolean = false,
   translations: PropertyPopupTranslations = DEFAULT_POPUP_TRANSLATIONS
 ): string {
   // Create image gallery HTML if multiple images
@@ -296,20 +341,28 @@ export function generatePropertyPopupHtml(
 
   // Source badge
   const sourceBadgeHtml = generateSourceBadgeHtml(property.source);
+  
+  // Like button
+  const likeButtonHtml = generateLikeButtonHtml(property.id, isLiked);
 
   return `
     <div style="min-width: ${POPUP_DIMENSIONS.MIN_WIDTH_PROPERTY}px; max-width: ${POPUP_DIMENSIONS.MAX_WIDTH}px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
       ${imageHtml}
       <div style="padding: 12px;">
         <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
-          ${generateTitleLinkHtml(property.url, property.title, '13px')}
+          <div style="flex: 1; min-width: 0;">
+            ${generateTitleLinkHtml(property.url, property.title, '13px')}
+          </div>
           ${sourceBadgeHtml}
         </div>
         <div style="font-size: 16px; font-weight: 700; color: ${POPUP_COLORS.PRICE_GREEN}; margin-bottom: 8px;">
           ${priceDisplay}
         </div>
         ${priceAnalysisBadgeHtml}
-        ${generatePropertyDetailsHtml(property.area, property.rooms, property.pricePerMeter, translations, '12px')}
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          ${generatePropertyDetailsHtml(property.area, property.rooms, property.pricePerMeter, translations, '12px')}
+          ${likeButtonHtml}
+        </div>
       </div>
     </div>
   `;
@@ -326,7 +379,8 @@ export function generateClusterPropertyPopupHtml(
   totalCount: number,
   fetchedCount: number,
   imageIndex: number = 0,
-  translations: PropertyPopupTranslations = DEFAULT_POPUP_TRANSLATIONS
+  translations: PropertyPopupTranslations = DEFAULT_POPUP_TRANSLATIONS,
+  isLiked: boolean = false
 ): string {
   const typeBadge = generateTypeBadgeHtml(property.estateType, translations);
   
@@ -352,6 +406,9 @@ export function generateClusterPropertyPopupHtml(
 
   // Source badge
   const sourceBadgeHtml = generateSourceBadgeHtml(property.source);
+  
+  // Like button
+  const likeButtonHtml = generateLikeButtonHtml(property.id, isLiked);
 
   const imageHtml = property.images.length > 0 ? `
     <div style="position: relative; background: ${POPUP_COLORS.BG_LIGHT}; border-radius: 8px 8px 0 0; overflow: hidden;">
@@ -389,7 +446,10 @@ export function generateClusterPropertyPopupHtml(
           ${priceDisplay}
         </div>
         ${clusterPriceAnalysisBadgeHtml}
-        ${generatePropertyDetailsHtml(property.area, property.rooms, property.pricePerMeter, translations, '11px')}
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          ${generatePropertyDetailsHtml(property.area, property.rooms, property.pricePerMeter, translations, '11px')}
+          ${likeButtonHtml}
+        </div>
         
         <!-- Subtle pagination at bottom -->
         <div style="display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 8px; margin-top: 8px; border-top: 1px solid ${POPUP_COLORS.BORDER_LIGHT};">

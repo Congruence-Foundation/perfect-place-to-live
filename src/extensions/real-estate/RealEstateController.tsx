@@ -23,6 +23,7 @@ import {
 import { useRealEstateMarkers } from './hooks/useRealEstateMarkers';
 import { useTileQueries } from './hooks/useTileQueries';
 import { useRealEstateStore, useRealEstateHydrated } from './store';
+import { usePropertyInteractionsStore } from './stores/propertyInteractionsStore';
 import {
   DETAILED_MODE_CLUSTER_FETCH_LIMIT,
   CLUSTER_FETCH_BATCH_SIZE,

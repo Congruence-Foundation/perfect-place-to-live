@@ -13,6 +13,8 @@ export const Z_INDEX = {
   MAP_HEATMAP_PANE: 450,
   /** Tile border debug pane (above heatmap) */
   MAP_TILE_BORDER_PANE: 500,
+  /** Location marker pane (above tile borders, below markers at 600) */
+  MAP_LOCATION_MARKER_PANE: 550,
   
   // Floating UI controls
   /** Base level for floating controls (settings, debug, info panels) */

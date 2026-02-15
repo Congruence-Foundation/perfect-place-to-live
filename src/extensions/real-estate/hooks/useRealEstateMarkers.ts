@@ -15,6 +15,7 @@ import type {
 } from '../lib/shared';
 import type { ClusterAnalysisMap } from '../lib/price-analysis';
 import { generatePropertyMarkerHtml, getPropertyMarkerClassName } from '../lib';
+import type { MarkerInteractionOptions } from '../lib';
 import { findMinMaxCategories } from '../lib/price-analysis';
 import {
   PROPERTY_ICON_SIZE,
@@ -39,6 +40,10 @@ import {
   generateClusterPropertyPopupHtml,
   generateLoadingPopupHtml,
   generateErrorPopupHtml,
+  generateSourceBadgeHtml,
+  generateLikeButtonHtml,
+  getExternalLinkIcon,
+  POPUP_COLORS,
 } from '../utils/popups';
 import {
   type MarkerContext,
@@ -49,9 +54,12 @@ import {
   computeClusterPriceCategories,
   clearMarkersFromRef,
   buildEnrichedPropsMap,
-  computePropertiesPriceHash,
 } from '../utils/marker-helpers';
-import { attachPopupNavigationListeners, type NavigationState } from '../utils/popup-navigation';
+import { attachPopupNavigationListeners, setupGlobalLikeHandler, type NavigationState } from '../utils/popup-navigation';
+import {
+  propertyInteractionsSelectors,
+  usePropertyInteractionsStore,
+} from '../stores/propertyInteractionsStore';
 
 // =============================================================================
 // Property Marker Functions
@@ -78,24 +86,31 @@ function updatePropertyMarkers(
 
     // Only show price category glow if price analysis is enabled (not 'off')
     const priceCategory = clusterPriceAnalysis !== 'off' ? property.priceAnalysis?.priceCategory : undefined;
+    
+    // Get interaction state (visited/liked)
+    const isVisited = propertyInteractionsSelectors.isVisited(property.id);
+    const isLiked = propertyInteractionsSelectors.isLiked(property.id);
+    const interactionOptions: MarkerInteractionOptions = { isVisited, isLiked };
 
     // Check if marker already exists
     const existingMarker = propertyMarkersRef.current.get(property.id);
     if (existingMarker) {
-      // Update existing marker's icon to reflect current price analysis mode
-      const icon = createPropertyIcon(property.estateType, priceCategory, property.price);
+      // Update existing marker's icon to reflect current price analysis mode and interaction state
+      const icon = createPropertyIcon(property.estateType, priceCategory, property.price, interactionOptions);
       if (icon) {
         existingMarker.setIcon(icon);
-        updatedCount++;
       }
+      // Note: We don't update popup content here - it will be updated when popup opens
+      // This avoids issues with event listeners being lost
+      updatedCount++;
       continue;
     }
 
     newCount++;
     const galleryId = `gallery-${property.id}`;
-    const popupContent = generatePropertyPopupHtml(property, galleryId, popupTranslations);
+    const popupContent = generatePropertyPopupHtml(property, galleryId, isLiked, popupTranslations);
 
-    const icon = createPropertyIcon(property.estateType, priceCategory, property.price);
+    const icon = createPropertyIcon(property.estateType, priceCategory, property.price, interactionOptions);
     if (!icon) continue;
 
     const marker = L.marker([property.lat, property.lng], { icon });
@@ -111,6 +126,38 @@ function updatePropertyMarkers(
       map.closePopup();
       clusterMarkersRef.current.forEach(cm => cm.closePopup());
       marker.openPopup();
+    });
+    
+    // Mark as visited when popup genuinely closes (user navigates away)
+    // Use a timeout to skip transient close/reopen during click cycles
+    let closeTimer: ReturnType<typeof setTimeout> | null = null;
+    
+    marker.on('popupopen', () => {
+      // Cancel any pending visited-mark if popup reopened quickly
+      if (closeTimer) {
+        clearTimeout(closeTimer);
+        closeTimer = null;
+      }
+    });
+    
+    marker.on('popupclose', () => {
+      // Delay marking as visited to allow click -> close -> reopen cycles
+      closeTimer = setTimeout(() => {
+        closeTimer = null;
+        if (!propertyInteractionsSelectors.isVisited(property.id)) {
+          propertyInteractionsSelectors.markVisited(property.id);
+          const currentIsLiked = propertyInteractionsSelectors.isLiked(property.id);
+          const newIcon = createPropertyIcon(
+            property.estateType,
+            priceCategory,
+            property.price,
+            { isVisited: true, isLiked: currentIsLiked }
+          );
+          if (newIcon) {
+            marker.setIcon(newIcon);
+          }
+        }
+      }, 200);
     });
 
     marker.addTo(layerGroup);
@@ -322,14 +369,18 @@ async function handleClusterClick(
       const props = clusterPopupDataRef.current.get(clusterId);
       if (!props || props.length === 0) return;
 
+      const currentProperty = props[navState.propertyIndex];
+      const isLiked = propertyInteractionsSelectors.isLiked(currentProperty.id);
+
       const html = generateClusterPropertyPopupHtml(
-        props[navState.propertyIndex],
+        currentProperty,
         clusterId,
         navState.propertyIndex,
         actualTotalCount,
         fetchedCount,
         navState.imageIndex,
-        popupTranslations
+        popupTranslations,
+        isLiked
       );
       clusterMarker.setPopupContent(html);
 
@@ -484,6 +535,174 @@ function updateClusterMarkers(ctx: MarkerContext, options: ClusterMarkerOptions)
 }
 
 // =============================================================================
+// Liked Property Markers (Always Visible)
+// =============================================================================
+
+/**
+ * Update liked property markers that are outside the current viewport
+ * These markers are always visible regardless of tile-based fetching
+ */
+function updateLikedMarkers(
+  ctx: MarkerContext & { likedMarkersRef: React.MutableRefObject<Map<string, L.Marker>> },
+  options: {
+    currentPropertyIds: Set<string>;
+    createPropertyIcon: (
+      estateType: UnifiedEstateType,
+      priceCategory?: PriceCategory,
+      price?: number | null,
+      interactionOptions?: MarkerInteractionOptions
+    ) => L.DivIcon | null;
+    popupTranslations?: import('../utils/popups').PropertyPopupTranslations;
+  }
+): void {
+  const { L, map, layerGroup, likedMarkersRef, propertyMarkersRef, clusterMarkersRef } = ctx;
+  const { currentPropertyIds, createPropertyIcon, popupTranslations } = options;
+  
+  // Get all liked properties from store
+  const likedProperties = propertyInteractionsSelectors.getLikedProperties();
+  const likedIds = Object.keys(likedProperties);
+  
+  if (likedIds.length === 0) {
+    // Clear all liked markers if none are liked
+    for (const [, marker] of likedMarkersRef.current) {
+      layerGroup.removeLayer(marker);
+    }
+    likedMarkersRef.current.clear();
+    return;
+  }
+  
+  const currentLikedMarkerIds = new Set<string>();
+  
+  for (const id of likedIds) {
+    // Skip if this property is already rendered by the tile-based system
+    if (currentPropertyIds.has(id)) {
+      // Remove from liked layer if it exists there (avoid duplicates)
+      const existingLikedMarker = likedMarkersRef.current.get(id);
+      if (existingLikedMarker) {
+        layerGroup.removeLayer(existingLikedMarker);
+        likedMarkersRef.current.delete(id);
+      }
+      continue;
+    }
+    
+    currentLikedMarkerIds.add(id);
+    
+    const propertyData = likedProperties[id];
+    if (!propertyData) continue;
+    
+    // Check if marker already exists in liked layer
+    const existingMarker = likedMarkersRef.current.get(id);
+    if (existingMarker) {
+      // Update icon to ensure it shows liked state (no fade for liked)
+      const icon = createPropertyIcon(
+        propertyData.estateType,
+        undefined, // No price category for liked markers outside viewport
+        propertyData.price,
+        { isVisited: false, isLiked: true }
+      );
+      if (icon) {
+        existingMarker.setIcon(icon);
+      }
+      continue;
+    }
+    
+    // Create new marker for liked property (no fade for liked)
+    const icon = createPropertyIcon(
+      propertyData.estateType,
+      undefined,
+      propertyData.price,
+      { isVisited: false, isLiked: true }
+    );
+    if (!icon) continue;
+    
+    const marker = L.marker([propertyData.lat, propertyData.lng], { icon });
+    
+    // Format price per meter
+    const pricePerMeterText = propertyData.pricePerMeter 
+      ? `${Math.round(propertyData.pricePerMeter).toLocaleString()} PLN/m²` 
+      : '';
+    
+    // Format details line
+    const detailsParts = [
+      `${propertyData.area} m²`,
+      propertyData.rooms ? `${propertyData.rooms} rooms` : '',
+      pricePerMeterText,
+    ].filter(Boolean).join(' • ');
+    
+    // Create popup with image if available
+    const imageHtml = propertyData.imageUrl ? `
+      <div style="background: ${POPUP_COLORS.BG_LIGHT}; border-radius: 8px 8px 0 0; overflow: hidden;">
+        <img 
+          src="${propertyData.imageUrl}" 
+          alt="" 
+          style="width: 100%; height: 120px; object-fit: cover; display: block;" 
+          onerror="this.style.display='none'" 
+        />
+      </div>
+    ` : '';
+    
+    // Unlike button (filled heart since it's liked)
+    const unlikeButtonHtml = generateLikeButtonHtml(id, true);
+    
+    const popupContent = `
+      <div style="min-width: 200px; max-width: 280px; font-family: system-ui, -apple-system, sans-serif; font-size: 12px;">
+        ${imageHtml}
+        <div style="padding: 12px;">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+            <a 
+              href="${propertyData.url}" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style="display: flex; align-items: flex-start; gap: 4px; flex: 1; font-weight: 600; font-size: 13px; line-height: 1.3; color: ${POPUP_COLORS.TEXT_PRIMARY}; text-decoration: none;"
+            >
+              <span style="flex: 1; max-height: 2.6em; overflow: hidden;">${propertyData.title}</span>
+              ${getExternalLinkIcon()}
+            </a>
+            ${generateSourceBadgeHtml(propertyData.source)}
+          </div>
+          ${propertyData.price ? `<div style="font-size: 16px; font-weight: 700; color: ${POPUP_COLORS.PRICE_GREEN}; margin-bottom: 8px;">${propertyData.price.toLocaleString()} PLN</div>` : ''}
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <div style="color: ${POPUP_COLORS.TEXT_SECONDARY}; font-size: 12px;">${detailsParts}</div>
+            ${unlikeButtonHtml}
+          </div>
+        </div>
+      </div>
+    `;
+    
+    marker.bindPopup(popupContent, {
+      maxWidth: 280,
+      className: 'property-popup liked-property-popup',
+    });
+    
+    // Click handler
+    marker.on('click', (e) => {
+      e.originalEvent?.preventDefault();
+      map.closePopup();
+      clusterMarkersRef.current.forEach(cm => cm.closePopup());
+      propertyMarkersRef.current.forEach(pm => pm.closePopup());
+      
+      // Mark as visited (marker won't fade since it's liked)
+      if (!propertyInteractionsSelectors.isVisited(id)) {
+        propertyInteractionsSelectors.markVisited(id);
+      }
+      
+      marker.openPopup();
+    });
+    
+    marker.addTo(layerGroup);
+    likedMarkersRef.current.set(id, marker);
+  }
+  
+  // Remove stale liked markers (unliked properties)
+  for (const [id, marker] of likedMarkersRef.current) {
+    if (!currentLikedMarkerIds.has(id)) {
+      layerGroup.removeLayer(marker);
+      likedMarkersRef.current.delete(id);
+    }
+  }
+}
+
+// =============================================================================
 // Hook Types
 // =============================================================================
 
@@ -562,6 +781,9 @@ export function useRealEstateMarkers({
   // Refs for tracking markers
   const propertyMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const clusterMarkersRef = useRef<Map<string, L.Marker>>(new Map());
+  
+  // Ref for liked property markers (always visible, separate from viewport-based markers)
+  const likedMarkersRef = useRef<Map<string, L.Marker>>(new Map());
 
   // Ref for storing cluster popup data (replaces window object storage)
   const clusterPopupDataRef = useRef<Map<string, EnrichedUnifiedProperty[]>>(new Map());
@@ -569,7 +791,6 @@ export function useRealEstateMarkers({
   // Track previous values to detect changes
   const prevClusterPriceAnalysisRef = useRef(clusterPriceAnalysis);
   const prevDetailedModeThresholdRef = useRef(detailedModeThreshold);
-  const prevPropertiesPriceHashRef = useRef<string>('');
 
   // Track current cluster request to prevent race conditions
   const currentClusterRequestRef = useRef<string | null>(null);
@@ -579,6 +800,15 @@ export function useRealEstateMarkers({
 
   // AbortController for cancelling in-flight fetch requests on unmount
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Subscribe to liked properties to trigger re-renders when likes change
+  const likedPropertiesVersion = usePropertyInteractionsStore(
+    (state) => Object.keys(state.likedProperties).length
+  );
+  
+  // Store properties in a ref for the global like handler to access
+  const propertiesRef = useRef<EnrichedUnifiedProperty[]>(properties);
+  propertiesRef.current = properties;
 
   // Memoize translations to prevent unnecessary re-renders
   const stableTranslations = useMemo(
@@ -588,11 +818,11 @@ export function useRealEstateMarkers({
 
   // Create property icon
   const createPropertyIcon = useCallback(
-    (estateType: UnifiedEstateType, priceCategory?: PriceCategory, price?: number | null) => {
+    (estateType: UnifiedEstateType, priceCategory?: PriceCategory, price?: number | null, interactionOptions?: MarkerInteractionOptions) => {
       if (!L) return null;
       return L.divIcon({
         className: getPropertyMarkerClassName(estateType, priceCategory),
-        html: generatePropertyMarkerHtml(estateType, PROPERTY_ICON_SIZE, priceCategory, price),
+        html: generatePropertyMarkerHtml(estateType, PROPERTY_ICON_SIZE, priceCategory, price, interactionOptions),
         iconSize: [PROPERTY_ICON_SIZE, PROPERTY_ICON_HEIGHT],
         iconAnchor: [PROPERTY_ICON_ANCHOR_X, PROPERTY_ICON_ANCHOR_Y],
         popupAnchor: [0, PROPERTY_POPUP_ANCHOR_Y],
@@ -600,6 +830,64 @@ export function useRealEstateMarkers({
     },
     [L]
   );
+  
+  // Set up global like button handler (event delegation)
+  useEffect(() => {
+    const getPropertyById = (id: string): EnrichedUnifiedProperty | undefined => {
+      // First check standalone properties
+      const standaloneProperty = propertiesRef.current.find(p => p.id === id);
+      if (standaloneProperty) return standaloneProperty;
+      
+      // Then check cluster popup data
+      for (const props of clusterPopupDataRef.current.values()) {
+        const clusterProperty = props.find(p => p.id === id);
+        if (clusterProperty) return clusterProperty;
+      }
+      
+      return undefined;
+    };
+    
+    const handleLikeChange = (propertyId: string, newIsLiked: boolean) => {
+      // Find the marker and update its icon (only for standalone property markers)
+      const marker = propertyMarkersRef.current.get(propertyId);
+      if (marker) {
+        const property = getPropertyById(propertyId);
+        if (property) {
+          const isVisited = propertyInteractionsSelectors.isVisited(propertyId);
+          const priceCategory = clusterPriceAnalysis !== 'off' ? property.priceAnalysis?.priceCategory : undefined;
+          const newIcon = createPropertyIcon(
+            property.estateType,
+            priceCategory,
+            property.price,
+            { isVisited, isLiked: newIsLiked }
+          );
+          if (newIcon) {
+            marker.setIcon(newIcon);
+          }
+          
+          // Update popup content
+          const galleryId = `gallery-${property.id}`;
+          const newPopupContent = generatePropertyPopupHtml(property, galleryId, newIsLiked, popupTranslations);
+          marker.setPopupContent(newPopupContent);
+        }
+      }
+      
+      // For cluster properties: update the like button appearance in-place
+      const btn = document.querySelector(`.property-like-btn[data-property-id="${propertyId}"]`) as HTMLButtonElement | null;
+      if (btn) {
+        btn.dataset.liked = String(newIsLiked);
+        const svg = btn.querySelector('svg');
+        if (svg) {
+          const heartColor = newIsLiked ? POPUP_COLORS.LIKED_PINK : POPUP_COLORS.TEXT_LIGHT;
+          const fillColor = newIsLiked ? POPUP_COLORS.LIKED_PINK : 'none';
+          svg.setAttribute('stroke', heartColor);
+          svg.setAttribute('fill', fillColor);
+        }
+      }
+    };
+    
+    setupGlobalLikeHandler(getPropertyById, handleLikeChange);
+  }, [createPropertyIcon, clusterPriceAnalysis, popupTranslations]);
 
   // Clear all markers when analysis mode or threshold changes
   useEffect(() => {
@@ -618,23 +906,6 @@ export function useRealEstateMarkers({
       prevDetailedModeThresholdRef.current = detailedModeThreshold;
     }
   }, [clusterPriceAnalysis, detailedModeThreshold, layerGroup]);
-
-  // Clear property markers when price analysis changes
-  useEffect(() => {
-    // Only compute hash if we have properties and layerGroup
-    if (!layerGroup || properties.length === 0) {
-      prevPropertiesPriceHashRef.current = '';
-      return;
-    }
-
-    const priceHash = computePropertiesPriceHash(properties);
-
-    if (prevPropertiesPriceHashRef.current && prevPropertiesPriceHashRef.current !== priceHash) {
-      clearMarkersFromRef(propertyMarkersRef, layerGroup);
-    }
-
-    prevPropertiesPriceHashRef.current = priceHash;
-  }, [properties, layerGroup]);
 
   // Use a ref to hold the latest values for the main effect.
   // This avoids a large dependency array that Turbopack may incorrectly compile
@@ -694,6 +965,7 @@ export function useRealEstateMarkers({
     createPropertyIcon,
     stableTranslations,
     popupTranslations,
+    likedPropertiesVersion, // Trigger re-render when likes change
   ]);
 
   // Main effect for updating markers — uses a fixed-size dependency array
@@ -728,6 +1000,7 @@ export function useRealEstateMarkers({
       layerGroup.clearLayers();
       propertyMarkersRef.current.clear();
       clusterMarkersRef.current.clear();
+      likedMarkersRef.current.clear();
       return;
     }
 
@@ -747,12 +1020,22 @@ export function useRealEstateMarkers({
     };
 
     // Update property markers
-    updatePropertyMarkers(ctx, {
+    const currentPropertyIds = updatePropertyMarkers(ctx, {
       properties: curProperties,
       clusterPriceAnalysis: curClusterPriceAnalysis,
       createPropertyIcon: curCreatePropertyIcon,
       popupTranslations: curPopupTranslations,
     });
+    
+    // Update liked markers (always visible, even outside viewport)
+    updateLikedMarkers(
+      { ...ctx, likedMarkersRef },
+      {
+        currentPropertyIds,
+        createPropertyIcon: curCreatePropertyIcon,
+        popupTranslations: curPopupTranslations,
+      }
+    );
 
     // Update cluster markers
     const clusterOptions: ClusterMarkerOptions = {

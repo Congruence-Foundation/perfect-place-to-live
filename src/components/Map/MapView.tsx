@@ -18,6 +18,7 @@ import { setupTouchLongPress, setupMouseLongPress } from './hooks/useLongPress';
 import { useTileBorders } from './hooks/useTileBorders';
 import { useHeatmapOverlay } from './hooks/useHeatmapOverlay';
 import { usePoiMarkers } from './hooks/usePoiMarkers';
+import { useLocationMarker } from './hooks/useLocationMarker';
 import {
   MAP_INIT_DELAY_MS,
   FLY_TO_DURATION,
@@ -119,6 +120,12 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     factors,
   });
   
+  // Use location marker hook for live user location
+  useLocationMarker({
+    mapReady,
+    mapInstance: mapInstanceRef.current,
+  });
+  
   // Use useLatestRef for values accessed in callbacks
   const poisRef = useLatestRef(pois);
   const factorsRef = useLatestRef(factors);
@@ -208,7 +215,8 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
           zoom: initialZoomRef.current,
           zoomControl: true,
           scrollWheelZoom: true,
-        });
+          tap: false, // Disable legacy tap handler to fix popup closing immediately on mobile
+        } as L.MapOptions & { tap?: boolean });
 
         L.tileLayer(OSM_TILE_URL, {
           attribution: OSM_ATTRIBUTION,

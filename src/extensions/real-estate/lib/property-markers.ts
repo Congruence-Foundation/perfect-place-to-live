@@ -35,28 +35,75 @@ const PROPERTY_MARKER_ICONS: Record<UnifiedEstateType, string> = {
 };
 
 /**
+ * Options for marker interaction states
+ */
+export interface MarkerInteractionOptions {
+  /** Whether the property has been visited (clicked) */
+  isVisited?: boolean;
+  /** Whether the property is liked/favorited */
+  isLiked?: boolean;
+}
+
+/** Pink color for liked properties */
+export const LIKED_MARKER_COLOR = '#ec4899'; // Pink-500
+
+/**
  * Generate HTML for a property marker icon with optional price category indicator and price label
  * Can be used with Leaflet's L.divIcon
  * 
- * Now uses unified estate types
+ * Now uses unified estate types and supports visited/liked states
  */
 export function generatePropertyMarkerHtml(
   estateType: UnifiedEstateType, 
   size: number = 28,
   priceCategory?: PriceCategory,
-  price?: number | null
+  price?: number | null,
+  interactionOptions?: MarkerInteractionOptions
 ): string {
   const color = PROPERTY_MARKER_COLORS[estateType] || PROPERTY_MARKER_COLORS.FLAT;
   const iconSvg = PROPERTY_MARKER_ICONS[estateType] || PROPERTY_MARKER_ICONS.FLAT;
   const iconSize = Math.round(size / 2);
   
-  // Determine border color and glow based on price category
+  const isVisited = interactionOptions?.isVisited ?? false;
+  const isLiked = interactionOptions?.isLiked ?? false;
+  
+  // Determine border color and glow based on liked status or price category
+  // Liked takes priority over price category for border
   const hasPriceData = priceCategory && priceCategory !== 'no_data' && priceCategory !== 'fair';
-  const borderColor = hasPriceData ? PRICE_CATEGORY_COLORS[priceCategory] : 'white';
-  const glowColor = hasPriceData ? PRICE_CATEGORY_COLORS[priceCategory] : 'transparent';
-  const borderWidth = hasPriceData ? 3 : 2;
-  const glowSize = hasPriceData ? '0 0 8px 2px' : '0 2px 6px';
-  const glowOpacity = hasPriceData ? '0.6' : '0.3';
+  
+  let borderColor: string;
+  let glowColor: string;
+  let borderWidth: number;
+  let glowSize: string;
+  let glowOpacity: string;
+  
+  if (isLiked) {
+    // Liked: pink border, no glow
+    borderColor = LIKED_MARKER_COLOR;
+    glowColor = 'transparent';
+    borderWidth = 3;
+    glowSize = '0 2px 6px';
+    glowOpacity = '0.3';
+  } else if (hasPriceData) {
+    // Price category styling
+    borderColor = PRICE_CATEGORY_COLORS[priceCategory];
+    glowColor = PRICE_CATEGORY_COLORS[priceCategory];
+    borderWidth = 3;
+    glowSize = '0 0 8px 2px';
+    glowOpacity = '0.6';
+  } else {
+    // Default styling
+    borderColor = 'white';
+    glowColor = 'transparent';
+    borderWidth = 2;
+    glowSize = '0 2px 6px';
+    glowOpacity = '0.3';
+  }
+  
+  // Visited state: reduce opacity and saturation (but NOT if liked)
+  const visitedStyles = (isVisited && !isLiked)
+    ? 'opacity: 0.7; filter: saturate(0.7);' 
+    : '';
   
   // Price label (subtle, below the marker)
   const priceLabel = price ? `
@@ -78,7 +125,7 @@ export function generatePropertyMarkerHtml(
   ` : '';
   
   return `
-    <div style="position: relative;">
+    <div style="position: relative; ${visitedStyles}">
       <div style="
         width: ${size}px;
         height: ${size}px;

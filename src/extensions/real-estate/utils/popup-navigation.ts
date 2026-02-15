@@ -5,6 +5,10 @@
  */
 
 import type { EnrichedUnifiedProperty } from '../lib/shared';
+import {
+  propertyInteractionsSelectors,
+  toLikedPropertyData,
+} from '../stores/propertyInteractionsStore';
 
 // =============================================================================
 // Types
@@ -15,6 +19,9 @@ export interface NavigationState {
   propertyIndex: number;
   imageIndex: number;
 }
+
+/** Callback type for when like state changes */
+type OnLikeChangeCallback = (propertyId: string, isLiked: boolean) => void;
 
 // =============================================================================
 // Helper Functions
@@ -38,6 +45,52 @@ function attachNavButtonHandler(
       onNavigate();
     }
   };
+}
+
+/**
+ * Set up global event delegation for like buttons
+ * This handles clicks on any like button, even dynamically created ones
+ * Uses mutable refs to avoid stale closures
+ */
+let globalLikeHandlerAttached = false;
+let globalGetPropertyById: ((id: string) => EnrichedUnifiedProperty | undefined) | null = null;
+let globalOnLikeChange: OnLikeChangeCallback | null = null;
+
+export function setupGlobalLikeHandler(
+  getPropertyById: (id: string) => EnrichedUnifiedProperty | undefined,
+  onLikeChange: OnLikeChangeCallback
+): void {
+  // Always update the callbacks so they don't go stale
+  globalGetPropertyById = getPropertyById;
+  globalOnLikeChange = onLikeChange;
+  
+  if (globalLikeHandlerAttached) return;
+  globalLikeHandlerAttached = true;
+  
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const button = target.closest('.property-like-btn') as HTMLButtonElement | null;
+    if (!button) return;
+    
+    const propertyId = button.dataset.propertyId;
+    if (!propertyId) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!globalGetPropertyById || !globalOnLikeChange) return;
+    
+    const property = globalGetPropertyById(propertyId);
+    if (!property) return;
+    
+    const isCurrentlyLiked = button.dataset.liked === 'true';
+    
+    // Toggle like state in store
+    propertyInteractionsSelectors.toggleLike(propertyId, toLikedPropertyData(property));
+    
+    const newIsLiked = !isCurrentlyLiked;
+    globalOnLikeChange(propertyId, newIsLiked);
+  });
 }
 
 /**
