@@ -167,19 +167,6 @@ export const PRICE_SCORE_THRESHOLDS = {
 } as const;
 
 // =============================================================================
-// Spatial Index Configuration
-// =============================================================================
-
-/** Default cell size for spatial index (meters) */
-export const SPATIAL_INDEX_CELL_SIZE_METERS = 100;
-
-/** Threshold for using linear search vs spatial index */
-export const SPATIAL_INDEX_LINEAR_THRESHOLD = 100;
-
-/** Threshold for detecting heatmap K value variation (values closer than this are considered identical) */
-export const HEATMAP_VARIATION_THRESHOLD = 0.001;
-
-// =============================================================================
 // Filter Default Values (for cache key generation)
 // =============================================================================
 

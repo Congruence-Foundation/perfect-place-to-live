@@ -304,8 +304,8 @@ export const CACHE_CONFIG = {
  * UI-related configuration constants
  */
 export const UI_CONFIG = {
-  /** Default grid cell size in meters */
-  DEFAULT_GRID_CELL_SIZE: 200,
+  /** Default grid cell size in meters (must match server heatmap grid) */
+  DEFAULT_GRID_CELL_SIZE: 100,
   
   /** Default threshold for detailed mode (max cluster count) */
   DEFAULT_DETAILED_MODE_THRESHOLD: 100,
@@ -432,6 +432,19 @@ export const PARALLEL_CONFIG = {
 export const SPATIAL_INDEX_CONFIG = {
   /** Default cell size in degrees for spatial indexing (~1.1km at equator) */
   DEFAULT_CELL_SIZE_DEGREES: 0.01,
+} as const;
+
+/**
+ * Heatmap point lookup configuration
+ * Used for finding nearest heatmap points for score lookups
+ */
+export const HEATMAP_LOOKUP_CONFIG = {
+  /** Cell size for spatial index (meters) */
+  SPATIAL_INDEX_CELL_SIZE_METERS: 100,
+  /** Threshold for using linear search vs spatial index */
+  LINEAR_SEARCH_THRESHOLD: 100,
+  /** Threshold for detecting heatmap K value variation (values closer than this are considered identical) */
+  VARIATION_THRESHOLD: 0.001,
 } as const;
 
 /**

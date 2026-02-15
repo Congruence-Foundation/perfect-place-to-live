@@ -52,3 +52,6 @@ export {
   getPoiTileKey,
   getPoiTilesForHeatmapTiles,
 } from './tiles';
+
+// Heatmap point lookup
+export { findNearestHeatmapPoint, getScoreForLocation } from './heatmap-lookup';

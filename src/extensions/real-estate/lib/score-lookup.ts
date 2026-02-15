@@ -1,96 +1,17 @@
+/**
+ * Score lookup utilities for real estate extension
+ * 
+ * Provides filtering functions for properties and clusters based on heatmap scores.
+ * Uses shared heatmap lookup utilities from @/lib/geo.
+ */
+
 import type { HeatmapPoint } from '@/types/heatmap';
 import type { UnifiedProperty, UnifiedCluster } from './shared/types';
-import { distanceInMeters, METERS_PER_DEGREE_LAT } from '@/lib/geo';
-import { GenericSpatialIndex, type GeoLocated } from '@/lib/geo/haversine';
-import { UI_CONFIG } from '@/constants/performance';
-import {
-  SPATIAL_INDEX_CELL_SIZE_METERS,
-  SPATIAL_INDEX_LINEAR_THRESHOLD,
-  HEATMAP_VARIATION_THRESHOLD,
-} from '../config/constants';
+import { findNearestHeatmapPoint, type GeoLocated } from '@/lib/geo';
+import { UI_CONFIG, HEATMAP_LOOKUP_CONFIG } from '@/constants/performance';
 
-/**
- * Distance function for heatmap points using distanceInMeters
- */
-function heatmapDistanceFn(p1: { lat: number; lng: number }, p2: HeatmapPoint): number {
-  return distanceInMeters(p1.lat, p1.lng, p2.lat, p2.lng);
-}
-
-/**
- * Module-level cache for spatial indexes
- * 
- * Design note: This uses simple module-level state rather than a full LRU cache
- * because we only ever need one spatial index at a time (for the current heatmap).
- * The cache is invalidated when heatmap points change (detected via hash).
- * 
- * This approach is simpler and sufficient for the use case. A full LRU cache
- * would add complexity without significant benefit since we don't need to
- * cache multiple spatial indexes simultaneously.
- */
-let cachedIndex: GenericSpatialIndex<HeatmapPoint> | null = null;
-let cachedPointsHash: string | null = null;
-
-/**
- * Get or create a spatial index for the given heatmap points
- */
-function getSpatialIndex(heatmapPoints: HeatmapPoint[]): GenericSpatialIndex<HeatmapPoint> {
-  // Simple hash based on first and last points and length
-  const hash = heatmapPoints.length > 0
-    ? `${heatmapPoints.length}:${heatmapPoints[0].lat}:${heatmapPoints[heatmapPoints.length - 1].lat}`
-    : '';
-  
-  if (cachedIndex && cachedPointsHash === hash) {
-    return cachedIndex;
-  }
-  
-  // Convert cell size from meters to degrees (approximate)
-  const cellSizeDegrees = SPATIAL_INDEX_CELL_SIZE_METERS / METERS_PER_DEGREE_LAT;
-  cachedIndex = new GenericSpatialIndex(heatmapPoints, heatmapDistanceFn, cellSizeDegrees);
-  cachedPointsHash = hash;
-  return cachedIndex;
-}
-
-/**
- * Find the nearest heatmap point to a given location within a search radius.
- * Uses spatial indexing for O(1) average lookup instead of O(n) linear search.
- * 
- * @param lat - Latitude of the location
- * @param lng - Longitude of the location
- * @param heatmapPoints - Array of heatmap points with scores
- * @param searchRadius - Maximum search radius in meters
- * @returns The nearest heatmap point or null if none found within radius
- */
-export function findNearestHeatmapPoint(
-  lat: number,
-  lng: number,
-  heatmapPoints: HeatmapPoint[],
-  searchRadius: number
-): HeatmapPoint | null {
-  if (!heatmapPoints || heatmapPoints.length === 0) {
-    return null;
-  }
-
-  // For small arrays, linear search is faster than building an index
-  if (heatmapPoints.length < SPATIAL_INDEX_LINEAR_THRESHOLD) {
-    let nearestPoint: HeatmapPoint | null = null;
-    let nearestDistance = Infinity;
-
-    for (const point of heatmapPoints) {
-      const distance = distanceInMeters(lat, lng, point.lat, point.lng);
-      if (distance < nearestDistance && distance <= searchRadius) {
-        nearestDistance = distance;
-        nearestPoint = point;
-      }
-    }
-
-    return nearestPoint;
-  }
-
-  // Use spatial index for larger arrays
-  const index = getSpatialIndex(heatmapPoints);
-  const result = index.findNearest({ lat, lng }, searchRadius);
-  return result ? result.item : null;
-}
+// Re-export findNearestHeatmapPoint for backwards compatibility
+export { findNearestHeatmapPoint } from '@/lib/geo';
 
 /**
  * Get the heatmap score (K value) for a specific location.
@@ -225,5 +146,5 @@ export function hasHeatmapVariation(heatmapPoints: HeatmapPoint[]): boolean {
     return false;
   }
   const firstK = heatmapPoints[0].value;
-  return heatmapPoints.some(p => Math.abs(p.value - firstK) > HEATMAP_VARIATION_THRESHOLD);
+  return heatmapPoints.some(p => Math.abs(p.value - firstK) > HEATMAP_LOOKUP_CONFIG.VARIATION_THRESHOLD);
 }

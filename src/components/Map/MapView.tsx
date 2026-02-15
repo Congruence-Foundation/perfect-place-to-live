@@ -5,6 +5,8 @@ import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallba
 import type { HeatmapPoint, POI, Factor, Bounds } from '@/types';
 import { useLatestRef } from '@/hooks';
 import { calculateFactorBreakdown } from '@/lib/scoring';
+import { findNearestHeatmapPoint } from '@/lib/geo';
+import { UI_CONFIG } from '@/constants/performance';
 import { useMapStore } from '@/stores/mapStore';
 import {
   generatePopupContent,
@@ -121,6 +123,7 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
   const poisRef = useLatestRef(pois);
   const factorsRef = useLatestRef(factors);
   const lambdaRef = useLatestRef(lambda);
+  const heatmapPointsRef = useLatestRef(heatmapPoints);
   const popupTranslationsRef = useLatestRef(popupTranslations);
   const factorTranslationsRef = useLatestRef(factorTranslations);
   const onBoundsChangeRef = useLatestRef(onBoundsChange);
@@ -133,12 +136,19 @@ const MapView = forwardRef<MapViewRef, MapViewProps>(({
     const L = (await import('leaflet')).default;
     const { lat, lng } = e.latlng;
     
-    const { k, breakdown } = calculateFactorBreakdown(
+    // Calculate factor breakdown for per-factor detail rows
+    const { k: breakdownK, breakdown } = calculateFactorBreakdown(
       lat, lng, factorsRef.current, poisRef.current, lambdaRef.current
     );
     
+    // Look up the grid K value (same value the filter uses) for the headline
+    // This ensures the popup headline matches what the slider filter sees
+    const searchRadius = UI_CONFIG.DEFAULT_GRID_CELL_SIZE * UI_CONFIG.SEARCH_RADIUS_MULTIPLIER;
+    const nearestPoint = findNearestHeatmapPoint(lat, lng, heatmapPointsRef.current, searchRadius);
+    const headlineK = nearestPoint ? nearestPoint.value : breakdownK;
+    
     const popupContent = generatePopupContent(
-      k, breakdown,
+      headlineK, breakdown,
       popupTranslationsRef.current,
       factorTranslationsRef.current
     );
